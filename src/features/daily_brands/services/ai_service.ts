@@ -1,5 +1,6 @@
 import { AIService, Product } from '../usecase';
 import { getGeminiModel } from '../../../core/vertex-ai';
+import { retry } from '../../../core/retry';
 import { z } from 'zod';
 
 const ProductSchema = z.object({
@@ -54,25 +55,35 @@ export class ValidatedAIService implements AIService {
 
   private async generateAndParse(prompt: string): Promise<Product[]> {
     try {
-      const result = await this.model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json' },
+      return await retry(async () => {
+        try {
+          const result = await this.model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: 'application/json' },
+          });
+
+          const candidate = result.response.candidates?.[0];
+          const responseText = candidate?.content?.parts?.[0]?.text;
+
+          if (!responseText) {
+            throw new Error("Empty response from AI");
+          }
+
+          const json = JSON.parse(responseText);
+          const parsed = ResponseSchema.parse(json);
+
+          return parsed.products;
+        } catch (error) {
+          console.warn("AI Generation attempt failed:", error);
+          throw error; // Ensure retry catches it
+        }
+      }, {
+        maxAttempts: 3,
+        initialDelayMs: 2000,
+        backoffFactor: 2
       });
-
-      const candidate = result.response.candidates?.[0];
-      const responseText = candidate?.content?.parts?.[0]?.text;
-
-      if (!responseText) {
-        throw new Error("Empty response from AI");
-      }
-
-      const json = JSON.parse(responseText);
-      const parsed = ResponseSchema.parse(json);
-
-      return parsed.products;
     } catch (error) {
       console.error("AI Generation Error:", error);
-      // Fallback or rethrow? For now rethrow so usecase handles it (it returns empty array on error)
       throw error;
     }
   }
