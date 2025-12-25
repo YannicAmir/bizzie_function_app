@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "dev": "bizzie-dev-7199b",
+    "qa": "bizzie-qa-e2f9c",
+    "prod": "bizzie-prod"
+  }
+}
