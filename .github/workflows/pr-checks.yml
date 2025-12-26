@@ -1,16 +1,9 @@
-name: Verify Code
+name: PR Checks
 
 on:
   pull_request:
-    branches:
-      - dev
-      - qa
-      - main
-    paths:
-      - 'src/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
+    branches: [ "main" ]
+
   workflow_dispatch:
 
 concurrency:
