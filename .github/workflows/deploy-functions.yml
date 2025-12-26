@@ -1,4 +1,4 @@
-name: Deploy Functions
+name: Manual Deployment
 
 on:
   push:
