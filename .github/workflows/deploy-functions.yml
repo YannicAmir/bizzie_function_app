@@ -1,7 +1,6 @@
 name: Manual Deployment
 
 on:
-
   workflow_dispatch:
     inputs:
       target_env:
@@ -42,7 +41,7 @@ jobs:
 
       # --- CONFIGURE ENVIRONMENT ---
       - name: Set Environment Variables (Dev)
-        if: github.ref == 'refs/heads/dev' || inputs.target_env == 'dev'
+        if: inputs.target_env == 'dev'
         env:
           SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}
         run: |
@@ -52,7 +51,7 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
 
       - name: Set Environment Variables (QA)
-        if: github.ref == 'refs/heads/qa' || inputs.target_env == 'qa'
+        if: inputs.target_env == 'qa'
         env:
           SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_QA }}
         run: |
@@ -62,7 +61,7 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
 
       - name: Set Environment Variables (Prod)
-        if: github.ref == 'refs/heads/main' || inputs.target_env == 'prod'
+        if: inputs.target_env == 'prod'
         env:
           SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}
         run: |
