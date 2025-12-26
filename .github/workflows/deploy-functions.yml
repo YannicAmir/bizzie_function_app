@@ -46,27 +46,33 @@ jobs:
 
       # --- CONFIGURE ENVIRONMENT ---
       - name: Set Environment Variables (Dev)
-        if: github.ref == 'refs/heads/dev' || inputs.target_env == 'dev'
+        if: inputs.target_env == 'dev'
+        env:
+          SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}
         run: |
           echo "FIREBASE_ALIAS=dev" >> $GITHUB_ENV
           echo "GCP_SA_KEY<<EOF" >> $GITHUB_ENV
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}" >> $GITHUB_ENV
+          echo "$SA_KEY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       - name: Set Environment Variables (QA)
-        if: github.ref == 'refs/heads/qa' || inputs.target_env == 'qa'
+        if: inputs.target_env == 'qa'
+        env:
+          SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_QA }}
         run: |
           echo "FIREBASE_ALIAS=qa" >> $GITHUB_ENV
           echo "GCP_SA_KEY<<EOF" >> $GITHUB_ENV
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_QA }}" >> $GITHUB_ENV
+          echo "$SA_KEY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       - name: Set Environment Variables (Prod)
-        if: github.ref == 'refs/heads/main' || inputs.target_env == 'prod'
+        if: inputs.target_env == 'prod'
+        env:
+          SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}
         run: |
           echo "FIREBASE_ALIAS=prod" >> $GITHUB_ENV
           echo "GCP_SA_KEY<<EOF" >> $GITHUB_ENV
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}" >> $GITHUB_ENV
+          echo "$SA_KEY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       # --- AUTHENTICATE & DEPLOY ---
