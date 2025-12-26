@@ -33,8 +33,10 @@ describe('refreshDailyBrands', () => {
         mockGenerateSectorProducts.mockResolvedValue([mockProduct]);
         mockGenerateAllSectorsProducts.mockResolvedValue([mockProduct]);
 
+        const mockSectors = ["Energy", "Materials", "Utilities", "Financials", "Health Care", "Real Estate", "Consumer Staples", "Consumer Discretionary", "Industrials", "Communication Services", "Information Technology"];
+
         // Act
-        await refreshDailyBrands(mockAIService, mockDBService);
+        await refreshDailyBrands(mockAIService, mockDBService, mockSectors);
 
         // Assert
         // 11 Sectors + 1 "All Sectors" = 12
@@ -55,8 +57,10 @@ describe('refreshDailyBrands', () => {
         });
         mockGenerateAllSectorsProducts.mockResolvedValue([]);
 
+        const mockSectors = ["Energy", "Materials", "Utilities", "Financials", "Health Care", "Real Estate", "Consumer Staples", "Consumer Discretionary", "Industrials", "Communication Services", "Information Technology"];
+
         // Act
-        await refreshDailyBrands(mockAIService, mockDBService);
+        await refreshDailyBrands(mockAIService, mockDBService, mockSectors);
 
         // Assert
         expect(mockSetDailyContent).toHaveBeenCalledTimes(1);
@@ -72,8 +76,10 @@ describe('refreshDailyBrands', () => {
         mockGenerateSectorProducts.mockResolvedValue([createMockProduct('P')]);
         mockGenerateAllSectorsProducts.mockRejectedValue(new Error('AI All Sectors Error'));
 
+        const mockSectors = ["Energy", "Materials", "Utilities", "Financials", "Health Care", "Real Estate", "Consumer Staples", "Consumer Discretionary", "Industrials", "Communication Services", "Information Technology"];
+
         // Act
-        await refreshDailyBrands(mockAIService, mockDBService);
+        await refreshDailyBrands(mockAIService, mockDBService, mockSectors);
 
         // Assert
         expect(mockSetDailyContent).toHaveBeenCalledTimes(1);
@@ -91,7 +97,7 @@ describe('refreshDailyBrands', () => {
         mockSetDailyContent.mockRejectedValue(new Error('DB Connection Error'));
 
         // Act & Assert
-        await expect(refreshDailyBrands(mockAIService, mockDBService))
+        await expect(refreshDailyBrands(mockAIService, mockDBService, ["Energy"]))
             .rejects.toThrow('DB Connection Error');
     });
 });

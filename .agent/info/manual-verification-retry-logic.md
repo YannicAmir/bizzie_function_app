@@ -24,7 +24,7 @@ This is the safest and fastest way to verify retries without deploying or touchi
       private async generateAndParse(prompt: string): Promise<Product[]> {
          return retry(async () => {
              debugAttemptCounter++;
-             console.log(`[DEBUG] Attempt ${debugAttemptCounter}`);
+             logger.info(`[DEBUG] Attempt ${debugAttemptCounter}`);
              
              // Simulate failure for first 2 attempts
              if (debugAttemptCounter <= 2) {

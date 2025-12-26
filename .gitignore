@@ -33,3 +33,14 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+
+# Firebase Emulators
+firebase-emulators-data/
+firestore-debug.log
+ui-debug.log
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary
+tmp/

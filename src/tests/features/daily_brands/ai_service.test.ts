@@ -31,7 +31,7 @@ describe('ValidatedAIService', () => {
             generateContent: mockGenerateContent
         });
 
-        aiService = new ValidatedAIService();
+        aiService = new ValidatedAIService("gemini-test-model");
     });
 
     afterEach(() => {

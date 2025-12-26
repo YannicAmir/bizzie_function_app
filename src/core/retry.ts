@@ -1,3 +1,6 @@
+import { Logger } from './logger';
+const logger = new Logger("Retry Utility");
+
 /**
  * Options for the retry utility.
  */
@@ -30,9 +33,9 @@ export async function retry<T>(
     const initialDelayMs = options.initialDelayMs ?? 1000;
     const backoffFactor = options.backoffFactor ?? 2;
     const maxDelayMs = options.maxDelayMs ?? 30000;
+    const shouldRetry = options.shouldRetry ?? (() => true); // Default to always retry
 
     let attempt = 1;
-    let delay = initialDelayMs;
 
     while (true) {
         try {
@@ -43,18 +46,20 @@ export async function retry<T>(
                 throw error;
             }
 
-            if (options.shouldRetry && !options.shouldRetry(error)) {
+            if (!shouldRetry(error)) {
                 // Error is not retryable
                 throw error;
             }
 
-            // Log the retry (using console.warn to avoid cluttering stdout if not critical)
-            console.warn(`Operation failed (Attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms... Error: ${error instanceof Error ? error.message : String(error)}`);
+            // Calculate delay for the current attempt
+            const delay = Math.min(initialDelayMs * Math.pow(backoffFactor, attempt - 1), maxDelayMs);
+
+            // Log the retry
+            logger.warn(`Operation failed (Attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms...`, { error: error instanceof Error ? error.message : String(error) });
 
             await new Promise(resolve => setTimeout(resolve, delay));
 
             attempt++;
-            delay = Math.min(delay * backoffFactor, maxDelayMs);
         }
     }
 }
