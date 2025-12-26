@@ -11,9 +11,8 @@ export const getVertexAI = (): VertexAI => {
     vertexAiInstance = new VertexAI({
       project: config.projectId,
       location: config.location,
-      // @ts-ignore - Required for Preview models
       apiEndpoint: 'aiplatform.googleapis.com',
-      // @ts-ignore - Required for Preview models
+      // @ts-expect-error - Required for Preview models but missing in type definition
       apiVersion: 'v1beta1',
     });
   }

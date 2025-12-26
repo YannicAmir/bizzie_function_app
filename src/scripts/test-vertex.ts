@@ -9,7 +9,7 @@ async function main() {
     try {
         const vertex = getVertexAI();
         logger.info(`Listing models in us-central1...`);
-        // @ts-ignore
+        // @ts-expect-error - listModels is not in the public type definition
         const resp = await vertex.listModels();
         logger.info('Found models:');
         resp.forEach((m: any) => {
