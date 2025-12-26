@@ -25,6 +25,7 @@ For **EACH** environment (Dev, QA, Prod), perform the following:
     - **Artifact Registry Writer** (Required for 2nd Gen functions to push images)
     - **Service Account User** (ActInAs permission)
     - **Firebase Admin** (General Firebase API access)
+    - **Cloud Scheduler Admin** (Required for scheduled functions)
 6.  Click **Done**.
 
 ## 2. Generate and Download Permissions Keys
