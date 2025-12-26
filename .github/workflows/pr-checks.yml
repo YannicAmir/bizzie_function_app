@@ -1,4 +1,4 @@
-name: Verify Code
+name: PR Checks
 
 on:
   pull_request:

@@ -3,7 +3,14 @@ description: Manual setup steps for CICD Deploy agent
 ---
 # CICD Deploy Manual Setup
 
-## 1. Create Google Cloud Service Accounts
+## 1. Enable Required Configuration
+**Before creating service accounts**, ensure these APIs are enabled in your Google Cloud Project:
+*   **Cloud Build API** (`cloudbuild.googleapis.com`)
+*   **Artifact Registry API** (`artifactregistry.googleapis.com`)
+*   **Cloud Functions API** (`cloudfunctions.googleapis.com`)
+*   **Cloud Logging API** (`logging.googleapis.com`)
+
+## 2. Create Google Cloud Service Accounts
 For **EACH** environment (Dev, QA, Prod), perform the following:
 1.  Go to the Google Cloud Console for the project (e.g., `bizzie-dev`).
 2.  Navigate to **IAM & Admin** > **Service Accounts**.
