@@ -3,7 +3,18 @@ description: Manual setup steps for CICD Deploy agent
 ---
 # CICD Deploy Manual Setup
 
-## 1. Create Google Cloud Service Accounts
+## 1. Enable Required Configuration
+**Before creating service accounts**, ensure these APIs are enabled in your Google Cloud Project:
+*   **Cloud Build API** (`cloudbuild.googleapis.com`)
+*   **Artifact Registry API** (`artifactregistry.googleapis.com`)
+*   **Cloud Functions API** (`cloudfunctions.googleapis.com`)
+*   **Cloud Logging API** (`logging.googleapis.com`)
+*   **Cloud Scheduler API** (`cloudscheduler.googleapis.com`)
+*   **Cloud Run API** (`run.googleapis.com`)
+*   **Eventarc API** (`eventarc.googleapis.com`)
+*   **Cloud Billing API** (`cloudbilling.googleapis.com`)
+
+## 2. Create Google Cloud Service Accounts
 For **EACH** environment (Dev, QA, Prod), perform the following:
 1.  Go to the Google Cloud Console for the project (e.g., `bizzie-dev`).
 2.  Navigate to **IAM & Admin** > **Service Accounts**.
@@ -14,6 +25,7 @@ For **EACH** environment (Dev, QA, Prod), perform the following:
     - **Artifact Registry Writer** (Required for 2nd Gen functions to push images)
     - **Service Account User** (ActInAs permission)
     - **Firebase Admin** (General Firebase API access)
+    - **Cloud Scheduler Admin** (Required for scheduled functions)
 6.  Click **Done**.
 
 ## 2. Generate and Download Permissions Keys
@@ -36,8 +48,8 @@ For **EACH** service account created above:
     | `FIREBASE_SERVICE_ACCOUNT_QA` | `bizzie-qa-....json` |
     | `FIREBASE_SERVICE_ACCOUNT_PROD` | `bizzie-prod-....json` |
 
-## 4. Verification
-Once the secrets are added, you can run the `cicd-deploy` workflow (via the agent) to generate the CI file, and then push code to `dev`, `qa`, or `main` to test the deployment.
+4.  **Verification**:
+    Once the secrets are added, you can run the `Manual Deployment` workflow (via the GitHub Actions tab) to deploy code. Deployments are **Manual Only** and do NOT run automatically on push.
 
 ## 5. Advanced Configuration (Best Practices)
 
