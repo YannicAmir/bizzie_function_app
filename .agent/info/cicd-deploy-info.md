@@ -12,6 +12,7 @@ description: Manual setup steps for CICD Deploy agent
 *   **Cloud Scheduler API** (`cloudscheduler.googleapis.com`)
 *   **Cloud Run API** (`run.googleapis.com`)
 *   **Eventarc API** (`eventarc.googleapis.com`)
+*   **Cloud Billing API** (`cloudbilling.googleapis.com`)
 
 ## 2. Create Google Cloud Service Accounts
 For **EACH** environment (Dev, QA, Prod), perform the following:
