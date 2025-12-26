@@ -34,6 +34,7 @@ description: Create new backend features following Clean Architecture
 4.  **Create Services (`services/*.ts`)**:
     *   Implement the service interfaces (e.g., `VertexAIService`, `FirestoreService`).
     *   Use `src/core` utilities.
+    *   **CRITICAL**: Wrap all external API calls (AI, Third-party, etc.) with `src/core/retry.ts`.
 
 5.  **Create Presentation Layer (`trigger.ts`)**:
     *   Implement the Cloud Function trigger.

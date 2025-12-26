@@ -25,7 +25,7 @@ Use these specific packages. Do not introduce alternatives without approval.
 | **Framework** | `firebase-functions` | Use **v2** imports: `firebase-functions/v2/*` |
 | **Admin SDK** | `firebase-admin` | For Firestore, Auth, and Remote Config access |
 | **AI / LLM** | `@google-cloud/vertexai` | Direct access to Gemini 1.5 Flash/Pro |
-| **Logging** | `firebase-functions/logger` | Use structured logging, not `console.log` |
+| **Logging** | `firebase-functions/logger` | **MANDATORY**: Use `src/core/logger.ts` wrapper. No `console.log`. |
 | **Validation** | `zod` | (Optional) For validating API inputs or JSON from AI |
 
 ## 4. Implementation Details
