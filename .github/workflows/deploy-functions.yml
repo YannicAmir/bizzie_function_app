@@ -1,0 +1,69 @@
+name: Deploy Functions
+
+on:
+  push:
+    branches:
+      - dev
+      - qa
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm test
+
+      - name: Build Project
+        run: npm run build
+
+      # --- CONFIGURE ENVIRONMENT ---
+      - name: Set Environment Variables (Dev)
+        if: github.ref == 'refs/heads/dev'
+        run: |
+          echo "FIREBASE_ALIAS=dev" >> $GITHUB_ENV
+          echo "GCP_SA_KEY=${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}" >> $GITHUB_ENV
+
+      - name: Set Environment Variables (QA)
+        if: github.ref == 'refs/heads/qa'
+        run: |
+          echo "FIREBASE_ALIAS=qa" >> $GITHUB_ENV
+          echo "GCP_SA_KEY=${{ secrets.FIREBASE_SERVICE_ACCOUNT_QA }}" >> $GITHUB_ENV
+
+      - name: Set Environment Variables (Prod)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "FIREBASE_ALIAS=prod" >> $GITHUB_ENV
+          echo "GCP_SA_KEY=${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}" >> $GITHUB_ENV
+
+      # --- AUTHENTICATE & DEPLOY ---
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ env.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy to Firebase
+        run: firebase deploy --only functions --project ${{ env.FIREBASE_ALIAS }} --force
