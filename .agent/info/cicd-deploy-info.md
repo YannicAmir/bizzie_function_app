@@ -36,8 +36,8 @@ For **EACH** service account created above:
     | `FIREBASE_SERVICE_ACCOUNT_QA` | `bizzie-qa-....json` |
     | `FIREBASE_SERVICE_ACCOUNT_PROD` | `bizzie-prod-....json` |
 
-## 4. Verification
-Once the secrets are added, you can run the `cicd-deploy` workflow (via the agent) to generate the CI file, and then push code to `dev`, `qa`, or `main` to test the deployment.
+4.  **Verification**:
+    Once the secrets are added, you can run the `Manual Deployment` workflow (via the GitHub Actions tab) to deploy code. Deployments are **Manual Only** and do NOT run automatically on push.
 
 ## 5. Advanced Configuration (Best Practices)
 

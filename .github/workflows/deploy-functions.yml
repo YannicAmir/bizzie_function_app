@@ -1,11 +1,7 @@
 name: Manual Deployment
 
 on:
-  push:
-    branches:
-      - dev
-      - qa
-      - main
+
   workflow_dispatch:
     inputs:
       target_env:
