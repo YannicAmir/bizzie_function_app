@@ -1,0 +1,51 @@
+
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import * as logger from 'firebase-functions/logger';
+import { defineSecret } from 'firebase-functions/params';
+import { SecFilingsNotifierUseCase } from './usecase';
+import { FirebaseWatchlistService } from '../../core/services/watchlist_service';
+import { FcmNotificationService } from '../../core/services/notification_service';
+import { FmpSecService } from './services/sec_service';
+import { FirebaseFilingHistoryService } from './services/filing_history_service';
+
+const fmpApiKey = defineSecret('FMP_API_KEY');
+
+export const secFilingsNotifier = onSchedule(
+    {
+        schedule: '0 9 * * *', // Daily at 9:00 AM EST
+        timeZone: 'America/New_York',
+        secrets: [fmpApiKey],
+        memory: '512MiB',
+        timeoutSeconds: 300,
+    },
+    async (event) => {
+        logger.info('Starting secFilingsNotifier scheduled function');
+
+        try {
+            // Instantiate Services
+            const watchlistService = new FirebaseWatchlistService();
+            const notificationService = new FcmNotificationService();
+
+            // FMP Key provided via Secret Manager
+            const secService = new FmpSecService(fmpApiKey.value());
+
+            const filingHistoryService = new FirebaseFilingHistoryService();
+
+            // Instantiate Use Case
+            const useCase = new SecFilingsNotifierUseCase(
+                watchlistService,
+                secService,
+                filingHistoryService,
+                notificationService
+            );
+
+            // Execute
+            await useCase.execute();
+
+            logger.info('secFilingsNotifier completed successfully');
+        } catch (error) {
+            logger.error('secFilingsNotifier failed', error);
+            throw error; // Rethrow to ensure Cloud Scheduler marks it as failed in Console
+        }
+    }
+);

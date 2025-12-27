@@ -2,7 +2,6 @@ import { AIService, Product } from '../usecase';
 import { getGeminiModel } from '../../../core/vertex-ai';
 import { retry } from '../../../core/retry';
 import { Logger } from '../../../core/logger';
-const logger = new Logger("Daily Brands AI Service");
 import { z } from 'zod';
 
 const ProductSchema = z.object({
@@ -15,6 +14,8 @@ const ProductSchema = z.object({
 const ResponseSchema = z.object({
   products: z.array(ProductSchema),
 });
+
+const _logger = new Logger("Daily Brands AI Service");
 
 export class ValidatedAIService implements AIService {
   private model;
@@ -120,7 +121,7 @@ export class ValidatedAIService implements AIService {
 
           return parsed.products;
         } catch (error) {
-          logger.warn("Generation attempt failed:", error);
+          _logger.warn("Generation attempt failed:", error);
           throw error; // Ensure retry catches it
         }
       }, {
@@ -129,7 +130,7 @@ export class ValidatedAIService implements AIService {
         backoffFactor: 2
       });
     } catch (error) {
-      logger.error("Generation Error:", error);
+      _logger.error("Generation Error:", error);
       throw error;
     }
   }

@@ -22,15 +22,16 @@ description: Rules and constraints for the logging-agent
 3.  **Allowed Patterns:**
     ```typescript
     import { Logger } from '../../core/logger';
-    const logger = new Logger("Daily Brands");
-    logger.error("Operation failed", { error }); // GOOD
+    const _logger = new Logger("Daily Brands");
+    _logger.error("Operation failed", { error }); // GOOD
     ```
 
 ## Naming Conventions
 -   File: `src/core/logger.ts`
 -   Methods: `info`, `warn`, `error`, `debug`.
 -   **Named Instances:** You MUST instantiate a named logger for each file/component.
-    *   **Syntax:** `const logger = new Logger("Feature Name");`
-    *   **Usage:** `logger.info("Message");`
+    *   **Syntax:** `const _logger = new Logger("Feature Name");` (Use spaces for readability, e.g. "Daily Brands" NOT "DailyBrands").
+    *   **Scope:** Private to the module (do not export).
+    *   **Usage:** `_logger.info("Message");`
     *   **Result:** Log message will be `"[Feature Name] Message"` and metadata will include `{ context: "Feature Name" }`.
     *   **Do NOT** manually type the prefix in the message string anymore.

@@ -17,6 +17,7 @@ firebase-debug.*.log
 .env
 .env.local
 .env.*.local
+.secret.local
 
 # Operating System
 .DS_Store

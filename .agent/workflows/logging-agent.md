@@ -16,24 +16,7 @@ description: Standardize application logging using structured logs
 
 1.  **Check for Logger Interface**:
     *   Check if `src/core/logger.ts` exists.
-    *   **IF MISSING**: Create it with the following content (or similar, strictly Typed):
-    ```typescript
-    import * as firebaseLogger from 'firebase-functions/logger';
-
-    export interface Logger {
-        info(message: string, data?: any): void;
-        error(message: string, error?: any): void;
-        warn(message: string, data?: any): void;
-        debug(message: string, data?: any): void;
-    }
-
-    export const logger: Logger = {
-        info: (message, data) => firebaseLogger.info(message, data),
-        error: (message, error) => firebaseLogger.error(message, error),
-        warn: (message, data) => firebaseLogger.warn(message, data),
-        debug: (message, data) => firebaseLogger.debug(message, data),
-    };
-    ```
+    *   **IF MISSING**: Create it wrapper around `firebase-functions/logger`.
 
 ## Phase 2: Discovery & Refactoring
 
@@ -41,12 +24,15 @@ description: Standardize application logging using structured logs
     *   Run `grep -r "console\." src/` to find all usages of `console.log`, `console.error`, etc.
 
 3.  **Refactor Files**:
-    *   For each file containing `console.`:
-        *   **Import Logger**: Add `import { logger } from '[relative_path]/core/logger';`.
+    *   For each file containing `console.` or legacy logger:
+        *   **Import Logger**: Add `import { Logger } from '[relative_path]/core/logger';`.
+        *   **Instantiate**: `const _logger = new Logger("Context With Spaces");` (Module-level, private).
         *   **Replace Calls**:
-            *   `console.log(msg)` -> `logger.info(msg)`
-            *   `console.error(msg, err)` -> `logger.error(msg, err)`
+            *   `console.log(msg)` -> `_logger.info(msg)`
+            *   `console.error(msg, err)` -> `_logger.error(msg, err)`
         *   **Verify**: Ensure no `console.` calls remain in `src/`.
+
+## Phase 3: Verification
 
 4.  **Verification**:
     *   Run `npm run build` to ensure imports are correct.

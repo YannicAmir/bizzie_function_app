@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { Logger } from './logger';
-const logger = new Logger("Remote Config");
+
+const _logger = new Logger("Remote Config");
 
 // Interface for our Application Configuration
 export interface AppConfig {
@@ -38,12 +39,12 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
 
   // 1. Check Cache
   if (configCache && (now - lastFetchTime < CACHE_DURATION_MS)) {
-    logger.debug("Using cached config");
+    _logger.debug("Using cached config");
     return configCache;
   }
 
   try {
-    logger.info("Fetching from Firebase...");
+    _logger.info("Fetching from Firebase...");
     const template = await admin.remoteConfig().getTemplate();
 
     // 2. Parse Parameters
@@ -62,12 +63,12 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     // 4. Update Cache
     configCache = newConfig;
     lastFetchTime = now;
-    logger.info("Refreshed successfully", newConfig);
+    _logger.info("Refreshed successfully", newConfig);
 
     return newConfig;
 
   } catch (error) {
-    logger.error("Failed to fetch. Using Defaults.", error);
+    _logger.error("Failed to fetch. Using Defaults.", error);
     // Fallback to defaults on error to keep app alive
     return DEFAULT_CONFIG;
   }
