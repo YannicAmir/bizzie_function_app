@@ -1,3 +1,6 @@
+import { Logger } from '../../core/logger';
+
+const _logger = new Logger("Daily Brands UseCase");
 
 export interface Product {
     name: string;
@@ -25,9 +28,6 @@ export interface DBService {
     setDailyContent(data: DailyBrandsData): Promise<void>;
 }
 
-import { Logger } from '../../core/logger';
-const logger = new Logger("Daily Brands UseCase");
-
 // ...
 
 export const refreshDailyBrands = async (
@@ -35,7 +35,7 @@ export const refreshDailyBrands = async (
     dbService: DBService,
     sectors: string[]
 ): Promise<void> => {
-    logger.info("Starting Refresh...");
+    _logger.info("Starting Refresh...");
 
     // 1. Generate core sectors in parallel
     const sectorPromises = sectors.map(async (sectorName) => {
@@ -43,7 +43,7 @@ export const refreshDailyBrands = async (
             const products = await aiService.generateSectorProducts(sectorName);
             return { name: sectorName, products };
         } catch (error) {
-            logger.error(`Failed to generate products for sector ${sectorName}:`, error);
+            _logger.error(`Failed to generate products for sector ${sectorName}:`, error);
             // Return empty products for this sector rather than failing the whole batch
             // This allows partial success
             return { name: sectorName, products: [] };
@@ -60,7 +60,7 @@ export const refreshDailyBrands = async (
     try {
         allSectorsProducts = await aiService.generateAllSectorsProducts(allGeneratedProducts);
     } catch (error) {
-        logger.error("Failed to generate 'All Sectors' products:", error);
+        _logger.error("Failed to generate 'All Sectors' products:", error);
         // Continue with empty list if this specific part fails
     }
 
@@ -80,5 +80,5 @@ export const refreshDailyBrands = async (
 
     // 5. Save to Database
     await dbService.setDailyContent(dailyData);
-    logger.info("Refresh Completed Successfully.");
+    _logger.info("Refresh Completed Successfully.");
 };

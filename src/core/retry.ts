@@ -1,5 +1,6 @@
 import { Logger } from './logger';
-const logger = new Logger("Retry Utility");
+
+const _logger = new Logger("Retry Utility");
 
 /**
  * Options for the retry utility.
@@ -55,7 +56,7 @@ export async function retry<T>(
             const delay = Math.min(initialDelayMs * Math.pow(backoffFactor, attempt - 1), maxDelayMs);
 
             // Log the retry
-            logger.warn(`Operation failed (Attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms...`, { error: error instanceof Error ? error.message : String(error) });
+            _logger.warn(`Operation failed (Attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms...`, { error: error instanceof Error ? error.message : String(error) });
 
             await new Promise(resolve => setTimeout(resolve, delay));
 

@@ -1,13 +1,14 @@
 import { VertexAI, GenerativeModel } from '@google-cloud/vertexai';
 import { config } from './config';
 import { Logger } from './logger';
-const logger = new Logger("VertexAI");
+
+const _logger = new Logger("Vertex AI");
 
 let vertexAiInstance: VertexAI | null = null;
 
 export const getVertexAI = (): VertexAI => {
   if (!vertexAiInstance) {
-    logger.info(`Initializing`, { project: config.projectId, location: config.location });
+    _logger.info(`Initializing`, { project: config.projectId, location: config.location });
     vertexAiInstance = new VertexAI({
       project: config.projectId,
       location: config.location,

@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { Logger } from './logger';
-const logger = new Logger("Remote Config");
+
+const _logger = new Logger("Remote Config");
 
 // Interface for our Application Configuration
 export interface AppConfig {
@@ -38,17 +39,17 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
 
   // 1. Check Cache
   if (configCache && (now - lastFetchTime < CACHE_DURATION_MS)) {
-    logger.debug("Using cached config");
+    _logger.debug("Using cached config");
     return configCache;
   }
 
   try {
-    logger.info("Fetching from Firebase...");
+    _logger.info("Fetching from Firebase...");
     const template = await admin.remoteConfig().getTemplate();
 
     // 2. Parse Parameters
-    const rawSectors = (template.parameters['daily_brands_sectors']?.defaultValue as any)?.value;
-    const rawModelName = (template.parameters['gemini_model_name']?.defaultValue as any)?.value;
+    const rawSectors = (template.parameters['daily_brands_sectors']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawModelName = (template.parameters['gemini_model_name']?.defaultValue as { value?: string } | undefined)?.value;
 
     // 3. Construct Config with Fallbacks per field
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;
@@ -62,12 +63,12 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     // 4. Update Cache
     configCache = newConfig;
     lastFetchTime = now;
-    logger.info("Refreshed successfully", newConfig);
+    _logger.info("Refreshed successfully", newConfig);
 
     return newConfig;
 
   } catch (error) {
-    logger.error("Failed to fetch. Using Defaults.", error);
+    _logger.error("Failed to fetch. Using Defaults.", error);
     // Fallback to defaults on error to keep app alive
     return DEFAULT_CONFIG;
   }

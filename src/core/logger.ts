@@ -11,23 +11,23 @@ export class Logger {
         this.context = context;
     }
 
-    info(message: string, data?: any): void {
+    info(message: string, data?: object): void {
         const payload = data ? { ...data, context: this.context } : { context: this.context };
         firebaseLogger.info(`[${this.context}] ${message}`, payload);
     }
 
-    error(message: string, error?: any): void {
+    error(message: string, error?: unknown): void {
         // Ensure error objects are properly serialized/attached
         const payload = error ? { error, context: this.context } : { context: this.context };
         firebaseLogger.error(`[${this.context}] ${message}`, payload);
     }
 
-    warn(message: string, data?: any): void {
+    warn(message: string, data?: object): void {
         const payload = data ? { ...data, context: this.context } : { context: this.context };
         firebaseLogger.warn(`[${this.context}] ${message}`, payload);
     }
 
-    debug(message: string, data?: any): void {
+    debug(message: string, data?: object): void {
         const payload = data ? { ...data, context: this.context } : { context: this.context };
         firebaseLogger.debug(`[${this.context}] ${message}`, payload);
     }
