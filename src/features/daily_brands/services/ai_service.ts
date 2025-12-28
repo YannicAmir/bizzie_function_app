@@ -29,8 +29,8 @@ export class ValidatedAIService implements AIService {
       Task: Generate a list of 6 products for the sector "${sectorName}".
       
       SELECTION LOGIC (Heirarchy):
-      1. First, identify the **6 most popular/valuable PUBLICLY TRADED US COMPANIES** in this sector (the market leaders).
-      2. Then, for each of these 6 companies, select their **most popular/iconic consumer product**.
+      1. First, identify the **6 LARGEST PUBLICLY TRADED US COMPANIES by MARKET CAP** in this sector.
+      2. Then, for each of these 6 companies, select their **most popular/latest consumer product**.
       3. Result: You should return exactly 6 products (one from each of the top 6 companies).
 
       CRITICAL PRODUCT NAME RULES:
@@ -66,8 +66,8 @@ export class ValidatedAIService implements AIService {
       Excluded items: ${excludedNames}... (and similar items).
       
       SELECTION LOGIC (Heirarchy):
-      1. Identify **6 most popular/valuable PUBLICLY TRADED US COMPANIES** (from *any* sector) that are NOT in the excluded list.
-      2. For each, select their **most popular/iconic consumer product**.
+      1. Identify **6 LARGEST PUBLICLY TRADED US COMPANIES by MARKET CAP** (from *any* sector) that are NOT in the excluded list.
+      2. For each, select their **most popular/latest consumer product**.
       3. The goal is "All Sectors" picks - major household names different from the sector-specific ones.
       
       CRITICAL PRODUCT NAME RULES:
