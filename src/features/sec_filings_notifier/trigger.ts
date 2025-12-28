@@ -19,7 +19,7 @@ export const secFilingsNotifier = onSchedule(
         memory: '512MiB',
         timeoutSeconds: 300,
     },
-    async (event) => {
+    async () => {
         logger.info('Starting secFilingsNotifier scheduled function');
 
         try {

@@ -43,7 +43,7 @@ describe('FirebaseWatchlistService', () => {
 
         mockGet.mockResolvedValue({
             empty: false,
-            forEach: (callback: (doc: any) => void) => mockDocs.forEach(callback),
+            forEach: (callback: (doc: { id: string; data: () => unknown }) => void) => mockDocs.forEach(callback),
             size: 3
         });
 

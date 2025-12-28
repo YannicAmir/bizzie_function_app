@@ -15,7 +15,7 @@ export const earningsNotifier = onSchedule(
         secrets: [fmpApiKey],
         memory: '512MiB',
     },
-    async (event) => {
+    async () => {
         logger.info('Starting earningsNotifier scheduled function');
 
         try {

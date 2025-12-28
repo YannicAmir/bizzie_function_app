@@ -1,5 +1,5 @@
 
-import { getRemoteConfig, AppConfig } from '../../core/remote-config';
+import { getRemoteConfig } from '../../core/remote-config';
 import * as admin from 'firebase-admin';
 
 // Mock firebase-admin
@@ -15,7 +15,7 @@ jest.mock('firebase-admin', () => {
 });
 
 describe('Remote Config Utility', () => {
-    const mockGetTemplate = (admin as any)._getTemplateMock;
+    const mockGetTemplate = (admin as unknown as { _getTemplateMock: jest.Mock })._getTemplateMock;
 
     beforeEach(() => {
         jest.clearAllMocks();

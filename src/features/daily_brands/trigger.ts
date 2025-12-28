@@ -15,7 +15,7 @@ export const dailyBrandsTrigger = onSchedule(
         memory: "1GiB", // Explicit memory for AI tasks
         timeoutSeconds: 300 // Explicit timeout for AI tasks
     },
-    async (event) => {
+    async () => {
         _logger.info("Started");
 
         try {

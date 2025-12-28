@@ -1,4 +1,4 @@
-import { getGeminiModel, getVertexAI } from '../core/vertex-ai';
+import { getVertexAI } from '../core/vertex-ai';
 import { Logger } from '../core/logger';
 const _logger = new Logger("Test Script");
 
@@ -12,6 +12,7 @@ async function main() {
         // @ts-expect-error - listModels is not in the public type definition
         const resp = await vertex.listModels();
         _logger.info('Found models:');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resp.forEach((m: any) => {
             if (m.name.includes('gemini')) {
                 _logger.info(`- ${m.name} (${m.versionId})`);

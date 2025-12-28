@@ -75,7 +75,7 @@ async function run() {
 
         if (!filingsQuery.empty) {
             const docs = filingsQuery.docs.map(d => d.data()).sort((a, b) => {
-                // @ts-ignore
+
                 return (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0);
             });
             const doc = docs[0];
@@ -90,6 +90,7 @@ async function run() {
         // Clean exit
         process.exit(0);
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
         _logger.error("Test Failed", e);
         console.error("FULL ERROR DEBUG:", JSON.stringify(e, Object.getOwnPropertyNames(e), 2));

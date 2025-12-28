@@ -1,4 +1,4 @@
-import { FmpMarketDataService, EarningsEvent } from '../../../features/earnings_notifier/services/market_data_service';
+import { FmpMarketDataService } from '../../../features/earnings_notifier/services/market_data_service';
 import * as retryModule from '../../../core/retry';
 
 // Mock Logger

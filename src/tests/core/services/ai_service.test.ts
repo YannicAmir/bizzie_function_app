@@ -1,7 +1,7 @@
 import { VertexAiService } from '../../../core/services/ai_service';
 import * as vertexAi from '../../../core/vertex-ai';
 import * as remoteConfig from '../../../core/remote-config';
-import * as retryModule from '../../../core/retry';
+
 
 // Mock dependencies
 jest.mock('../../../core/vertex-ai');

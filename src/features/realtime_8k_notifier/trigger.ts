@@ -5,11 +5,10 @@ import { FmpSecService } from '../../core/services/sec_service';
 import { FirebaseFilingHistoryService } from '../../core/services/filing_history_service';
 import { VertexAiService } from '../../core/services/ai_service';
 import { Realtime8kNotifierUseCase } from './usecase';
-import * as dotenv from 'dotenv';
-import { setGlobalOptions } from 'firebase-functions/v2';
+
 
 // Determine Environment
-const isDev = process.env.FUNCTIONS_EMULATOR === 'true';
+
 
 // Schedule: Every 15 minutes, 6 AM to 10 PM, Mon-Fri (Market Hours+)
 // Cron: */15 6-22 * * 1-5
@@ -19,7 +18,7 @@ export const realtime8kNotifier = onSchedule({
     memory: '1GiB', // Needs memory for AI parsing if text is large
     timeoutSeconds: 540, // 9 minutes max
     secrets: ["FMP_API_KEY"]
-}, async (event) => {
+}, async () => {
 
     // Check if secret exists (runtime)
     const apiKey = process.env.FMP_API_KEY;

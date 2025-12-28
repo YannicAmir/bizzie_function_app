@@ -48,8 +48,8 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const template = await admin.remoteConfig().getTemplate();
 
     // 2. Parse Parameters
-    const rawSectors = (template.parameters['daily_brands_sectors']?.defaultValue as any)?.value;
-    const rawModelName = (template.parameters['gemini_model_name']?.defaultValue as any)?.value;
+    const rawSectors = (template.parameters['daily_brands_sectors']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawModelName = (template.parameters['gemini_model_name']?.defaultValue as { value?: string } | undefined)?.value;
 
     // 3. Construct Config with Fallbacks per field
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;

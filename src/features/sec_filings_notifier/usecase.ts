@@ -2,7 +2,7 @@
 import { Logger } from '../../core/logger';
 import { WatchlistService } from '../../core/services/watchlist_service';
 import { NotificationService } from '../../core/services/notification_service';
-import { SecService, SecFiling } from '../../core/services/sec_service';
+import { SecService } from '../../core/services/sec_service';
 import { FilingHistoryService } from '../../core/services/filing_history_service';
 import { AiService } from '../../core/services/ai_service'; // Import interface
 

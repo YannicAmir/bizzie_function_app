@@ -34,9 +34,10 @@ export class FmpMarketDataService implements MarketDataService {
                 throw new Error(`FMP API Error: ${response.status} ${response.statusText}`);
             }
 
-            const data = await response.json() as any[];
+            const data = await response.json() as unknown[];
 
             // Map raw data to our clean interface
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return data.map((item: any) => ({
                 date: item.date,
                 symbol: item.symbol,

@@ -44,8 +44,6 @@ export class EarningsNotifierUseCase {
                 // Get company name, defaulting to symbol if something went wrong
                 const companyName = watchedTickers.get(event.symbol) || event.symbol;
 
-                const eventDate = new Date(event.date); // API date is YYYY-MM-DD
-
                 // Normalize current date to midnight for accurate day-diff
                 const now = new Date();
                 now.setHours(0, 0, 0, 0);
