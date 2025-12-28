@@ -188,7 +188,7 @@ describe('SecFilingsNotifierUseCase', () => {
         // 2. Notification
         expect(mockNotificationService.sendTopicNotification).toHaveBeenCalledWith(
             'AAPL',
-            'AAPL SEC Filing Update',
+            "AAPL's 10-Q is now available",
             'Apple had a great quarter due to iPhone sales.', // AI Summary
             expect.objectContaining({
                 type: 'sec_filing',
