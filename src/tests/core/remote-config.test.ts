@@ -2,20 +2,28 @@
 import { getRemoteConfig } from '../../core/remote-config';
 import * as admin from 'firebase-admin';
 
-// Mock firebase-admin
-jest.mock('firebase-admin', () => {
-    const getTemplateMock = jest.fn();
-    return {
+// Mock src/core/firebase
+const getTemplateMock = jest.fn();
+jest.mock('../../core/firebase', () => ({
+    getFirebaseAdmin: jest.fn(() => ({
         remoteConfig: jest.fn(() => ({
             getTemplate: getTemplateMock
-        })),
-        // Helper to access the mock for assertions/setup
-        _getTemplateMock: getTemplateMock
-    };
-});
+        }))
+    }))
+}));
 
 describe('Remote Config Utility', () => {
-    const mockGetTemplate = (admin as unknown as { _getTemplateMock: jest.Mock })._getTemplateMock;
+    // We can access getTemplateMock directly since it's defined in scope
+    // But to be clean with potential hoisting if we moved it inside describe (which we shouldnt for jest.mock):
+    // Actually, because we defined getTemplateMock outside, we can just use the variable we defined above!
+    // BUT jest.mock calls are hoisted. So we need to access it differently or define it locally.
+    // Best practice:
+    // const mockGetTemplate = require('../../core/firebase').getFirebaseAdmin().remoteConfig().getTemplate; 
+
+    // Simpler: Just rely on the closure if it works in this environment, OR re-import.
+    // Let's use the standard "getMock" pattern.
+    const { getFirebaseAdmin } = require('../../core/firebase');
+    const mockGetTemplate = getFirebaseAdmin().remoteConfig().getTemplate;
 
     beforeEach(() => {
         jest.clearAllMocks();
