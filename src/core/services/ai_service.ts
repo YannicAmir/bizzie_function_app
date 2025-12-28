@@ -64,7 +64,7 @@ export class VertexAiService implements AiService {
                 If the text is just boilerplate or doesn't match the topics, set "topic": null.
 
                 TEXT:
-                ${text.substring(0, 30000)} 
+                ${text.substring(0, 1500000)} 
                 `;
 
                 const result = await model.generateContent({
