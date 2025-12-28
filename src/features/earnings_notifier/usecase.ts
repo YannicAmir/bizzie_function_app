@@ -21,7 +21,10 @@ export class EarningsNotifierUseCase {
         // Helper to format YYYY-MM-DD
         const formatDate = (d: Date) => d.toISOString().substring(0, 10);
 
-        const fromDateStr = formatDate(today);
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+
+        const fromDateStr = formatDate(yesterday);
         const toDateStr = formatDate(nextWeek);
 
         _logger.info(`Running Earnings Notification cycle for ${fromDateStr} to ${toDateStr}`);
@@ -56,13 +59,18 @@ export class EarningsNotifierUseCase {
                 const diffTime = target.getTime() - now.getTime();
                 const daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                if (daysDiff < 0 || daysDiff > 7) continue;
-
-                const daysText = daysDiff === 0 ? 'today' : `in ${daysDiff} day${daysDiff > 1 ? 's' : ''}`;
+                if (daysDiff < -1 || daysDiff > 7) continue;
 
                 // Construct Title and Body
                 const title = `${event.symbol} Earnings Update`;
-                const body = `${companyName} is releasing earnings ${daysText}!`;
+                let body = '';
+
+                if (daysDiff === -1) {
+                    body = `${companyName} released their earnings yesterday. Check out how they did last period!`;
+                } else {
+                    const daysText = daysDiff === 0 ? 'today' : `in ${daysDiff} day${daysDiff > 1 ? 's' : ''}`;
+                    body = `${companyName} is releasing their earnings ${daysText}!`;
+                }
 
                 await this.notificationService.sendTopicNotification(
                     event.symbol,

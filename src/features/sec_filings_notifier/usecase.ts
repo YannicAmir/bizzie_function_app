@@ -98,7 +98,7 @@ export class SecFilingsNotifierUseCase {
             }
 
             // Title: [TICKER] SEC Filing Update
-            const title = `${filing.symbol} SEC Filing Update`;
+            const title = `${filing.symbol}'s ${filing.formType} is now available`;
 
             // Body: Use AI summary if available, otherwise fallback
             const body = aiData.summary;

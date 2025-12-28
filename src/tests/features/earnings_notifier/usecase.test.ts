@@ -76,7 +76,7 @@ describe('EarningsNotifierUseCase', () => {
         expect(mockNotificationService.sendTopicNotification).toHaveBeenCalledWith(
             'AAPL',
             'AAPL Earnings Update',
-            'Apple Inc. is releasing earnings today!',
+            'Apple Inc. is releasing their earnings today!',
             expect.objectContaining({ type: 'earnings_reminder', daysRemaining: '0' })
         );
     });
@@ -105,7 +105,7 @@ describe('EarningsNotifierUseCase', () => {
         expect(mockNotificationService.sendTopicNotification).toHaveBeenCalledWith(
             'AAPL',
             'AAPL Earnings Update',
-            'Apple Inc. is releasing earnings in 1 day!',
+            'Apple Inc. is releasing their earnings in 1 day!',
             expect.objectContaining({ type: 'earnings_reminder', daysRemaining: '1' })
         );
     });

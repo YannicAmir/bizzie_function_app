@@ -88,7 +88,7 @@ export class Realtime8kNotifierUseCase {
             let body = '';
 
             if (enriched.isEarnings) {
-                title = `${filing.symbol}’s Earnings Are In!`;
+                title = `${filing.symbol}’s earnings are in!`;
                 body = `Find out how ${companyName} performed this past period.`;
             } else {
                 title = `${filing.symbol} Breaking News`;
