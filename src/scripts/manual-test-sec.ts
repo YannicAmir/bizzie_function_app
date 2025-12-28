@@ -16,8 +16,9 @@ import { getFirebaseAdmin } from '../core/firebase';
 import { Logger } from '../core/logger';
 import { FirebaseWatchlistService } from '../core/services/watchlist_service';
 import { FcmNotificationService } from '../core/services/notification_service';
-import { FmpSecService } from '../features/sec_filings_notifier/services/sec_service';
-import { FirebaseFilingHistoryService } from '../features/sec_filings_notifier/services/filing_history_service';
+import { VertexAiService } from '../core/services/ai_service';
+import { FmpSecService } from '../core/services/sec_service';
+import { FirebaseFilingHistoryService } from '../core/services/filing_history_service';
 import { SecFilingsNotifierUseCase } from '../features/sec_filings_notifier/usecase';
 
 const _logger = new Logger('Manual SEC Test');
@@ -41,39 +42,52 @@ async function run() {
         thirtyDaysAgo.setDate(new Date().getDate() - 90);
         const pastStr = thirtyDaysAgo.toISOString().split('T')[0] || '';
 
-        _logger.info("--- 1. Testing SEC Service (Last 90 Days Sample) ---");
-        // We can't filter by symbol in the API easily with this specific endpoint (it's by formType)
-        // So we just rely on standard fetching
-        const filings = await secService.getFilings('10-Q', pastStr, today);
-        _logger.info(`Fetched ${filings.length} 10-Qs from ${pastStr} to ${today} globally.`);
-        if (filings.length > 0) {
-            _logger.info("First item sample:", filings[0]);
+        _logger.info("--- 1. Search for a recent 10-K (Last 90 Days) ---");
+        // Get 10-Ks
+        const filings = await secService.getFilings('10-K', pastStr, today);
+        _logger.info(`Fetched ${filings.length} 10-Ks from ${pastStr} to ${today} globally.`);
+
+        if (!filings || filings.length === 0 || !filings[0]) {
+            _logger.error("No 10-K filings found in the last 90 days. Cannot verify.");
+            process.exit(1);
         }
 
-        // 2.5 Seed Watchlist (Simulation)
-        // If the user has no subscriptions, we can't test anything. Let's force one.
-        // CNXA filed a 10-Q on 2025-12-23 (per logs).
-        const knownTicker = 'CNXA';
-        const watchlistRef = getFirebaseAdmin().firestore().collection('watchlist').doc(knownTicker);
-        if (!(await watchlistRef.get()).exists) {
-            _logger.info(`[Simulation] Seeding watchlist with ${knownTicker} for testing...`);
-            await watchlistRef.set({ companyName: 'ConnectOne Bancorp (Test Seed)' });
+        const targetFiling = filings[0];
+        _logger.info(`Targeting Filing: ${targetFiling.symbol} filed on ${targetFiling.filingDate}`);
+
+        // 2.5 Seed Watchlist (Dynamic)
+        const watchlistRef = getFirebaseAdmin().firestore().collection('watchlist').doc(targetFiling.symbol);
+        _logger.info(`[Simulation] Seeding watchlist with ${targetFiling.symbol} for testing...`);
+        await watchlistRef.set({ companyName: `${targetFiling.symbol} Test Corp` });
+
+        // CLEAR HISTORY for this ticker
+        const processedRef = getFirebaseAdmin().firestore().collection('processed_filings').where('symbol', '==', targetFiling.symbol);
+        const processedDocs = await processedRef.get();
+        if (!processedDocs.empty) {
+            _logger.info(`[Simulation] Clearing ${processedDocs.size} processed records for ${targetFiling.symbol}...`);
+            const batch = getFirebaseAdmin().firestore().batch();
+            processedDocs.docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
         }
 
-        // 3. Execution (The Real Logic: Yesterday -> Today)
-        // SIMULATION: Let's pretend "Today" is a date we KNOW has filings.
-        // Target: 2025-12-24. Because logic checks (Yesterday..Today], so (Dec 23..Dec 24].
-        // This should catch the Dec 23rd filing.
+        // 3. Execution 
+        // We simulate "Today" as the day AFTER the filing was accepted, to ensure logic picks it up.
+        // Filing acceptedDate is string "YYYY-MM-DD HH:mm:ss".
+        // Filing logic looks for >= yesterday and <= today.
 
-        const simulateDate = new Date();
-        // const simulateDate = new Date('2025-12-24T10:00:00Z'); // Time Travel Test
+        // Let's set simulation date to filingDate + 1 day
+        const filingDateObj = new Date(targetFiling.filingDate);
+        const simulateDate = new Date(filingDateObj);
+        simulateDate.setDate(simulateDate.getDate() + 1);
 
-        _logger.info(`--- 2. Executing Use Case (Simulated Date: ${simulateDate.toISOString().split('T')[0]}) ---`);
+        _logger.info(`--- 2. Executing Use Case (Simulated Date: ${simulateDate.toISOString().split('T')[0]}) for ${targetFiling.symbol} ---`);
+        const aiService = new VertexAiService(); // Mock or Real
         const useCase = new SecFilingsNotifierUseCase(
             watchlistService,
             secService,
             filingHistoryService,
-            notificationService
+            notificationService,
+            aiService
         );
 
         await useCase.execute(simulateDate);

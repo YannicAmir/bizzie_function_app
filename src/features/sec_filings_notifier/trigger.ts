@@ -2,11 +2,12 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as logger from 'firebase-functions/logger';
 import { defineSecret } from 'firebase-functions/params';
+import { VertexAiService } from '../../core/services/ai_service';
 import { SecFilingsNotifierUseCase } from './usecase';
 import { FirebaseWatchlistService } from '../../core/services/watchlist_service';
 import { FcmNotificationService } from '../../core/services/notification_service';
-import { FmpSecService } from './services/sec_service';
-import { FirebaseFilingHistoryService } from './services/filing_history_service';
+import { FmpSecService } from '../../core/services/sec_service';
+import { FirebaseFilingHistoryService } from '../../core/services/filing_history_service';
 
 const fmpApiKey = defineSecret('FMP_API_KEY');
 
@@ -30,13 +31,15 @@ export const secFilingsNotifier = onSchedule(
             const secService = new FmpSecService(fmpApiKey.value());
 
             const filingHistoryService = new FirebaseFilingHistoryService();
+            const aiService = new VertexAiService(); // Instantiated VertexAiService
 
             // Instantiate Use Case
             const useCase = new SecFilingsNotifierUseCase(
                 watchlistService,
                 secService,
                 filingHistoryService,
-                notificationService
+                notificationService,
+                aiService // Added aiService to the use case constructor
             );
 
             // Execute

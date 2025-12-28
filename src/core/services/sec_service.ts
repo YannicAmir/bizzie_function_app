@@ -1,6 +1,6 @@
 
-import { Logger } from '../../../core/logger';
-import { retry } from '../../../core/retry';
+import { Logger } from '../logger';
+import { retry } from '../retry';
 
 const _logger = new Logger('SEC Service');
 
@@ -16,7 +16,8 @@ export interface SecFiling {
 }
 
 export interface SecService {
-    getFilings(type: '10-K' | '10-Q', startDate: string, endDate: string): Promise<SecFiling[]>;
+    getFilings(type: '10-K' | '10-Q' | '8-K', startDate: string, endDate: string): Promise<SecFiling[]>;
+    getFilingText(url: string): Promise<string>;
 }
 
 export class FmpSecService implements SecService {
@@ -24,7 +25,7 @@ export class FmpSecService implements SecService {
 
     constructor(private apiKey: string) { }
 
-    async getFilings(type: '10-K' | '10-Q', startDate: string, endDate: string): Promise<SecFiling[]> {
+    async getFilings(type: '10-K' | '10-Q' | '8-K', startDate: string, endDate: string): Promise<SecFiling[]> {
         const results: SecFiling[] = [];
         let page = 0;
         const limit = 1000; // API Max Limit
@@ -74,5 +75,32 @@ export class FmpSecService implements SecService {
 
         _logger.info(`Total ${type} filings fetched: ${results.length}`);
         return results;
+    }
+
+    async getFilingText(url: string): Promise<string> {
+        // Fetch raw text/html from the filing link
+        try {
+            // SEC.gov requires a User-Agent header: AppName/Version <email>
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': 'BizzieApp/1.0 (bizzie@example.com)',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                }
+            });
+            if (!response.ok) {
+                _logger.warn(`Failed to fetch filing text from ${url}: ${response.status}`);
+                return "";
+            }
+            const rawText = await response.text();
+
+            // helper to strip HTML tags
+            const strippedText = rawText.replace(/<[^>]*>?/gm, ' ');
+
+            // Increase limit to 1,500,000 characters for 10-K analysis
+            return strippedText.substring(0, 1500000);
+        } catch (error) {
+            _logger.error(`Error fetching filing text from ${url}`, error);
+            return "";
+        }
     }
 }

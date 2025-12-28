@@ -1,7 +1,7 @@
 
 import * as crypto from 'crypto';
-import { getFirebaseAdmin } from '../../../core/firebase';
-import { Logger } from '../../../core/logger';
+import { getFirebaseAdmin } from '../firebase';
+import { Logger } from '../logger';
 import { SecFiling } from './sec_service';
 
 const _logger = new Logger('Filing History Service');

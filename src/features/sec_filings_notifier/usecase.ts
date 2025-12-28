@@ -2,8 +2,12 @@
 import { Logger } from '../../core/logger';
 import { WatchlistService } from '../../core/services/watchlist_service';
 import { NotificationService } from '../../core/services/notification_service';
-import { SecService, SecFiling } from './services/sec_service';
-import { FilingHistoryService } from './services/filing_history_service';
+import { SecService, SecFiling } from '../../core/services/sec_service';
+import { FilingHistoryService } from '../../core/services/filing_history_service';
+import { AiService } from '../../core/services/ai_service'; // Import interface
+
+import { getFirebaseAdmin } from '../../core/firebase';
+import * as admin from 'firebase-admin';
 
 const _logger = new Logger('SEC Filings Usecase');
 
@@ -13,7 +17,8 @@ export class SecFilingsNotifierUseCase {
         private watchlistService: WatchlistService,
         private secService: SecService,
         private filingHistoryService: FilingHistoryService,
-        private notificationService: NotificationService
+        private notificationService: NotificationService,
+        private aiService: AiService // Injected
     ) { }
 
     async execute(targetDate?: Date): Promise<void> {
@@ -66,17 +71,37 @@ export class SecFilingsNotifierUseCase {
                 continue;
             }
 
-            // C. Prepare Notification
+            // C. Prepare Data
             const companyName = watchedTickers.get(filing.symbol) || filing.symbol;
-
-            // Logic: 10-K -> "year", 10-Q -> "quarter"
             const periodText = filing.formType === '10-K' ? 'year' : 'quarter';
+
+            // Fetch and Analyze Text (AI)
+            let aiData = { revenue: null as string | null, eps: null as string | null, summary: `${filing.formType} filed.` };
+
+            try {
+                // Ensure we have a link (prefer finalLink)
+                const targetLink = filing.finalLink || filing.link;
+                if (targetLink) {
+                    _logger.info(`Analyzing ${filing.formType} for ${filing.symbol}...`);
+                    const filingText = await this.secService.getFilingText(targetLink);
+                    if (filingText) {
+                        const result = await this.aiService.enrichFinancialReport(filingText, filing.formType);
+                        if (result) {
+                            aiData = result;
+                            _logger.info(`AI Analysis for ${filing.symbol}: ${JSON.stringify(aiData)}`);
+                        }
+                    }
+                }
+            } catch (err) {
+                _logger.error(`Failed to run AI analysis for ${filing.symbol}`, err);
+                // Continue without AI data (fallback to basic summary)
+            }
 
             // Title: [TICKER] SEC Filing Update
             const title = `${filing.symbol} SEC Filing Update`;
 
-            // Body: [Company]'s [Type] is ready for you to view. See how the company did this past [period]!
-            const body = `${companyName}'s ${filing.formType} is ready for you to view. See how the company did this past ${periodText}!`;
+            // Body: Use AI summary if available, otherwise fallback
+            const body = aiData.summary;
 
             // D. Send Notification (Sequential Execution for FCM Stability)
             await this.notificationService.sendTopicNotification(
@@ -87,12 +112,25 @@ export class SecFilingsNotifierUseCase {
                     type: 'sec_filing',
                     ticker: filing.symbol,
                     formType: filing.formType,
-                    period: filing.period || periodText, // Fallback if missing
+                    period: filing.period || periodText,
                     link: filing.finalLink,
                     filingDate: filing.filingDate
                 }
             );
             sentCount++;
+
+            // D-2. Save to DB (sec_filings)
+            await getFirebaseAdmin().firestore().collection('sec_filings').add({
+                symbol: filing.symbol,
+                companyName: companyName,
+                formType: filing.formType,
+                filingDate: filing.filingDate,
+                link: filing.finalLink,
+                summary: aiData.summary,
+                revenue: aiData.revenue, // Save extracted metric
+                eps: aiData.eps,         // Save extracted metric
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
 
             // E. Mark as Processed
             await this.filingHistoryService.markProcessed(filing);
