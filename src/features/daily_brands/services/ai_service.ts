@@ -121,7 +121,7 @@ export class ValidatedAIService implements AIService {
 
           return parsed.products;
         } catch (error) {
-          _logger.warn("Generation attempt failed:", error);
+          _logger.warn("Generation attempt failed:", { error });
           throw error; // Ensure retry catches it
         }
       }, {
