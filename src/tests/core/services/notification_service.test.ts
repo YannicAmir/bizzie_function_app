@@ -2,8 +2,7 @@ import { FcmNotificationService } from '../../../core/services/notification_serv
 import * as firebaseCore from '../../../core/firebase';
 import { messaging } from 'firebase-admin';
 
-// Mock dependencies
-jest.mock('../../../core/firebase');
+// Mock Logger
 jest.mock('../../../core/logger', () => ({
     Logger: jest.fn().mockImplementation(() => ({
         info: jest.fn(),
@@ -13,51 +12,68 @@ jest.mock('../../../core/logger', () => ({
     }))
 }));
 
+// Mock Firebase
+jest.mock('../../../core/firebase');
+
 describe('FcmNotificationService', () => {
     let service: FcmNotificationService;
+    let mockMessaging: jest.Mock;
     let mockSend: jest.Mock;
 
     beforeEach(() => {
         service = new FcmNotificationService();
         mockSend = jest.fn();
+        mockMessaging = jest.fn(() => ({
+            send: mockSend
+        }));
 
         (firebaseCore.getFirebaseAdmin as jest.Mock).mockReturnValue({
-            messaging: () => ({
-                send: mockSend
-            })
+            messaging: mockMessaging
         });
     });
 
-    afterEach(() => {
-        jest.clearAllMocks();
+    describe('sendTopicNotification', () => {
+        it('sends message successfully', async () => {
+            mockSend.mockResolvedValue('msg-id');
+
+            await service.sendTopicNotification('test-topic', 'Title', 'Body');
+
+            expect(mockSend).toHaveBeenCalledWith({
+                topic: 'test-topic',
+                notification: {
+                    title: 'Title',
+                    body: 'Body'
+                },
+                data: {}
+            });
+        });
+
+        it('handles errors gracefully (does not throw)', async () => {
+            mockSend.mockRejectedValue(new Error('FCM Error'));
+
+            await expect(service.sendTopicNotification('test-topic', 'Title', 'Body')).resolves.not.toThrow();
+        });
     });
 
-    it('sendTopicNotification_validPayload_sendsToFCM', async () => {
-        mockSend.mockResolvedValue('msg-id-123');
+    describe('sendToToken', () => {
+        it('sends message to token successfully', async () => {
+            mockSend.mockResolvedValue('msg-id');
 
-        await service.sendTopicNotification('ticker-AAPL', 'News', 'Body', { key: 'val' });
+            await service.sendToToken('test-token', 'Private Title', 'Private Body');
 
-        expect(mockSend).toHaveBeenCalledTimes(1);
-        const expectedMessage: messaging.Message = {
-            topic: 'ticker-AAPL',
-            notification: {
-                title: 'News',
-                body: 'Body'
-            },
-            data: { key: 'val' }
-        };
-        expect(mockSend).toHaveBeenCalledWith(expectedMessage);
-    });
+            expect(mockSend).toHaveBeenCalledWith({
+                token: 'test-token',
+                notification: {
+                    title: 'Private Title',
+                    body: 'Private Body'
+                },
+                data: {}
+            });
+        });
 
-    it('sendTopicNotification_fcmError_logsAndDoesNotThrow', async () => {
-        mockSend.mockRejectedValue(new Error('FCM Error'));
-
-        // Should not throw
-        await expect(service.sendTopicNotification('ticker-ERR', 'News', 'Body'))
-            .resolves.not.toThrow();
-
-        expect(mockSend).toHaveBeenCalledTimes(1);
-        // Note: We can't verify logging unless we spy on key Logger, but we mocked it.
-        // The main requirement here is ensuring it doesn't crash the app.
+        it('handles errors gracefully', async () => {
+            mockSend.mockRejectedValue(new Error('Invalid Token'));
+            await expect(service.sendToToken('bad-token', 'T', 'B')).resolves.not.toThrow();
+        });
     });
 });

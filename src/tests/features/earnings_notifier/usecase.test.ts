@@ -27,7 +27,8 @@ describe('EarningsNotifierUseCase', () => {
             getEarningsCalendar: jest.fn()
         };
         mockNotificationService = {
-            sendTopicNotification: jest.fn()
+            sendTopicNotification: jest.fn(),
+            sendToToken: jest.fn()
         };
 
         useCase = new EarningsNotifierUseCase(
