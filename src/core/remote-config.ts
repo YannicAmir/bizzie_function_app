@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin';
+import { getFirebaseAdmin } from './firebase';
 import { Logger } from './logger';
 
 const _logger = new Logger("Remote Config");
@@ -45,7 +45,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
 
   try {
     _logger.info("Fetching from Firebase...");
-    const template = await admin.remoteConfig().getTemplate();
+    const template = await getFirebaseAdmin().remoteConfig().getTemplate();
 
     // 2. Parse Parameters
     const rawSectors = (template.parameters['daily_brands_sectors']?.defaultValue as { value?: string } | undefined)?.value;

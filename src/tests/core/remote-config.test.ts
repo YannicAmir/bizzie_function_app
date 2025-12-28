@@ -1,21 +1,19 @@
 
 import { getRemoteConfig } from '../../core/remote-config';
-import * as admin from 'firebase-admin';
 
-// Mock firebase-admin
-jest.mock('firebase-admin', () => {
-    const getTemplateMock = jest.fn();
-    return {
+// Mock src/core/firebase
+const getTemplateMock = jest.fn();
+jest.mock('../../core/firebase', () => ({
+    getFirebaseAdmin: jest.fn(() => ({
         remoteConfig: jest.fn(() => ({
             getTemplate: getTemplateMock
-        })),
-        // Helper to access the mock for assertions/setup
-        _getTemplateMock: getTemplateMock
-    };
-});
+        }))
+    }))
+}));
 
 describe('Remote Config Utility', () => {
-    const mockGetTemplate = (admin as unknown as { _getTemplateMock: jest.Mock })._getTemplateMock;
+    // Access getTemplateMock directly since it is in the module scope
+    const mockGetTemplate = getTemplateMock;
 
     beforeEach(() => {
         jest.clearAllMocks();
