@@ -52,8 +52,9 @@ async function runDripForUser(userId: string, fcmToken: string, day: number) {
             }
         });
         console.log(`✅ Notification SENT to device! Check your phone.`);
-    } catch (e: any) {
-        console.error(`❌ Failed to send: ${e.message}`);
+    } catch (e: unknown) {
+        const err = e as Error;
+        console.error(`❌ Failed to send: ${err.message}`);
     }
 }
 

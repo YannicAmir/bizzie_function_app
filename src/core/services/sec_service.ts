@@ -1,6 +1,6 @@
-
 import { Logger } from '../logger';
 import { retry } from '../retry';
+import { getRemoteConfig } from '../remote-config';
 
 const _logger = new Logger('SEC Service');
 
@@ -21,8 +21,6 @@ export interface SecService {
 }
 
 export class FmpSecService implements SecService {
-    private baseUrl = 'https://financialmodelingprep.com/stable';
-
     constructor(private apiKey: string) { }
 
     async getFilings(type: '10-K' | '10-Q' | '8-K', startDate: string, endDate: string): Promise<SecFiling[]> {
@@ -35,7 +33,9 @@ export class FmpSecService implements SecService {
 
         while (keepFetching) {
             const pageResults = await retry(async () => {
-                const url = `${this.baseUrl}/sec-filings-search/form-type?formType=${type}&from=${startDate}&to=${endDate}&page=${page}&limit=${limit}&apikey=${this.apiKey}`;
+                const config = await getRemoteConfig();
+                const baseUrl = config.fmp.baseUrl;
+                const url = `${baseUrl}/sec-filings-search/form-type?formType=${type}&from=${startDate}&to=${endDate}&page=${page}&limit=${limit}&apikey=${this.apiKey}`;
                 // _logger.debug(`Fetching page ${page}: ${url}`); // Be careful logging API keys if DEBUG is on (url contains key)
 
                 const response = await fetch(url);

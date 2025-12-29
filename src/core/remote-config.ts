@@ -8,6 +8,11 @@ export interface AppConfig {
   sectors: string[];
   modelName: string;
   subscriptionDripCampaign: string;
+  fmp: {
+    baseUrl: string;
+    v3Url: string;
+    v4Url: string;
+  };
 }
 
 // Default Fallback Configuration (Safety Net)
@@ -37,7 +42,13 @@ const DEFAULT_CONFIG: AppConfig = {
     5: { title: 'Bizzie Plus for 40% Discount 💎', body: "Subscribe to Bizzie Plus to unlock all Bizzie's features like product and brand search" },
     6: { title: "Unlock Bizzie's Full Potential 🔓", body: "Subscribe to Bizzie Plus to get AI analyses of financial reports. Get the information that matters in seconds!" },
     7: { title: 'Last Call! 40% Off Bizzie Plus ⏳', body: 'Save time sifting through reports with AI analysis. Subscribe to Bizzie Plus to enjoy now!' }
-  })
+  }),
+  // FMP Configuration
+  fmp: {
+    baseUrl: "https://financialmodelingprep.com/stable",
+    v3Url: "https://financialmodelingprep.com/api/v3",
+    v4Url: "https://financialmodelingprep.com/api/v4"
+  }
 };
 
 // Caching Mechanism
@@ -62,16 +73,19 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const rawSectors = (template.parameters['daily_brands_sectors']?.defaultValue as { value?: string } | undefined)?.value;
     const rawModelName = (template.parameters['gemini_model_name']?.defaultValue as { value?: string } | undefined)?.value;
     const rawDrip = (template.parameters['subscription_drip_campaign']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawFmp = (template.parameters['fmp_config']?.defaultValue as { value?: string } | undefined)?.value;
 
     // 3. Construct Config with Fallbacks per field
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;
     const modelName = (rawModelName as string) || DEFAULT_CONFIG.modelName;
     const subscriptionDripCampaign = (rawDrip as string) || DEFAULT_CONFIG.subscriptionDripCampaign;
+    const fmp = rawFmp ? JSON.parse(rawFmp) : DEFAULT_CONFIG.fmp;
 
     const newConfig: AppConfig = {
       sectors,
       modelName,
-      subscriptionDripCampaign
+      subscriptionDripCampaign,
+      fmp
     };
 
     // 4. Update Cache

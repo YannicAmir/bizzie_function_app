@@ -1,6 +1,5 @@
 import { FcmNotificationService } from '../../../core/services/notification_service';
 import * as firebaseCore from '../../../core/firebase';
-import { messaging } from 'firebase-admin';
 
 // Mock Logger
 jest.mock('../../../core/logger', () => ({

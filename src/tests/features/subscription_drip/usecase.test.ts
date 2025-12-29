@@ -118,6 +118,7 @@ describe('SubscriptionDripUseCase', () => {
     it('skips users without tokens or createdAt', async () => {
         mockConfigService.getDripCampaign.mockResolvedValue({});
         async function* mockGenerator() {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             yield [{ id: 'u1', isSubscribed: false } as any]; // Missing fields
         }
         mockUserService.streamRecentFreeUsers.mockReturnValue(mockGenerator());
