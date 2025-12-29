@@ -10,7 +10,7 @@ const fmpApiKey = defineSecret('FMP_API_KEY');
 
 export const earningsNotifier = onSchedule(
     {
-        schedule: '0 9 * * *', // 9 AM EST
+        schedule: 'every mon,tue,wed,thu,fri 08:45', // Weekdays 8:45 AM EST
         timeZone: 'America/New_York',
         secrets: [fmpApiKey],
         memory: '512MiB',
