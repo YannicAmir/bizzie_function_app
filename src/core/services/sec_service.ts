@@ -1,6 +1,6 @@
-
 import { Logger } from '../logger';
 import { retry } from '../retry';
+import { getRemoteConfig } from '../remote-config';
 
 const _logger = new Logger('SEC Service');
 
@@ -20,11 +20,7 @@ export interface SecService {
     getFilingText(url: string): Promise<string>;
 }
 
-import { getRemoteConfig } from '../remote-config';
-
 export class FmpSecService implements SecService {
-    // Removed hardcoded baseUrl
-
     constructor(private apiKey: string) { }
 
     async getFilings(type: '10-K' | '10-Q' | '8-K', startDate: string, endDate: string): Promise<SecFiling[]> {
