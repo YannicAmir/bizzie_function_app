@@ -14,6 +14,16 @@ jest.mock('../../../core/logger', () => ({
 // Mock Retry to execute immediately
 jest.spyOn(retryModule, 'retry').mockImplementation(async (fn) => fn());
 
+// Mock Remote Config
+jest.mock('../../../core/remote-config', () => ({
+    getRemoteConfig: jest.fn().mockResolvedValue({
+        fmp: {
+            baseUrl: 'https://test-fmp.com',
+            v3Url: 'https://test-fmp.com/v3'
+        }
+    })
+}));
+
 // Mock global fetch
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
