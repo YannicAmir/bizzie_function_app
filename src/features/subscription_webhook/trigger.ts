@@ -17,13 +17,15 @@ export const revenueCatWebhook = onRequest(
     },
     async (request, response) => {
         // 1. Security Check
-        const authHeader = request.headers['authorization'];
-        const secretValue = revenueCatSecret.value();
+        const authHeader = request.headers['authorization'] || '';
+        const secretValue = revenueCatSecret.value().trim();
+        const incomingAuth = authHeader.trim();
 
-        // Basic "Bearer " strip if present, though manual setting often sends just the token or "Bearer <token>"
-        // To be safe, we check if it INCLUDES our secret.
-        if (!authHeader || !authHeader.includes(secretValue)) {
-            _logger.warn('Unauthorized webhook attempt.', { headers: request.headers });
+        // Debug Log (Remove after successful connection)
+        _logger.info(`Auth Debug: SecretLength=${secretValue.length}, HeaderLength=${incomingAuth.length}, Header='${incomingAuth}'`);
+
+        if (!incomingAuth.includes(secretValue)) {
+            _logger.warn(`Unauthorized webhook attempt. Expected secret length: ${secretValue.length}, Received header: ${incomingAuth}`);
             response.status(403).send('Unauthorized');
             return;
         }

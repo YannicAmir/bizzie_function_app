@@ -62,6 +62,7 @@ curl -X POST YOUR_URL_HERE \
 1.  Go to the **Firebase Console** -> **Firestore Database**.
 2.  Look for the `users` collection.
 3.  Find the document named `test_user_999`.
+    *   **Note**: If you didn't have a `users` collection or this user, **Don't Worry!** Firestore automatically created them for you when the function ran.
 4.  **Success Criteria**:
     *   Do you see `isSubscribed: true`?
     *   Do you see `updatedAt`?
