@@ -4,3 +4,6 @@ export * from './features/earnings_notifier/trigger';
 export * from './features/sec_filings_notifier/trigger';
 export * from './features/realtime_8k_notifier/trigger';
 export * from './features/subscription_drip/trigger';
+export * from './features/bizzies_picks_notifier/trigger';
+export * from './features/user_subscription_sync/trigger';
+export * from './features/subscription_webhook/trigger';

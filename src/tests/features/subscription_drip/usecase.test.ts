@@ -25,7 +25,9 @@ describe('SubscriptionDripUseCase', () => {
         };
         mockNotificationService = {
             sendTopicNotification: jest.fn(),
-            sendToToken: jest.fn()
+            sendToToken: jest.fn(),
+            subscribeToTopic: jest.fn(),
+            unsubscribeFromTopic: jest.fn(),
         };
         mockConfigService = {
             getDripCampaign: jest.fn()
