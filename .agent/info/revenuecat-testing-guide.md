@@ -86,3 +86,41 @@ This tests the entire chain: Apple -> RevenueCat -> Bizzie Backend -> Firestore.
 1.  Wait about 5-10 seconds.
 2.  Check YOUR user document in Firestore.
     *   **Success**: `isSubscribed` should flip to `true` automatically!
+
+---
+
+## Phase 4: Postman Verification (GUI Alternative)
+
+If you prefer a graphical interface over the command line, use Postman.
+
+### 1. Create Request
+*   Open Postman and click **(+) New Request**.
+*   **Method**: Select `POST`.
+*   **URL**: Paste your deployed Cloud Function URL (e.g., `https://us-central1-bizzie-dev-7199b.cloudfunctions.net/revenueCatWebhook`).
+
+### 2. Set Headers
+Go to the **Headers** tab and add:
+*   **Key**: `Authorization`
+*   **Value**: `bizzie_secret_010324` (Or your actual secret from Google Cloud Secret Manager)
+*   **Key**: `Content-Type`
+*   **Value**: `application/json`
+
+### 3. Set Body
+Go to the **Body** tab, select **raw**, and choose **JSON** from the dropdown. Paste this payload:
+
+```json
+{
+  "event": {
+    "type": "INITIAL_PURCHASE",
+    "app_user_id": "test_user_postman",
+    "expiration_at_ms": 1998790400000
+  },
+  "api_version": "1.0"
+}
+```
+
+### 4. Send & Verify
+1.  Click **Send**.
+2.  **Response**: You should see `200 OK` and `"OK"` in the body.
+3.  **Verify**: Check Firestore for the user `test_user_postman`.
+    *   `isSubscribed` should be `true`.
