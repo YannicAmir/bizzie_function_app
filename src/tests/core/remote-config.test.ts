@@ -1,6 +1,3 @@
-
-import { getRemoteConfig } from '../../core/remote-config';
-
 // Mock src/core/firebase
 const getTemplateMock = jest.fn();
 jest.mock('../../core/firebase', () => ({
@@ -14,14 +11,17 @@ jest.mock('../../core/firebase', () => ({
 describe('Remote Config Utility', () => {
     // Access getTemplateMock directly since it is in the module scope
     const mockGetTemplate = getTemplateMock;
+    let getRemoteConfig: any;
 
     beforeEach(() => {
         jest.clearAllMocks();
-        // Reset cache mechanism if possible? 
-        // Since cache is a module-level variable, it's hard to reset without reloading module.
-        // For unit tests, we might treat it as "first run" or assume cache behavior.
-        // If we really need to test caching vs fresh fetch, we might need to modify the source to export a cache reset, 
-        // or re-require the module. For now, let's verify the first fetch behavior which is most critical.
+        jest.resetModules();
+        // Re-require the module to reset the internal cache variable
+        // We need to re-mock firebase because resetModules clears the mock registry for that module if not careful,
+        // but here we defined the mock factory at top level which usually persists, 
+        // however 'jest.mock' calls are hoisted.
+        // Let's re-require the module under test.
+        getRemoteConfig = require('../../core/remote-config').getRemoteConfig;
     });
 
     it('should return parsed config from valid template', async () => {
@@ -32,41 +32,35 @@ describe('Remote Config Utility', () => {
             }
         });
 
-        // FORCE timestamp check bypass? 
-        // In this specific implementation, we cannot easy reset module state (cache).
-        // However, if we assume the first run of the test suite hits this, it should call fetch.
-        // If we want to be robust, we can't easily test cache invalidation without Refactoring.
-        // Let's just test that it returns the values provided by the mock, 
-        // effectively testing formatting.
-
         const config = await getRemoteConfig();
 
         expect(config.sectors).toEqual(['Tech', 'Energy']);
 
         expect(config.modelName).toBe('gemini-test-model');
+
+        // FMP defaults when param is missing
+        expect(config.fmp.baseUrl).toBe('https://financialmodelingprep.com/stable');
+    });
+
+    it('should parse FMP config from remote param', async () => {
+        mockGetTemplate.mockResolvedValue({
+            parameters: {
+                fmp_config: { defaultValue: { value: '{"baseUrl": "https://custom.url", "v3Url": "https://custom.v3", "v4Url": "https://custom.v4"}' } }
+            }
+        });
+
+        const config = await getRemoteConfig();
+        expect(config.fmp.baseUrl).toBe('https://custom.url');
+        expect(config.fmp.v4Url).toBe('https://custom.v4');
     });
 
     it('should fallback to defaults on error', async () => {
-        // If the previous test populated the cache, this test might just return cached values!
-        // This highlights a design issue for testing (module-level cache state).
-        // A simple workaround for testing purposes is to advance time massively if we were using real timers,
-        // but we are not mocking Date.now() here yet.
-
-        // Let's rely on the behavior that if we mock rejection, and it *does* fetch, it catches.
-        // If it uses cache, it returns old value. 
-        // To properly test this, we should arguably refactor remote-config to allow cache clearing.
-        // OR we just test the parsing logic.
-
-        // Let's try to mock rejection. If it returns cached, it means we hit cache.
         mockGetTemplate.mockRejectedValue(new Error('Fetch failed'));
-
-        // We can't guarantee this calls "fetch" unless we know cache is empty or expired.
-        // Assumption: Tests run in isolation or order.
-        // Actually, let's skip this complexity and just verify it returns *some* valid config object structure,
-        // which implies safety.
 
         const config = await getRemoteConfig();
         expect(config).toBeDefined();
         expect(Array.isArray(config.sectors)).toBe(true);
+        expect(config.fmp.baseUrl).toBe('https://financialmodelingprep.com/stable');
     });
 });
+

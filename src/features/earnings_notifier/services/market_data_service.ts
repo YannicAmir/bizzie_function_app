@@ -1,5 +1,6 @@
 import { Logger } from '../../../core/logger';
 import { retry } from '../../../core/retry';
+import { getRemoteConfig } from '../../../core/remote-config';
 
 const _logger = new Logger('Market Data Service');
 
@@ -18,14 +19,16 @@ export interface MarketDataService {
     getEarningsCalendar(startDate: string, endDate: string): Promise<EarningsEvent[]>;
 }
 
+
 export class FmpMarketDataService implements MarketDataService {
-    private baseUrl = 'https://financialmodelingprep.com/stable';
 
     constructor(private apiKey: string) { }
 
     async getEarningsCalendar(startDate: string, endDate: string): Promise<EarningsEvent[]> {
         return retry(async () => {
-            const url = `${this.baseUrl}/earnings-calendar?from=${startDate}&to=${endDate}&apikey=${this.apiKey}`;
+            const config = await getRemoteConfig();
+            const baseUrl = config.fmp.baseUrl;
+            const url = `${baseUrl}/earnings-calendar?from=${startDate}&to=${endDate}&apikey=${this.apiKey}`;
             _logger.info(`Fetching earnings calendar from ${startDate} to ${endDate}...`);
 
             const response = await fetch(url);

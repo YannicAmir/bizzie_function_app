@@ -20,8 +20,10 @@ export interface SecService {
     getFilingText(url: string): Promise<string>;
 }
 
+import { getRemoteConfig } from '../remote-config';
+
 export class FmpSecService implements SecService {
-    private baseUrl = 'https://financialmodelingprep.com/stable';
+    // Removed hardcoded baseUrl
 
     constructor(private apiKey: string) { }
 
@@ -35,7 +37,9 @@ export class FmpSecService implements SecService {
 
         while (keepFetching) {
             const pageResults = await retry(async () => {
-                const url = `${this.baseUrl}/sec-filings-search/form-type?formType=${type}&from=${startDate}&to=${endDate}&page=${page}&limit=${limit}&apikey=${this.apiKey}`;
+                const config = await getRemoteConfig();
+                const baseUrl = config.fmp.baseUrl;
+                const url = `${baseUrl}/sec-filings-search/form-type?formType=${type}&from=${startDate}&to=${endDate}&page=${page}&limit=${limit}&apikey=${this.apiKey}`;
                 // _logger.debug(`Fetching page ${page}: ${url}`); // Be careful logging API keys if DEBUG is on (url contains key)
 
                 const response = await fetch(url);
