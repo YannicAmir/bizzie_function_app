@@ -33,8 +33,11 @@ jest.mock('firebase-admin/firestore', () => ({
 describe('FirestoreService', () => {
     let service: FirestoreService;
     // Cast admin to any to access internal mocks or use the require approach
-    const mockAdmin = require('firebase-admin');
-    const { FieldValue } = require('firebase-admin/firestore');
+    const mockAdmin = admin as unknown as {
+        _mockUpdate: jest.Mock;
+        _mockDoc: jest.Mock;
+        _mockCollection: jest.Mock;
+    };
 
     beforeEach(() => {
         jest.clearAllMocks();

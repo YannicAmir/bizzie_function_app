@@ -49,7 +49,6 @@ export class SubscriptionWebhookUseCase {
                 break;
 
             case 'EXPIRATION':
-            case 'PRODUCT_CHANGE': // Only if downgrade? Complex. Treating as potential expiry logic if needed.
                 // Assuming EXPIRATION means they verified lost access.
                 await this.userService.updateSubscriptionStatus(userId, false, event.expiration_at_ms);
                 break;
