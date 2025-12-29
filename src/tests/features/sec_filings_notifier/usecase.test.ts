@@ -43,7 +43,8 @@ describe('SecFilingsNotifierUseCase', () => {
             markProcessed: jest.fn()
         };
         mockNotificationService = {
-            sendTopicNotification: jest.fn()
+            sendTopicNotification: jest.fn(),
+            sendToToken: jest.fn()
         };
         mockAiService = {
             enrich8k: jest.fn(),

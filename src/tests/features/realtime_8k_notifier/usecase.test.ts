@@ -37,7 +37,10 @@ describe('Realtime8kNotifierUseCase', () => {
         mockWatchlistService = { getAllWatchedTickers: jest.fn() };
         mockSecService = { getFilings: jest.fn(), getFilingText: jest.fn() };
         mockFilingHistoryService = { hasProcessed: jest.fn(), markProcessed: jest.fn() };
-        mockNotificationService = { sendTopicNotification: jest.fn() };
+        mockNotificationService = {
+            sendTopicNotification: jest.fn(),
+            sendToToken: jest.fn()
+        };
         mockAiService = { enrich8k: jest.fn(), enrichFinancialReport: jest.fn() };
 
         // Firebase Mock

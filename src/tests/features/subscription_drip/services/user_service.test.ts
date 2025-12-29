@@ -1,0 +1,93 @@
+
+import { FirebaseUserService } from '../../../../features/subscription_drip/services/user_service';
+import * as firebaseCore from '../../../../core/firebase';
+
+// Mock DB
+const mockGet = jest.fn();
+const mockLimit = jest.fn(() => ({ get: mockGet }));
+const mockOrderBy = jest.fn(() => ({ limit: mockLimit }));
+const mockWhere2 = jest.fn(() => ({ orderBy: mockOrderBy }));
+const mockWhere1 = jest.fn(() => ({ where: mockWhere2 }));
+const mockCollection = jest.fn(() => ({ where: mockWhere1 }));
+const mockFirestore = jest.fn(() => ({ collection: mockCollection }));
+
+jest.mock('../../../../core/firebase', () => ({
+    getFirebaseAdmin: jest.fn(() => ({
+        firestore: mockFirestore
+    }))
+}));
+
+// Mock Logger
+jest.mock('../../../../core/logger', () => ({
+    Logger: jest.fn().mockImplementation(() => ({
+        info: jest.fn(),
+        error: jest.fn()
+    }))
+}));
+
+jest.mock('../../../../core/retry', () => ({
+    retry: jest.fn((fn) => fn()) // Just execute immediately
+}));
+
+describe('FirebaseUserService', () => {
+    let service: FirebaseUserService;
+
+    beforeEach(() => {
+        service = new FirebaseUserService();
+        jest.clearAllMocks();
+
+        // Reset query chain mocks
+        mockGet.mockResolvedValue({ empty: true, docs: [], size: 0 });
+        mockLimit.mockReturnValue({ get: mockGet, startAfter: jest.fn(() => ({ get: mockGet })) } as any);
+        mockOrderBy.mockReturnValue({ limit: mockLimit } as any);
+        mockWhere2.mockReturnValue({ orderBy: mockOrderBy } as any);
+        mockWhere1.mockReturnValue({ where: mockWhere2 } as any);
+        mockCollection.mockReturnValue({ where: mockWhere1 } as any);
+    });
+
+    it('streamRecentFreeUsers_success_returnsUsers', async () => {
+        const mockDocs = [
+            { id: 'u1', data: () => ({ fcmToken: 't1', isSubscribed: false, createdAt: '2023-01-01' }) }
+        ];
+
+        mockGet.mockResolvedValueOnce({
+            empty: false,
+            docs: mockDocs,
+            size: 1 // less than batch size -> finish
+        });
+
+        const generator = service.streamRecentFreeUsers(7, 100);
+        let batches = 0;
+        let userCount = 0;
+
+        for await (const batch of generator) {
+            batches++;
+            userCount += batch.length;
+            if (batch.length > 0) {
+                expect(batch[0]!.id).toBe('u1');
+                expect(batch[0]!.fcmToken).toBe('t1');
+            }
+        }
+
+        expect(batches).toBe(1);
+        expect(userCount).toBe(1);
+        expect(mockCollection).toHaveBeenCalledWith('users');
+    });
+
+    it('streamRecentFreeUsers_noToken_skipsUser', async () => {
+        const mockDocs = [
+            { id: 'u1', data: () => ({ isSubscribed: false }) } // No Token
+        ];
+
+        mockGet.mockResolvedValueOnce({
+            empty: false,
+            docs: mockDocs,
+            size: 1
+        });
+
+        const generator = service.streamRecentFreeUsers(7);
+        for await (const batch of generator) {
+            expect(batch.length).toBe(0);
+        }
+    });
+});

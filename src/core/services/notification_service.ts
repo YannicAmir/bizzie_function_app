@@ -4,6 +4,7 @@ import { Logger } from '../logger';
 
 export interface NotificationService {
     sendTopicNotification(topic: string, title: string, body: string, data?: Record<string, string>): Promise<void>;
+    sendToToken(token: string, title: string, body: string, data?: Record<string, string>): Promise<void>;
 }
 
 const _logger = new Logger('Notification Service');
@@ -26,6 +27,24 @@ export class FcmNotificationService implements NotificationService {
         } catch (error) {
             _logger.error(`Failed to send notification to topic ${topic}`, error);
             // We do not throw here to prevent one failure from stopping the entire batch
+        }
+    }
+
+    async sendToToken(token: string, title: string, body: string, data: Record<string, string> = {}): Promise<void> {
+        const message: messaging.Message = {
+            token: token,
+            notification: {
+                title,
+                body,
+            },
+            data,
+        };
+
+        try {
+            // _logger.debug(`Sending notification to token: ${token.substring(0, 10)}...`);
+            await getFirebaseAdmin().messaging().send(message);
+        } catch (error) {
+            _logger.error(`Failed to send notification to token ${token.substring(0, 10)}...`, error);
         }
     }
 }
