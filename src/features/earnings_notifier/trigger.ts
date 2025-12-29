@@ -14,6 +14,7 @@ export const earningsNotifier = onSchedule(
         timeZone: 'America/New_York',
         secrets: [fmpApiKey],
         memory: '512MiB',
+        timeoutSeconds: 540,
     },
     async () => {
         logger.info('Starting earningsNotifier scheduled function');

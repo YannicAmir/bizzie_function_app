@@ -32,7 +32,7 @@ Use these specific packages. Do not introduce alternatives without approval.
 
 ### A. Functions Generation 2
 * ALWAYS explicitly set memory and timeout for AI functions.
-* Example: `{ memory: '1GiB', timeoutSeconds: 300 }`.
+* Example: `{ memory: '1GiB', timeoutSeconds: 540 }`.
 
 ### B. Vertex AI (Gemini)
 * **Model:** `gemini-1.5-flash` (Default for speed/cost).

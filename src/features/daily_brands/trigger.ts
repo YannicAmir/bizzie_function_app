@@ -13,7 +13,7 @@ export const dailyBrandsTrigger = onSchedule(
         schedule: "every day 00:00",
         timeZone: "America/Los_Angeles", // Defaulting to PST as user is there
         memory: "1GiB", // Explicit memory for AI tasks
-        timeoutSeconds: 300 // Explicit timeout for AI tasks
+        timeoutSeconds: 540 // Explicit timeout for AI tasks
     },
     async () => {
         _logger.info("Started");
