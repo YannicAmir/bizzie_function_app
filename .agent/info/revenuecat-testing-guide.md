@@ -101,7 +101,7 @@ If you prefer a graphical interface over the command line, use Postman.
 ### 2. Set Headers
 Go to the **Headers** tab and add:
 *   **Key**: `Authorization`
-*   **Value**: `bizzie_secret_010324` (Or your actual secret from Google Cloud Secret Manager)
+*   **Value**: [REVENUECAT_SECRET_TOKEN] (Or your actual secret from Google Cloud Secret Manager)
 *   **Key**: `Content-Type`
 *   **Value**: `application/json`
 
