@@ -143,3 +143,13 @@ To test what happens when a user subscription expires:
 3.  Click **Send**.
 4.  **Verify**: Check Firestore.
     *   `isSubscribed` should flip back to `false`.
+
+### 6. Verify "Premium" Notification Setup (Advanced)
+Since you don't have a live app yet, you can verify that Firebase **TRIED** to subscribe your device to the `premium_notifications` topic.
+
+1.  Go to **Google Cloud Console** -> **Cloud Functions** -> **Logs**.
+2.  Filter for `User Subscription Sync Trigger` (or just look at recent logs).
+3.  **Success**: You should see a log entry like:
+    > `[Notification Service] Subscribed 1 token(s) to topic: premium_notifications`
+4.  **Reverse**: If you test Expiration (Step 5 above), you should see:
+    > `[Notification Service] Unsubscribed 1 token(s) from topic: premium_notifications`
