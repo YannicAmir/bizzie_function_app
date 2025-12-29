@@ -33,8 +33,8 @@ const DEFAULT_CONFIG: AppConfig = {
     1: { title: 'Welcome to Bizzie! 🚀', body: 'Unlock the power of AI with Bizzie Plus' },
     2: { title: 'We Have A Gift for You 🎁', body: 'Open now to see the surprise' },
     3: { title: 'Your Discount is Waiting 🏷️', body: 'Get Bizzie Plus for 40% off now!' },
-    4: { title: 'Get 40% Discount on Bizzie Plus ⚡', body: "Subscribe to unlock Bizzie's Daily Picks" },
-    5: { title: 'Bizzie Plus for 40% Discount �', body: "Subscribe to Bizzie Plus to unlock all Bizzie's features like product and brand search" },
+    4: { title: 'Get 40% Discount on Bizzie Plus ⚡️', body: "Subscribe to unlock Bizzie's Daily Picks" },
+    5: { title: 'Bizzie Plus for 40% Discount 💎', body: "Subscribe to Bizzie Plus to unlock all Bizzie's features like product and brand search" },
     6: { title: "Unlock Bizzie's Full Potential 🔓", body: "Subscribe to Bizzie Plus to get AI analyses of financial reports. Get the information that matters in seconds!" },
     7: { title: 'Last Call! 40% Off Bizzie Plus ⏳', body: 'Save time sifting through reports with AI analysis. Subscribe to Bizzie Plus to enjoy now!' }
   })
