@@ -17,7 +17,7 @@ export const secFilingsNotifier = onSchedule(
         timeZone: 'America/New_York',
         secrets: [fmpApiKey],
         memory: '512MiB',
-        timeoutSeconds: 300,
+        timeoutSeconds: 540,
     },
     async () => {
         logger.info('Starting secFilingsNotifier scheduled function');
