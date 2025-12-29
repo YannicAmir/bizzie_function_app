@@ -13,7 +13,8 @@ export interface User {
 
 export class UserSubscriptionSyncUseCase {
 
-    private readonly TOPIC = 'premium_notifications';
+    private readonly PREMIUM_TOPIC = 'premium_notifications';
+    private readonly BASIC_TOPIC = 'basic_notifications';
 
     constructor(
         private notificationService: NotificationService,
@@ -29,7 +30,9 @@ export class UserSubscriptionSyncUseCase {
         const tokens = user.fcmTokens || {};
 
         for (const token of Object.values(tokens)) {
-            tasks.push(this.unsubscribeSafe(token));
+            // Unsubscribe from ALL potential topics
+            tasks.push(this.unsubscribeSafe(token, this.PREMIUM_TOPIC));
+            tasks.push(this.unsubscribeSafe(token, this.BASIC_TOPIC));
         }
 
         await Promise.all(tasks);
@@ -46,56 +49,47 @@ export class UserSubscriptionSyncUseCase {
         _logger.info(`Syncing subscriptions for user ${after.id}`);
         const tasks: Promise<void>[] = [];
 
-        // 2. Collect tokens present in 'After' state
+        // 2. Collect tokens
         const afterTokens = after.fcmTokens || {};
         const beforeTokens = before.fcmTokens || {};
 
-        // 3. Logic:
+        // 3. Determine Target Topic (Exclusive Tiers)
+        const targetTopic = after.isSubscribed ? this.PREMIUM_TOPIC : this.BASIC_TOPIC;
+        const oldTopic = after.isSubscribed ? this.BASIC_TOPIC : this.PREMIUM_TOPIC;
 
-        // A: User is NOW Subscribed (Active)
-        if (after.isSubscribed) {
-            // Subscribe all current tokens
-            for (const [deviceId, token] of Object.entries(afterTokens)) {
-                // Check if this token is "new" or if the user wasn't subscribed before
-                const isNewToken = beforeTokens[deviceId] !== token;
-                const wasNotSubscribed = !before.isSubscribed;
+        // 4. Handle "After" Tokens (Subscribe/Swap)
+        for (const [deviceId, token] of Object.entries(afterTokens)) {
+            const isNewToken = beforeTokens[deviceId] !== token;
+            const statusChanged = before.isSubscribed !== after.isSubscribed;
 
-                if (wasNotSubscribed || isNewToken) {
-                    tasks.push(this.subscribeSafe(after.id, deviceId, token));
-                }
+            // A. Subscribe to correct topic if (New Token OR Status Change)
+            if (isNewToken || statusChanged) {
+                tasks.push(this.subscribeSafe(after.id, deviceId, token, targetTopic));
             }
 
-            // Unsubscribe Removed Devices (Garbage Collection logic if user logged out of one device but kept other)
-            // If user is still subscribed, but removed a device key, we should unsubscribe that specific old token.
-            for (const [deviceId, token] of Object.entries(beforeTokens)) {
-                if (!afterTokens[deviceId] || afterTokens[deviceId] !== token) {
-                    // Token was removed or changed. Unsubscribe the OLD one.
-                    tasks.push(this.unsubscribeSafe(token));
-                }
+            // B. Unsubscribe from old topic if (Status Change)
+            // Meaning: They moved from Basic -> Premium (or vice versa), so remove the old one.
+            if (statusChanged) {
+                tasks.push(this.unsubscribeSafe(token, oldTopic));
             }
-
         }
 
-        // B: User is NOW Unsubscribed (Cancelled/Expired)
-        else {
-            // Unsubscribe ALL tokens that were previously tracked
-            // We look at 'after' tokens (if any exist) AND 'before' tokens to be safe
-            const allTokens = new Set<string>([
-                ...Object.values(beforeTokens),
-                ...Object.values(afterTokens)
-            ]);
-
-            for (const token of allTokens) {
-                tasks.push(this.unsubscribeSafe(token));
+        // 5. Handle REMOVED tokens (Garbage Collection)
+        // If a token was in 'before' but is NOT in 'after' (or changed), cleanup old token completely.
+        for (const [deviceId, token] of Object.entries(beforeTokens)) {
+            if (!afterTokens[deviceId] || afterTokens[deviceId] !== token) {
+                // Token removed/replaced. Remove from ALL topics to be clean.
+                tasks.push(this.unsubscribeSafe(token, this.PREMIUM_TOPIC));
+                tasks.push(this.unsubscribeSafe(token, this.BASIC_TOPIC));
             }
         }
 
         await Promise.all(tasks);
     }
 
-    private async subscribeSafe(userId: string, deviceId: string, token: string): Promise<void> {
+    private async subscribeSafe(userId: string, deviceId: string, token: string, topic: string): Promise<void> {
         try {
-            await this.notificationService.subscribeToTopic(token, this.TOPIC);
+            await this.notificationService.subscribeToTopic(token, topic);
         } catch (error: unknown) {
             // 4. Stale Token Cleanup
             if (this.isStaleTokenError(error)) {
@@ -105,12 +99,12 @@ export class UserSubscriptionSyncUseCase {
         }
     }
 
-    private async unsubscribeSafe(token: string): Promise<void> {
+    private async unsubscribeSafe(token: string, topic: string): Promise<void> {
         try {
-            await this.notificationService.unsubscribeFromTopic(token, this.TOPIC);
+            await this.notificationService.unsubscribeFromTopic(token, topic);
         } catch (error: unknown) {
             // If unsubscribe fails (e.g. invalid token), it's fine, we treat it as done.
-            _logger.warn(`Failed to unsubscribe token ${token.substring(0, 6)}...`, { error });
+            _logger.warn(`Failed to unsubscribe token ${token.substring(0, 6)}... from ${topic}`, { error });
         }
     }
 
