@@ -14,16 +14,18 @@ description: Generates unit tests for features using strict conventions
 
 1.  **Context Analysis**:
     *   Read the `usecase.ts` file for the requested feature.
-    *   Read the corresponding `services/` files to understand dependencies (for mocking).
+    *   Read the corresponding `services/` files to understand dependencies and logic that needs testing.
     *   If the user asks to test "all features", iterate through `src/features/*`.
 
 2.  **Test Generation**:
-    *   Create a test plan: List the success and failure scenarios you will test.
-    *   Generate the test code in `src/tests/features/[feature_name]/usecase.test.ts`.
-    *   **Strictly** follow the naming conventions: `lowerCamelCase` and `entity_action_result`.
-    *   Use `jest` and standard mocking (e.g., `jest.mock`, or dependency injection if the architecture supports it).
+    *   Create a test plan: List the success and failure scenarios for both the **UseCase** and **Services**.
+    *   Generate test code for the UseCase in `src/tests/features/[feature_name]/usecase.test.ts`.
+    *   Generate test code for Services in `src/tests/features/[feature_name]/services/[service_name].test.ts`.
+    *   **Strictly** follow the naming conventions: `lowerCamelCamel` and `entity_action_result`.
+    *   Use `jest` and standard mocking (e.g., `jest.mock`, or dependency injection).
 
 3.  **Verification**:
-    *   Run the specific test suite using `npm test src/tests/features/[feature_name]/usecase.test.ts`.
-    *   Fix any compilation errors or test failures.
-    *   Ensure all tests pass before completing.
+    *   Run the specific test suite using `npm test src/tests/features/[feature_name]/`.
+    *   Run linting using `npm run lint`.
+    *   Fix any compilation errors, linting errors, or test failures.
+    *   Ensure all tests pass and linting is clean before completing.

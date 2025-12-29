@@ -39,7 +39,9 @@ describe('Realtime8kNotifierUseCase', () => {
         mockFilingHistoryService = { hasProcessed: jest.fn(), markProcessed: jest.fn() };
         mockNotificationService = {
             sendTopicNotification: jest.fn(),
-            sendToToken: jest.fn()
+            sendToToken: jest.fn(),
+            subscribeToTopic: jest.fn(),
+            unsubscribeFromTopic: jest.fn(),
         };
         mockAiService = { enrich8k: jest.fn(), enrichFinancialReport: jest.fn() };
 
