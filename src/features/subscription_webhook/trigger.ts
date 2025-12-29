@@ -21,11 +21,8 @@ export const revenueCatWebhook = onRequest(
         const secretValue = revenueCatSecret.value().trim();
         const incomingAuth = authHeader.trim();
 
-        // Debug Log (Remove after successful connection)
-        _logger.info(`Auth Debug: SecretLength=${secretValue.length}, HeaderLength=${incomingAuth.length}, Header='${incomingAuth}'`);
-
         if (!incomingAuth.includes(secretValue)) {
-            _logger.warn(`Unauthorized webhook attempt. Expected secret length: ${secretValue.length}, Received header: ${incomingAuth}`);
+            _logger.warn('Unauthorized webhook attempt.', { headers: request.headers });
             response.status(403).send('Unauthorized');
             return;
         }
