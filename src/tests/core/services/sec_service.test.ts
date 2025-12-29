@@ -39,7 +39,18 @@ describe('FmpSecService', () => {
 
     describe('getFilings', () => {
         it('returns list of filings on success', async () => {
-            const mockData: SecFiling[] = [{
+            const expectedResult: SecFiling[] = [{
+                symbol: 'AAPL',
+                filingDate: '2023-01-01',
+                acceptedDate: '2023-01-01',
+                period: 'Q1',
+                formType: '10-Q',
+                link: 'http://link',
+                finalLink: 'http://final',
+                cik: '123'
+            }];
+
+            const mockRawData = [{
                 symbol: 'AAPL',
                 filingDate: '2023-01-01',
                 acceptedDate: '2023-01-01',
@@ -52,12 +63,12 @@ describe('FmpSecService', () => {
 
             mockFetch.mockResolvedValue({
                 ok: true,
-                json: async () => mockData
+                json: async () => mockRawData
             });
 
             const result = await service.getFilings('10-Q', '2023-01-01', '2023-01-02');
 
-            expect(result).toEqual(mockData);
+            expect(result).toEqual(expectedResult);
             expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('formType=10-Q'));
             expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('apikey=test-api-key'));
         });

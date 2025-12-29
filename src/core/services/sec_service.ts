@@ -20,6 +20,18 @@ export interface SecService {
     getFilingText(url: string): Promise<string>;
 }
 
+// Raw DTO from FMP
+interface FmpSecFilingDTO {
+    symbol: string;
+    filingDate: string;
+    acceptedDate: string;
+    period?: string;
+    formType: string;
+    link: string;
+    finalLink: string;
+    cik: string;
+}
+
 export class FmpSecService implements SecService {
     constructor(private apiKey: string) { }
 
@@ -48,7 +60,28 @@ export class FmpSecService implements SecService {
                     _logger.error("API returned non-array:", data);
                     return [];
                 }
-                return data as SecFiling[];
+
+                // Safe Cast to DTO
+                const dtos = data as FmpSecFilingDTO[];
+
+                // Map to Domain Entity
+                return dtos.map(dto => {
+                    const filing: SecFiling = {
+                        symbol: dto.symbol,
+                        filingDate: dto.filingDate,
+                        acceptedDate: dto.acceptedDate,
+                        formType: dto.formType,
+                        link: dto.link,
+                        finalLink: dto.finalLink,
+                        cik: dto.cik
+                    };
+
+                    if (dto.period) {
+                        filing.period = dto.period;
+                    }
+
+                    return filing;
+                });
             }, {
                 maxAttempts: 3,
                 initialDelayMs: 1000,

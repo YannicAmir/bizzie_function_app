@@ -20,6 +20,18 @@ export interface MarketDataService {
 }
 
 
+// Raw DTO matching the external API response exactly
+interface FmpEarningsEventDTO {
+    date: string;
+    symbol: string;
+    epsActual: number | null;
+    epsEstimated: number | null;
+    revenueActual: number | null;
+    revenueEstimated: number | null;
+    lastUpdated: string;
+    time?: string;
+}
+
 export class FmpMarketDataService implements MarketDataService {
 
     constructor(private apiKey: string) { }
@@ -37,20 +49,26 @@ export class FmpMarketDataService implements MarketDataService {
                 throw new Error(`FMP API Error: ${response.status} ${response.statusText}`);
             }
 
-            const data = await response.json() as unknown[];
+            const rawData = await response.json() as FmpEarningsEventDTO[];
 
             // Map raw data to our clean interface
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return data.map((item: any) => ({
-                date: item.date,
-                symbol: item.symbol,
-                epsActual: item.epsActual,
-                epsEstimated: item.epsEstimated,
-                revenueActual: item.revenueActual,
-                revenueEstimated: item.revenueEstimated,
-                lastUpdated: item.lastUpdated,
-                time: item.time // Keeping it if it exists, but interface marks it optional
-            }));
+            return rawData.map((item) => {
+                const event: EarningsEvent = {
+                    date: item.date,
+                    symbol: item.symbol,
+                    epsActual: item.epsActual,
+                    epsEstimated: item.epsEstimated,
+                    revenueActual: item.revenueActual,
+                    revenueEstimated: item.revenueEstimated,
+                    lastUpdated: item.lastUpdated
+                };
+
+                if (item.time) {
+                    event.time = item.time;
+                }
+
+                return event;
+            });
         }, {
             maxAttempts: 3,
             initialDelayMs: 1000,
