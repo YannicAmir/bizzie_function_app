@@ -1,6 +1,5 @@
 
 import { FirebaseUserService } from '../../../../features/subscription_drip/services/user_service';
-import * as firebaseCore from '../../../../core/firebase';
 
 // Mock DB
 const mockGet = jest.fn();
@@ -38,10 +37,15 @@ describe('FirebaseUserService', () => {
 
         // Reset query chain mocks
         mockGet.mockResolvedValue({ empty: true, docs: [], size: 0 });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mockLimit.mockReturnValue({ get: mockGet, startAfter: jest.fn(() => ({ get: mockGet })) } as any);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mockOrderBy.mockReturnValue({ limit: mockLimit } as any);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mockWhere2.mockReturnValue({ orderBy: mockOrderBy } as any);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mockWhere1.mockReturnValue({ where: mockWhere2 } as any);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mockCollection.mockReturnValue({ where: mockWhere1 } as any);
     });
 

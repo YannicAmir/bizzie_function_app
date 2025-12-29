@@ -8,12 +8,14 @@ jest.mock('../../core/firebase', () => ({
     }))
 }));
 
+import { getRemoteConfig as getRemoteConfigType } from '../../core/remote-config';
+
 describe('Remote Config Utility', () => {
     // Access getTemplateMock directly since it is in the module scope
     const mockGetTemplate = getTemplateMock;
-    let getRemoteConfig: any;
+    let getRemoteConfig: typeof getRemoteConfigType;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         jest.clearAllMocks();
         jest.resetModules();
         // Re-require the module to reset the internal cache variable
@@ -21,7 +23,8 @@ describe('Remote Config Utility', () => {
         // but here we defined the mock factory at top level which usually persists, 
         // however 'jest.mock' calls are hoisted.
         // Let's re-require the module under test.
-        getRemoteConfig = require('../../core/remote-config').getRemoteConfig;
+        const module = await import('../../core/remote-config');
+        getRemoteConfig = module.getRemoteConfig;
     });
 
     it('should return parsed config from valid template', async () => {
