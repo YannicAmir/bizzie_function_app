@@ -85,3 +85,6 @@ bizzie-backend/
 * **No Logic in Index:** `src/index.ts` must only contain `export const funcName = ...` statements.
 * **Environment Isolation:** Never hardcode Project IDs. Use `process.env` or `src/core/config.ts`.
 * **Testing:** All `usecase.ts` files must have a corresponding test file in `src/tests/`.
+* **Strict Typing:** ALL external API responses must be cast to a Raw DTO Interface first.
+* **DTO Placement:** Private DTOs can be defined in the service file. Shared DTOs should go in `services/dtos.ts`.
+* **Encapsulation:** DTOs should NOT be exported outside the `services/` directory.
