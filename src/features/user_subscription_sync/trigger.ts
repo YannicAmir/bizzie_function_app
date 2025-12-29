@@ -1,4 +1,4 @@
-import { onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/firestore';
+import { onDocumentWritten, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import { Logger } from '../../core/logger';
 import { UserSubscriptionSyncUseCase, User } from './usecase';
 import { FcmNotificationService } from '../../core/services/notification_service';
@@ -6,7 +6,7 @@ import { FirestoreService } from './services/firestore_service';
 
 const _logger = new Logger("User Subscription Sync Trigger");
 
-export const userSubscriptionSyncTrigger = onDocumentUpdated(
+export const userSubscriptionSyncTrigger = onDocumentWritten(
     "users/{userId}",
     async (event) => {
         // _logger.info("Triggered");
@@ -15,24 +15,26 @@ export const userSubscriptionSyncTrigger = onDocumentUpdated(
             return;
         }
 
-        const beforeData = event.data.before.data();
-        const afterData = event.data.after.data();
-
-        if (!beforeData || !afterData) {
+        // 1. Skip Deletions (Handled by userDeletionCleanup)
+        if (!event.data.after.exists) {
             return;
         }
+
+        // 2. Extract Data (Handle Creation where before is undefined)
+        const beforeData = event.data.before.data();
+        const afterData = event.data.after.data();
 
         // Map Firestore data to User Entity
         const beforeUser: User = {
             id: event.params.userId,
-            isSubscribed: !!beforeData.isSubscribed,
-            fcmTokens: beforeData.fcmTokens || {}
+            isSubscribed: !!beforeData?.isSubscribed,
+            fcmTokens: beforeData?.fcmTokens || {}
         };
 
         const afterUser: User = {
             id: event.params.userId,
-            isSubscribed: !!afterData.isSubscribed,
-            fcmTokens: afterData.fcmTokens || {}
+            isSubscribed: !!afterData!.isSubscribed,
+            fcmTokens: afterData!.fcmTokens || {}
         };
 
         try {
