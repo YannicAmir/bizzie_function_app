@@ -125,3 +125,21 @@ Go to the **Body** tab, select **raw**, and choose **JSON** from the dropdown. P
 2.  **Response**: You should see `200 OK` and `"OK"` in the body.
 3.  **Verify**: Check Firestore for the user `test_user_postman`.
     *   `isSubscribed` should be `true`.
+
+### 5. Test Expiration (Revoke Access)
+To test what happens when a user subscription expires:
+1.  Use the **same URL and Headers**.
+2.  Change the **Body** to this:
+```json
+{
+  "event": {
+    "type": "EXPIRATION",
+    "app_user_id": "test_user_postman",
+    "expiration_at_ms": 1998790400000
+  },
+  "api_version": "1.0"
+}
+```
+3.  Click **Send**.
+4.  **Verify**: Check Firestore.
+    *   `isSubscribed` should flip back to `false`.
