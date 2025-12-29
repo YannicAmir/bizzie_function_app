@@ -1,4 +1,4 @@
-import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import { Logger } from '../../core/logger';
 import { UserSubscriptionSyncUseCase, User } from './usecase';
 import { FcmNotificationService } from '../../core/services/notification_service';
@@ -44,6 +44,36 @@ export const userSubscriptionSyncTrigger = onDocumentUpdated(
 
         } catch (error) {
             _logger.error("Failed", error);
+        }
+    }
+);
+
+export const userDeletionCleanup = onDocumentDeleted(
+    "users/{userId}",
+    async (event) => {
+        if (!event.data) {
+            return;
+        }
+
+        const deletedData = event.data.data();
+        if (!deletedData) {
+            return;
+        }
+
+        const deletedUser: User = {
+            id: event.params.userId,
+            isSubscribed: !!deletedData.isSubscribed,
+            fcmTokens: deletedData.fcmTokens || {}
+        };
+
+        try {
+            const notificationService = new FcmNotificationService();
+            const firestoreService = new FirestoreService();
+            const useCase = new UserSubscriptionSyncUseCase(notificationService, firestoreService);
+
+            await useCase.cleanupUser(deletedUser);
+        } catch (error) {
+            _logger.error("Failed to cleanup deleted user", error);
         }
     }
 );

@@ -37,6 +37,28 @@ describe('UserSubscriptionSyncUseCase', () => {
         expect(mockNotificationService.unsubscribeFromTopic).not.toHaveBeenCalled();
     });
 
+    it('should_doNothing_when_keysShuffled_butContentSame', async () => {
+        // user A: { "dev1": "tok1", "dev2": "tok2" }
+        const before: User = {
+            id: 'u1',
+            isSubscribed: true,
+            fcmTokens: { 'dev1': 'tok1', 'dev2': 'tok2' }
+        };
+        // user B: { "dev2": "tok2", "dev1": "tok1" } (Shuffled)
+        const after: User = {
+            id: 'u1',
+            isSubscribed: true,
+            fcmTokens: { 'dev2': 'tok2', 'dev1': 'tok1' }
+        };
+
+        await useCase.execute(before, after);
+
+        // Verification: If isEqual works, this returns early.
+        // If it was JSON.stringify, it would fail string equality, proceed, and likely try to subscribe again.
+        // Since logic is idempotent, it wouldn't break, but we want to ensure it DOES NOT call anything.
+        expect(mockNotificationService.subscribeToTopic).not.toHaveBeenCalled();
+    });
+
     it('should_subscribeTokens_when_userBecomesSubscribed', async () => {
         const before = userSubscribed('u1', 'tok1', false); // Not subscribed
         const after = userSubscribed('u1', 'tok1', true);   // Now subscribed
@@ -103,5 +125,19 @@ describe('UserSubscriptionSyncUseCase', () => {
 
         // Should not throw
         await useCase.execute(before, after);
+    });
+
+    it('should_unsubscribeAllTokens_when_cleanupUserCalled', async () => {
+        const user: User = {
+            id: 'u1',
+            isSubscribed: true,
+            fcmTokens: { 'dev1': 'tok1', 'dev2': 'tok2' }
+        };
+
+        await useCase.cleanupUser(user);
+
+        expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledWith('tok1', 'premium_notifications');
+        expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledWith('tok2', 'premium_notifications');
+        expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledTimes(2);
     });
 });

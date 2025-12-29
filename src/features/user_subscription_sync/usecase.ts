@@ -1,6 +1,7 @@
 import { Logger } from '../../core/logger';
 import { NotificationService } from '../../core/services/notification_service';
 import { FirestoreService } from './services/firestore_service';
+import { isEqual } from 'lodash';
 
 const _logger = new Logger('User Subscription Sync Usecase');
 
@@ -19,11 +20,26 @@ export class UserSubscriptionSyncUseCase {
         private firestoreService: FirestoreService
     ) { }
 
+    /**
+     * Handles cleanup when a user document is deleted.
+     */
+    async cleanupUser(user: User): Promise<void> {
+        _logger.info(`Cleaning up subscriptions for deleted user ${user.id}`);
+        const tasks: Promise<void>[] = [];
+        const tokens = user.fcmTokens || {};
+
+        for (const token of Object.values(tokens)) {
+            tasks.push(this.unsubscribeSafe(token));
+        }
+
+        await Promise.all(tasks);
+    }
+
     async execute(before: User, after: User): Promise<void> {
 
         // 1. Early Exit: If no change in subscription status or tokens, return.
         if (before.isSubscribed === after.isSubscribed &&
-            JSON.stringify(before.fcmTokens) === JSON.stringify(after.fcmTokens)) {
+            isEqual(before.fcmTokens, after.fcmTokens)) {
             return;
         }
 
