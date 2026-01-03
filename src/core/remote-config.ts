@@ -7,6 +7,7 @@ const _logger = new Logger("Remote Config");
 export interface AppConfig {
   sectors: string[];
   modelName: string;
+  gemini_model_name: string | undefined; // Specific for Deep Analysis (Gemini 3.0)
   subscriptionDripCampaign: string;
   fmp: {
     baseUrl: string;
@@ -33,6 +34,7 @@ const DEFAULT_CONFIG: AppConfig = {
   ],
   // Current Stable Model
   modelName: "gemini-3-flash-preview",
+  gemini_model_name: undefined,
   // Default Drip Campaign (Days 1-7)
   subscriptionDripCampaign: JSON.stringify({
     1: { title: 'Welcome to Bizzie! 🚀', body: 'Unlock the power of AI with Bizzie Plus' },
@@ -84,6 +86,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const newConfig: AppConfig = {
       sectors,
       modelName,
+      gemini_model_name: (template.parameters['gemini_model_name']?.defaultValue as { value?: string } | undefined)?.value,
       subscriptionDripCampaign,
       fmp
     };

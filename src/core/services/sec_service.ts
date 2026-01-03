@@ -116,7 +116,7 @@ export class FmpSecService implements SecService {
             // SEC.gov requires a User-Agent header: AppName/Version <email>
             const response = await fetch(url, {
                 headers: {
-                    'User-Agent': 'BizzieApp/1.0 (bizzie@example.com)',
+                    'User-Agent': 'BizzieApp/1.0 (yannic@getbizzie.io)',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
                 }
             });

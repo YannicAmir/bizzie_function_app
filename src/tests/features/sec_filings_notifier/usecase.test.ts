@@ -50,7 +50,8 @@ describe('SecFilingsNotifierUseCase', () => {
         };
         mockAiService = {
             enrich8k: jest.fn(),
-            enrichFinancialReport: jest.fn()
+            enrichFinancialReport: jest.fn(),
+            enrichDeepFinancialReport: jest.fn()
         };
 
         // Initialize Firestore Mock

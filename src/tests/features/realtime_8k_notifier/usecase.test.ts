@@ -43,7 +43,7 @@ describe('Realtime8kNotifierUseCase', () => {
             subscribeToTopic: jest.fn(),
             unsubscribeFromTopic: jest.fn(),
         };
-        mockAiService = { enrich8k: jest.fn(), enrichFinancialReport: jest.fn() };
+        mockAiService = { enrich8k: jest.fn(), enrichFinancialReport: jest.fn(), enrichDeepFinancialReport: jest.fn() };
 
         // Firebase Mock
         mockFirestoreAdd = jest.fn();
