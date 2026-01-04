@@ -19,7 +19,6 @@ export class ReportService {
 
     async saveReport(report: FinancialReport): Promise<void> {
         try {
-            // Idempotent write using the Compound ID
             await this.collection.doc(report.id).set(report, { merge: true });
             _logger.info(`Saved financial report: ${report.id}`);
         } catch (error) {

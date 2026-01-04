@@ -215,8 +215,6 @@ export class VertexAiService implements AiService {
         return retry(async () => {
             try {
                 const config = await getRemoteConfig();
-                // Use 'gemini_model_name' from Remote Config, default to a high-reasoning model if not set.
-                // NOTE: User intends to use "Gemini 3.0"
                 const modelName = config.gemini_model_name || 'gemini-3-flash-preview';
                 const model = getGeminiModel(modelName);
 

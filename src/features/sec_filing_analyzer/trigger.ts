@@ -27,9 +27,7 @@ export const secFilingAnalyzerTrigger = onDocumentCreated(
         try {
             _logger.info(`Triggered for document ${event.params.docId}`);
 
-            // Instantiate Services with Secrets
             const aiService = new VertexAiService();
-            // Pass the API Key from the secret
             const secService = new FmpSecService(fmpApiKey.value());
             const reportService = new ReportService();
             const usecase = new SecFilingAnalyzerUseCase(aiService, secService, reportService);
