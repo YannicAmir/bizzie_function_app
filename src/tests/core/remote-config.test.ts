@@ -39,7 +39,7 @@ describe('Remote Config Utility', () => {
 
         expect(config.sectors).toEqual(['Tech', 'Energy']);
 
-        expect(config.modelName).toBe('gemini-test-model');
+        expect(config.gemini_model_name).toBe('gemini-test-model');
 
         // FMP defaults when param is missing
         expect(config.fmp.baseUrl).toBe('https://financialmodelingprep.com/stable');

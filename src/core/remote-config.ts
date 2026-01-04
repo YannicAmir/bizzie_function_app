@@ -6,7 +6,7 @@ const _logger = new Logger("Remote Config");
 // Interface for our Application Configuration
 export interface AppConfig {
   sectors: string[];
-  modelName: string;
+  gemini_model_name: string; // The primary AI model for the app
   subscriptionDripCampaign: string;
   fmp: {
     baseUrl: string;
@@ -32,7 +32,7 @@ const DEFAULT_CONFIG: AppConfig = {
     "Real Estate"
   ],
   // Current Stable Model
-  modelName: "gemini-3-flash-preview",
+  gemini_model_name: "gemini-3-flash-preview",
   // Default Drip Campaign (Days 1-7)
   subscriptionDripCampaign: JSON.stringify({
     1: { title: 'Welcome to Bizzie! 🚀', body: 'Unlock the power of AI with Bizzie Plus' },
@@ -77,13 +77,13 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
 
     // 3. Construct Config with Fallbacks per field
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;
-    const modelName = (rawModelName as string) || DEFAULT_CONFIG.modelName;
+    const gemini_model_name = (rawModelName as string) || DEFAULT_CONFIG.gemini_model_name;
     const subscriptionDripCampaign = (rawDrip as string) || DEFAULT_CONFIG.subscriptionDripCampaign;
     const fmp = rawFmp ? JSON.parse(rawFmp) : DEFAULT_CONFIG.fmp;
 
     const newConfig: AppConfig = {
       sectors,
-      modelName,
+      gemini_model_name,
       subscriptionDripCampaign,
       fmp
     };

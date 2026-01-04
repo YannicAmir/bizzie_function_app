@@ -1,8 +1,11 @@
 import { ValidatedAIService } from '../../../features/daily_brands/services/ai_service';
 import { getGeminiModel } from '../../../core/vertex-ai';
+import { getRemoteConfig } from '../../../core/remote-config';
 
 // Mock the Vertex AI module
 jest.mock('../../../core/vertex-ai');
+// Mock Remote Config
+jest.mock('../../../core/remote-config');
 
 // Mock retry to trigger immediately without delays
 jest.mock('../../../core/retry', () => ({
@@ -31,7 +34,12 @@ describe('ValidatedAIService', () => {
             generateContent: mockGenerateContent
         });
 
-        aiService = new ValidatedAIService("gemini-test-model");
+        // Setup mock for getRemoteConfig
+        (getRemoteConfig as jest.Mock).mockResolvedValue({
+            gemini_model_name: 'gemini-test-model'
+        });
+
+        aiService = new ValidatedAIService();
     });
 
     afterEach(() => {
@@ -77,15 +85,6 @@ describe('ValidatedAIService', () => {
 
         await expect(aiService.generateSectorProducts('Tech'))
             .rejects.toThrow('Persistent Error');
-
-        // Initial + 3 retries = 4 attempts?? 
-        // Wait, retry utility: if maxAttempts=3, it runs 3 times total.
-        // Let's check retry.ts logic: "while (true) { ... attempt++; }"
-        // If maxAttempts=3:
-        // Attempt 1: fail. attempt=2.
-        // Attempt 2: fail. attempt=3.
-        // Attempt 3: fail. attempt=4. loop breaks.
-        // So it mimics "Try up to 3 times".
 
         expect(mockGenerateContent).toHaveBeenCalledTimes(3);
     });

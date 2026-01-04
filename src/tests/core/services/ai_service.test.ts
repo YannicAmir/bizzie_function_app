@@ -32,7 +32,7 @@ describe('VertexAiService', () => {
         });
 
         (remoteConfig.getRemoteConfig as jest.Mock).mockResolvedValue({
-            modelName: 'gemini-test-model',
+            gemini_model_name: 'gemini-test-model',
             sectors: []
         });
     });

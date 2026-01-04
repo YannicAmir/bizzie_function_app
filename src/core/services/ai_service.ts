@@ -20,9 +20,54 @@ export interface EnrichedFinancialData {
     summary: string;
 }
 
+// Strict Types for Deep Analysis
+export interface MetricWithDriver {
+    amount: string | null;
+    changeAmount: string | null;
+    changePercent: string | null;
+    driver: string | null;
+    citationPage: number | null;
+}
+
+export interface MetricSimple {
+    amount: string | null;
+    changeAmount: string | null;
+    changePercent: string | null;
+    citationPage: number | null;
+}
+
+export interface DeepFinancialAnalysis {
+    income: {
+        revenue: MetricWithDriver;
+        costOfRevenue: MetricSimple;
+        totalExpenses: MetricWithDriver;
+        netIncome: MetricWithDriver;
+        eps: MetricSimple;
+    };
+    cashFlow: {
+        freeCashFlow: MetricWithDriver;
+    };
+    balanceSheet: {
+        totalAssets: MetricSimple;
+        totalLiabilities: MetricSimple;
+        equity: MetricSimple;
+    };
+    stockActivity: {
+        repurchasedShares: string | null;
+        issuedShares: string | null;
+        netStockChangeShares: string | null;
+        citationPage: number | null;
+    };
+    summary: {
+        forwardLooking: string | null;
+        citationPage: number | null;
+    };
+}
+
 export interface AiService {
     enrich8k(text: string): Promise<Enriched8kData | null>;
     enrichFinancialReport(text: string, formType: string): Promise<EnrichedFinancialData | null>;
+    enrichDeepFinancialReport(text: string, formType: string, ticker: string, filingDate: string): Promise<DeepFinancialAnalysis | null>;
 }
 
 export class VertexAiService implements AiService {
@@ -31,7 +76,7 @@ export class VertexAiService implements AiService {
         return retry(async () => {
             try {
                 const config = await getRemoteConfig();
-                const modelName = config.modelName || 'gemini-3-flash-preview';
+                const modelName = config.gemini_model_name || 'gemini-3-flash-preview';
                 const model = getGeminiModel(modelName);
 
                 const prompt = `
@@ -106,7 +151,7 @@ export class VertexAiService implements AiService {
             try {
                 const config = await getRemoteConfig();
                 // Reuse the same model for now, or add a new config param like 'modelNameFinancials'
-                const modelName = config.modelName || 'gemini-3-flash-preview';
+                const modelName = config.gemini_model_name || 'gemini-3-flash-preview';
                 const model = getGeminiModel(modelName);
 
                 const prompt = `
@@ -161,6 +206,83 @@ export class VertexAiService implements AiService {
 
             } catch (error) {
                 _logger.error(`Error analyzing ${formType}`, error);
+                throw error;
+            }
+        }, { maxAttempts: 3, backoffFactor: 2 });
+    }
+
+    async enrichDeepFinancialReport(text: string, formType: string, ticker: string, filingDate: string): Promise<DeepFinancialAnalysis | null> {
+        return retry(async () => {
+            try {
+                const config = await getRemoteConfig();
+                const modelName = config.gemini_model_name || 'gemini-3-flash-preview';
+                const model = getGeminiModel(modelName);
+
+                const prompt = `
+                You are an expert financial analyst. Perform a deep "reasoning-based" analysis of this SEC ${formType} filing for ${ticker} (Filed: ${filingDate}).
+
+                GOAL: Extract precise financial metrics, calculate derived values (Free Cash Flow, Net Stock Change), and explain the "Drivers" (Reasons) for changes based on the Management's Discussion and Notes.
+
+                STRICT OUTPUT SCHEMA (JSON ONLY):
+                {
+                  "income": {
+                    "revenue": { "amount": "string ($)", "changeAmount": "string ($)", "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
+                    "costOfRevenue": { "amount": "string ($)", "changeAmount": "string ($)", "changePercent": "string (%)", "citationPage": number },
+                    "totalExpenses": { "amount": "string ($)", "changeAmount": "string ($)", "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
+                    "netIncome": { "amount": "string ($)", "changeAmount": "string ($)", "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
+                    "eps": { "amount": "string ($/share)", "changeAmount": "string", "changePercent": "string (%)", "citationPage": number }
+                  },
+                  "cashFlow": {
+                    "freeCashFlow": { 
+                        "amount": "CALCULATE: (Net Cash from Operating Activities - Capital Expenditures (ex: Purchase of Property Plant Equipment))", 
+                        "changeAmount": "string", "changePercent": "string", 
+                        "driver": "Reason for change (Analyze components: Net Income, Working Capital, CapEx)", 
+                        "citationPage": number 
+                    }
+                  },
+                  "balanceSheet": {
+                    "totalAssets": { "amount": "string", "changeAmount": "string", "changePercent": "string", "citationPage": number },
+                    "totalLiabilities": { "amount": "string", "changeAmount": "string", "changePercent": "string", "citationPage": number },
+                    "equity": { "amount": "string", "changeAmount": "string", "changePercent": "string", "citationPage": number }
+                  },
+                  "stockActivity": {
+                    "repurchasedShares": "string (NUMBER OF SHARES, NOT DOLLARS)", 
+                    "issuedShares": "string (NUMBER OF SHARES)", 
+                    "netStockChangeShares": "CALCULATE: (Issued Shares - Repurchased Shares)", 
+                    "citationPage": number
+                  },
+                  "summary": {
+                    "forwardLooking": "Summary of forward-looking statements (Outlook/Guidance)",
+                    "citationPage": number
+                  }
+                }
+
+                RULES:
+                1. **Nulls**: If a value cannot be found with certainty, return null. Do not guess.
+                2. **Citations**: Provide the "citationPage" number for every section where data was found.
+                3. **Drivers**: For Drivers, analyze the "Management's Discussion and Analysis" (MD&A) section. Provide a COMPLETE SENTENCE explaining the reason (e.g., "Revenue increased primarily due to higher sales of iPhone 15."). Do not just list keywords.
+                4. **Calculations**: Perform the math for Free Cash Flow (unless Free Cash Flow is explicitly provided) and Net Stock Change.
+                5. **Format**: All amounts should be formatted strings (e.g., "$15.4B", "$0.52", "1.5M shares").
+
+                TEXT:
+                ${text.substring(0, 1500000)}
+                `;
+
+                const result = await model.generateContent({
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: 'application/json' }
+                });
+
+                const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!responseText) {
+                    _logger.warn("AI returned empty response for deep analysis");
+                    return null;
+                }
+
+                return JSON.parse(responseText);
+
+            } catch (error) {
+                _logger.error(`Error performing deep analysis for ${ticker}`, error);
                 throw error;
             }
         }, { maxAttempts: 3, backoffFactor: 2 });

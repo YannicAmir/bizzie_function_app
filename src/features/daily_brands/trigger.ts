@@ -21,9 +21,9 @@ export const dailyBrandsTrigger = onSchedule(
         try {
             // Fetch configuration (cached)
             const config = await getRemoteConfig();
-            _logger.info(`Using Model: ${config.modelName}, Sectors Count: ${config.sectors.length}`);
+            _logger.info(`Using Model: ${config.gemini_model_name}, Sectors Count: ${config.sectors.length}`);
 
-            const aiService = new ValidatedAIService(config.modelName);
+            const aiService = new ValidatedAIService();
             const dbService = new FirestoreService();
 
             await refreshDailyBrands(aiService, dbService, config.sectors);

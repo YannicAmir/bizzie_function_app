@@ -2,6 +2,7 @@ import { AIService, Product } from '../usecase';
 import { getGeminiModel } from '../../../core/vertex-ai';
 import { retry } from '../../../core/retry';
 import { Logger } from '../../../core/logger';
+import { getRemoteConfig } from '../../../core/remote-config';
 import { z } from 'zod';
 
 const ProductSchema = z.object({
@@ -18,10 +19,9 @@ const ResponseSchema = z.object({
 const _logger = new Logger("Daily Brands AI Service");
 
 export class ValidatedAIService implements AIService {
-  private model;
 
-  constructor(modelName: string) {
-    this.model = getGeminiModel(modelName);
+  constructor() {
+    // configured dynamically
   }
 
   async generateSectorProducts(sectorName: string): Promise<Product[]> {
@@ -104,7 +104,11 @@ export class ValidatedAIService implements AIService {
     try {
       return await retry(async () => {
         try {
-          const result = await this.model.generateContent({
+          const config = await getRemoteConfig();
+          const modelName = config.gemini_model_name || 'gemini-3-flash-preview';
+          const model = getGeminiModel(modelName);
+
+          const result = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: { responseMimeType: 'application/json' },
           });

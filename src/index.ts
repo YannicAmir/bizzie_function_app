@@ -7,3 +7,4 @@ export * from './features/subscription_drip/trigger';
 export * from './features/bizzies_picks_notifier/trigger';
 export * from './features/user_subscription_sync/trigger';
 export * from './features/subscription_webhook/trigger';
+export * from './features/sec_filing_analyzer/trigger';
