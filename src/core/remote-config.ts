@@ -24,7 +24,7 @@ const DEFAULT_CONFIG: AppConfig = {
     "Industrials",
     "Consumer Discretionary",
     "Consumer Staples",
-    "Health Care",
+    "Healthcare",
     "Financials",
     "Information Technology",
     "Communication Services",

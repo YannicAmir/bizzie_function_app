@@ -33,7 +33,7 @@ describe('refreshDailyBrands', () => {
         mockGenerateSectorProducts.mockResolvedValue([mockProduct]);
         mockGenerateAllSectorsProducts.mockResolvedValue([mockProduct]);
 
-        const mockSectors = ["Energy", "Materials", "Utilities", "Financials", "Health Care", "Real Estate", "Consumer Staples", "Consumer Discretionary", "Industrials", "Communication Services", "Information Technology"];
+        const mockSectors = ["Energy", "Materials", "Utilities", "Financials", "Healthcare", "Real Estate", "Consumer Staples", "Consumer Discretionary", "Industrials", "Communication Services", "Information Technology"];
 
         // Act
         await refreshDailyBrands(mockAIService, mockDBService, mockSectors);
@@ -57,7 +57,7 @@ describe('refreshDailyBrands', () => {
         });
         mockGenerateAllSectorsProducts.mockResolvedValue([]);
 
-        const mockSectors = ["Energy", "Materials", "Utilities", "Financials", "Health Care", "Real Estate", "Consumer Staples", "Consumer Discretionary", "Industrials", "Communication Services", "Information Technology"];
+        const mockSectors = ["Energy", "Materials", "Utilities", "Financials", "Healthcare", "Real Estate", "Consumer Staples", "Consumer Discretionary", "Industrials", "Communication Services", "Information Technology"];
 
         // Act
         await refreshDailyBrands(mockAIService, mockDBService, mockSectors);
@@ -76,7 +76,7 @@ describe('refreshDailyBrands', () => {
         mockGenerateSectorProducts.mockResolvedValue([createMockProduct('P')]);
         mockGenerateAllSectorsProducts.mockRejectedValue(new Error('AI All Sectors Error'));
 
-        const mockSectors = ["Energy", "Materials", "Utilities", "Financials", "Health Care", "Real Estate", "Consumer Staples", "Consumer Discretionary", "Industrials", "Communication Services", "Information Technology"];
+        const mockSectors = ["Energy", "Materials", "Utilities", "Financials", "Healthcare", "Real Estate", "Consumer Staples", "Consumer Discretionary", "Industrials", "Communication Services", "Information Technology"];
 
         // Act
         await refreshDailyBrands(mockAIService, mockDBService, mockSectors);
