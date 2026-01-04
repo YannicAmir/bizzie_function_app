@@ -12,6 +12,7 @@ jest.mock('firebase-admin', () => {
         messaging: jest.fn(),
         firestore: mockFirestore,
         initializeApp: jest.fn(), // If needed by getFirebaseAdmin
+        apps: [], // Mock the apps array so checks for length don't crash
         // We also need to expose the mock functions for assertions
         _mockSet: mockSet,
         _mockDoc: mockDoc,

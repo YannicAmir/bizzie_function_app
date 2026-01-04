@@ -1,11 +1,8 @@
 import * as admin from 'firebase-admin';
 
-let initialized = false;
-
 export const getFirebaseAdmin = () => {
-  if (!initialized) {
+  if (admin.apps.length === 0) {
     admin.initializeApp();
-    initialized = true;
   }
   return admin;
 };

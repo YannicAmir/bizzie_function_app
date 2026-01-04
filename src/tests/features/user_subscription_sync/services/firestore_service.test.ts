@@ -15,6 +15,7 @@ jest.mock('firebase-admin', () => {
         messaging: jest.fn(),
         firestore: Object.assign(mockFirestore, { FieldValue: { delete: mockDelete } }),
         initializeApp: jest.fn(),
+        apps: [], // Mock the apps array so checks for length don't crash
         // Expose mocks
         _mockUpdate: mockUpdate,
         _mockDoc: mockDoc,
