@@ -76,7 +76,7 @@ export class VertexAiService implements AiService {
         return retry(async () => {
             try {
                 const config = await getRemoteConfig();
-                const modelName = config.modelName || 'gemini-3-flash-preview';
+                const modelName = config.gemini_model_name || 'gemini-3-flash-preview';
                 const model = getGeminiModel(modelName);
 
                 const prompt = `
@@ -151,7 +151,7 @@ export class VertexAiService implements AiService {
             try {
                 const config = await getRemoteConfig();
                 // Reuse the same model for now, or add a new config param like 'modelNameFinancials'
-                const modelName = config.modelName || 'gemini-3-flash-preview';
+                const modelName = config.gemini_model_name || 'gemini-3-flash-preview';
                 const model = getGeminiModel(modelName);
 
                 const prompt = `
