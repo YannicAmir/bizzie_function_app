@@ -1,6 +1,5 @@
 import { refreshDailyBrands, AIService, DBService, Product, DailyBrandsData } from '../../../features/daily_brands/usecase';
 
-// Mocks
 const mockGenerateSectorProducts = jest.fn();
 const mockGenerateAllSectorsProducts = jest.fn();
 const mockSetDailyContent = jest.fn();
@@ -14,7 +13,6 @@ const mockDBService: DBService = {
     setDailyContent: mockSetDailyContent,
 };
 
-// Helpers
 const createMockProduct = (name: string): Product => ({
     name,
     description: 'Description',
@@ -65,9 +63,7 @@ describe('refreshDailyBrands', () => {
         // Assert
         expect(mockSetDailyContent).toHaveBeenCalledTimes(1);
         const storedData: DailyBrandsData = mockSetDailyContent.mock.calls[0][0];
-        // Energy should be empty
         expect(storedData.sectors.find(s => s.name === 'Energy')?.products).toHaveLength(0);
-        // Others should have data (10 other sectors + All Sectors)
         expect(storedData.sectors.find(s => s.name === 'Materials')?.products).toHaveLength(1);
     });
 
@@ -84,9 +80,7 @@ describe('refreshDailyBrands', () => {
         // Assert
         expect(mockSetDailyContent).toHaveBeenCalledTimes(1);
         const storedData: DailyBrandsData = mockSetDailyContent.mock.calls[0][0];
-        // All Sectors should be empty
         expect(storedData.sectors.find(s => s.name === 'All Sectors')?.products).toHaveLength(0);
-        // Standard sectors should be fine
         expect(storedData.sectors.find(s => s.name === 'Utilities')?.products).toHaveLength(1);
     });
 

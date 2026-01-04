@@ -1,7 +1,6 @@
 
 import { FirebaseUserService } from '../../../../features/subscription_drip/services/user_service';
 
-// Mock DB
 const mockGet = jest.fn();
 const mockLimit = jest.fn(() => ({ get: mockGet }));
 const mockOrderBy = jest.fn(() => ({ limit: mockLimit }));
@@ -16,7 +15,6 @@ jest.mock('../../../../core/firebase', () => ({
     }))
 }));
 
-// Mock Logger
 jest.mock('../../../../core/logger', () => ({
     Logger: jest.fn().mockImplementation(() => ({
         info: jest.fn(),
@@ -25,7 +23,7 @@ jest.mock('../../../../core/logger', () => ({
 }));
 
 jest.mock('../../../../core/retry', () => ({
-    retry: jest.fn((fn) => fn()) // Just execute immediately
+    retry: jest.fn((fn) => fn())
 }));
 
 describe('FirebaseUserService', () => {
@@ -35,7 +33,6 @@ describe('FirebaseUserService', () => {
         service = new FirebaseUserService();
         jest.clearAllMocks();
 
-        // Reset query chain mocks
         mockGet.mockResolvedValue({ empty: true, docs: [], size: 0 });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mockLimit.mockReturnValue({ get: mockGet, startAfter: jest.fn(() => ({ get: mockGet })) } as any);
@@ -50,6 +47,7 @@ describe('FirebaseUserService', () => {
     });
 
     it('streamRecentFreeUsers_success_returnsUsers', async () => {
+        // Arrange
         const mockDocs = [
             { id: 'u1', data: () => ({ fcmToken: 't1', isSubscribed: false, createdAt: '2023-01-01' }) }
         ];
@@ -57,9 +55,10 @@ describe('FirebaseUserService', () => {
         mockGet.mockResolvedValueOnce({
             empty: false,
             docs: mockDocs,
-            size: 1 // less than batch size -> finish
+            size: 1
         });
 
+        // Act
         const generator = service.streamRecentFreeUsers(7, 100);
         let batches = 0;
         let userCount = 0;
@@ -73,14 +72,16 @@ describe('FirebaseUserService', () => {
             }
         }
 
+        // Assert
         expect(batches).toBe(1);
         expect(userCount).toBe(1);
         expect(mockCollection).toHaveBeenCalledWith('users');
     });
 
     it('streamRecentFreeUsers_noToken_skipsUser', async () => {
+        // Arrange
         const mockDocs = [
-            { id: 'u1', data: () => ({ isSubscribed: false }) } // No Token
+            { id: 'u1', data: () => ({ isSubscribed: false }) }
         ];
 
         mockGet.mockResolvedValueOnce({
@@ -89,9 +90,12 @@ describe('FirebaseUserService', () => {
             size: 1
         });
 
+        // Act
         const generator = service.streamRecentFreeUsers(7);
         for await (const batch of generator) {
             expect(batch.length).toBe(0);
         }
+
+        // Assert (Implied by loop finishing without errors and batch length check)
     });
 });

@@ -6,7 +6,6 @@ import { FilingHistoryService } from '../../../core/services/filing_history_serv
 import { AiService } from '../../../core/services/ai_service';
 import * as firebaseCore from '../../../core/firebase';
 
-// Mock dependencies
 jest.mock('../../../core/firebase');
 jest.mock('../../../core/logger', () => ({
     Logger: jest.fn().mockImplementation(() => ({
@@ -19,18 +18,15 @@ jest.mock('../../../core/logger', () => ({
 
 describe('SecFilingsNotifierUseCase', () => {
     let useCase: SecFilingsNotifierUseCase;
-    // Mock Services
     let mockWatchlistService: jest.Mocked<WatchlistService>;
     let mockSecService: jest.Mocked<SecService>;
     let mockFilingHistoryService: jest.Mocked<FilingHistoryService>;
     let mockNotificationService: jest.Mocked<NotificationService>;
     let mockAiService: jest.Mocked<AiService>;
 
-    // Mock Firebase
     let mockFirestoreAdd: jest.Mock;
 
     beforeEach(() => {
-        // Initialize Mocks
         mockWatchlistService = {
             getAllWatchedTickers: jest.fn()
         };
@@ -54,7 +50,6 @@ describe('SecFilingsNotifierUseCase', () => {
             enrichDeepFinancialReport: jest.fn()
         };
 
-        // Initialize Firestore Mock
         mockFirestoreAdd = jest.fn();
         (firebaseCore.getFirebaseAdmin as jest.Mock).mockReturnValue({
             firestore: () => ({
@@ -110,7 +105,7 @@ describe('SecFilingsNotifierUseCase', () => {
         mockWatchlistService.getAllWatchedTickers.mockResolvedValue(watchlist);
 
         const filing: SecFiling = {
-            symbol: 'GOOG', // Not in watchlist
+            symbol: 'GOOG',
             filingDate: '2023-10-01',
             acceptedDate: '2023-10-01',
             period: 'Q3',
@@ -119,13 +114,13 @@ describe('SecFilingsNotifierUseCase', () => {
             formType: '10-Q',
             cik: '12345'
         };
-        mockSecService.getFilings.mockResolvedValueOnce([]).mockResolvedValueOnce([filing]); // Return for 10-Q
+        mockSecService.getFilings.mockResolvedValueOnce([]).mockResolvedValueOnce([filing]);
 
         // Act
         await useCase.execute();
 
         // Assert
-        expect(mockFilingHistoryService.hasProcessed).not.toHaveBeenCalled(); // Optimization check
+        expect(mockFilingHistoryService.hasProcessed).not.toHaveBeenCalled();
         expect(mockNotificationService.sendTopicNotification).not.toHaveBeenCalled();
     });
 
@@ -146,7 +141,7 @@ describe('SecFilingsNotifierUseCase', () => {
         };
         mockSecService.getFilings.mockResolvedValueOnce([]).mockResolvedValueOnce([filing]);
 
-        mockFilingHistoryService.hasProcessed.mockResolvedValue(true); // Already processed
+        mockFilingHistoryService.hasProcessed.mockResolvedValue(true);
 
         // Act
         await useCase.execute();
@@ -172,7 +167,7 @@ describe('SecFilingsNotifierUseCase', () => {
             cik: '54321'
         };
         mockSecService.getFilings.mockResolvedValueOnce([]).mockResolvedValueOnce([filing]);
-        mockFilingHistoryService.hasProcessed.mockResolvedValue(false); // New filing
+        mockFilingHistoryService.hasProcessed.mockResolvedValue(false);
 
         mockSecService.getFilingText.mockResolvedValue('Raw 10-Q Content');
         mockAiService.enrichFinancialReport.mockResolvedValue({
@@ -239,16 +234,14 @@ describe('SecFilingsNotifierUseCase', () => {
         await useCase.execute();
 
         // Assert
-        // Should fallback to default summary format
         const fallbackSummary = '10-K filed.';
         expect(mockNotificationService.sendTopicNotification).toHaveBeenCalledWith(
             'AAPL',
             expect.any(String),
-            fallbackSummary, // Default
+            fallbackSummary,
             expect.any(Object)
         );
 
-        // DB should save valid filing but potentially null metrics or fallback summary
-        expect(mockFirestoreAdd).toHaveBeenCalled(); // We expect it to save even if AI fails
+        expect(mockFirestoreAdd).toHaveBeenCalled();
     });
 });

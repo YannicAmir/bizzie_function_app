@@ -2,7 +2,6 @@
 import { RemoteConfigService } from '../../../../features/subscription_drip/services/config_service';
 import * as remoteConfigCore from '../../../../core/remote-config';
 
-// Mock the core remote config module
 jest.mock('../../../../core/remote-config');
 
 describe('RemoteConfigService', () => {
@@ -19,6 +18,7 @@ describe('RemoteConfigService', () => {
     });
 
     it('getDripCampaign_success_returnsParsedJson', async () => {
+        // Arrange
         const mockJson = JSON.stringify({
             1: { title: 'Day 1', body: 'Messages' }
         });
@@ -27,31 +27,36 @@ describe('RemoteConfigService', () => {
             subscriptionDripCampaign: mockJson
         });
 
+        // Act
         const result = await service.getDripCampaign();
 
+        // Assert
         expect(result).toEqual({
             1: { title: 'Day 1', body: 'Messages' }
         });
     });
 
     it('getDripCampaign_malformedJson_returnsEmpty', async () => {
+        // Arrange
         mockGetRemoteConfig.mockResolvedValue({
             subscriptionDripCampaign: "{ invalid json "
         });
 
+        // Act
         const result = await service.getDripCampaign();
 
+        // Assert
         expect(result).toEqual({});
     });
 
     it('getDripCampaign_missingProp_returnsEmpty', async () => {
-        mockGetRemoteConfig.mockResolvedValue({}); // No subscriptionDripCampaign prop
+        // Arrange
+        mockGetRemoteConfig.mockResolvedValue({});
 
-        // The real implementation might throw or return undefined if strict, 
-        // but current impl might error on JSON.parse(undefined). 
-        // Let's verify behavior. If it throws catch block should handle it.
-
+        // Act
         const result = await service.getDripCampaign();
+
+        // Assert
         expect(result).toEqual({});
     });
 });

@@ -11,9 +11,8 @@ jest.mock('firebase-admin', () => {
     return {
         messaging: jest.fn(),
         firestore: mockFirestore,
-        initializeApp: jest.fn(), // If needed by getFirebaseAdmin
-        apps: [], // Mock the apps array so checks for length don't crash
-        // We also need to expose the mock functions for assertions
+        initializeApp: jest.fn(),
+        apps: [],
         _mockSet: mockSet,
         _mockDoc: mockDoc,
         _mockCollection: mockCollection,
@@ -23,8 +22,6 @@ jest.mock('firebase-admin', () => {
 
 describe('UserService', () => {
     let userService: UserService;
-    // Helper to access the mocked functions from the factory above
-    // Helper to access the mocked functions from the factory above
     const mockAdmin = admin as unknown as {
         _mockSet: jest.Mock;
         _mockDoc: jest.Mock;
@@ -37,19 +34,21 @@ describe('UserService', () => {
     });
 
     it('should_updateFirestore_withCorrectData_when_isSubscribedTrue', async () => {
+        // Arrange
         const userId = 'user_123';
         const isSubscribed = true;
-        const expiryDateMs = 1735497600000; // Some timestamp
+        const expiryDateMs = 1735497600000;
 
+        // Act
         await userService.updateSubscriptionStatus(userId, isSubscribed, expiryDateMs);
 
+        // Assert
         expect(mockAdmin._mockCollection).toHaveBeenCalledWith('users');
         expect(mockAdmin._mockDoc).toHaveBeenCalledWith(userId);
 
-        // Verify payload
         const expectedPayload = {
             isSubscribed: true,
-            updatedAt: expect.any(String), // We don't check exact timestamp
+            updatedAt: expect.any(String),
             subscriptionExpiryDate: new Date(expiryDateMs).toISOString()
         };
 
@@ -57,24 +56,28 @@ describe('UserService', () => {
     });
 
     it('should_updateFirestore_withoutExpiry_when_expiryNotProvided', async () => {
+        // Arrange
         const userId = 'user_456';
         const isSubscribed = false;
 
+        // Act
         await userService.updateSubscriptionStatus(userId, isSubscribed);
 
+        // Assert
         const expectedPayload = {
             isSubscribed: false,
             updatedAt: expect.any(String)
-            // No subscriptionExpiryDate
         };
 
         expect(mockAdmin._mockSet).toHaveBeenCalledWith(expectedPayload, { merge: true });
     });
 
     it('should_throwError_when_firestoreFails', async () => {
+        // Arrange
         const error = new Error('Firestore unavailable');
         mockAdmin._mockSet.mockRejectedValue(error);
 
+        // Act & Assert
         await expect(userService.updateSubscriptionStatus('user_error', true)).rejects.toThrow(error);
     });
 });

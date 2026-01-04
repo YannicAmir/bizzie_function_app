@@ -1,7 +1,6 @@
 import { FirebaseWatchlistService } from '../../../core/services/watchlist_service';
 import * as firebaseCore from '../../../core/firebase';
 
-// Mock dependencies
 jest.mock('../../../core/firebase');
 jest.mock('../../../core/logger', () => ({
     Logger: jest.fn().mockImplementation(() => ({
@@ -34,11 +33,11 @@ describe('FirebaseWatchlistService', () => {
     });
 
     it('getAllWatchedTickers_hasDocs_returnsTickerMap', async () => {
-        // Mock snapshot with documents
+        // Arrange
         const mockDocs = [
             { id: 'AAPL', data: () => ({ companyName: 'Apple Inc.' }) },
             { id: 'GOOG', data: () => ({ name: 'Alphabet' }) },
-            { id: 'TSLA', data: () => ({}) } // Fallback to ID
+            { id: 'TSLA', data: () => ({}) }
         ];
 
         mockGet.mockResolvedValue({
@@ -47,8 +46,10 @@ describe('FirebaseWatchlistService', () => {
             size: 3
         });
 
+        // Act
         const result = await service.getAllWatchedTickers();
 
+        // Assert
         expect(result.size).toBe(3);
         expect(result.get('AAPL')).toBe('Apple Inc.');
         expect(result.get('GOOG')).toBe('Alphabet');
@@ -58,20 +59,25 @@ describe('FirebaseWatchlistService', () => {
     });
 
     it('getAllWatchedTickers_empty_returnsEmptyMap', async () => {
+        // Arrange
         mockGet.mockResolvedValue({
             empty: true,
             forEach: jest.fn(),
             size: 0
         });
 
+        // Act
         const result = await service.getAllWatchedTickers();
 
+        // Assert
         expect(result.size).toBe(0);
     });
 
     it('getAllWatchedTickers_firestoreError_throws', async () => {
+        // Arrange
         mockGet.mockRejectedValue(new Error('Firestore Down'));
 
+        // Act & Assert
         await expect(service.getAllWatchedTickers())
             .rejects.toThrow('Firestore Down');
     });

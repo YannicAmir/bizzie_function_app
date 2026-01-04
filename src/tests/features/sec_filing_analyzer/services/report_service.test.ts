@@ -2,12 +2,9 @@
 import { ReportService, FinancialReport } from '../../../../../src/features/sec_filing_analyzer/services/report_service';
 import { getFirebaseAdmin } from '../../../../../src/core/firebase';
 
-// Mock dependencies
 jest.mock('../../../../../src/core/firebase', () => ({
     getFirebaseAdmin: jest.fn()
 }));
-
-// Mock Firestore Chain
 const mockSet = jest.fn();
 const mockGet = jest.fn();
 const mockDocFn = jest.fn();
@@ -24,12 +21,8 @@ const mockAdmin = {
 describe('ReportService', () => {
     let service: ReportService;
 
-    // Reset mocks before each test
     beforeEach(() => {
         jest.clearAllMocks();
-
-        // Setup default mock return values
-        // Note: ReportService calls getFirebaseAdmin().firestore().collection(...) in its constructor/property initializer
         (getFirebaseAdmin as jest.Mock).mockReturnValue(mockAdmin);
         mockCollectionFn.mockReturnValue({ doc: mockDocFn });
         mockDocFn.mockReturnValue({
@@ -37,11 +30,11 @@ describe('ReportService', () => {
             get: mockGet
         });
 
-        // Initialize service
         service = new ReportService();
     });
 
     test('saveReport_validReport_savesToFirestore', async () => {
+        // Arrange
         const report: FinancialReport = {
             id: 'TEST_2025_10K',
             ticker: 'TEST',
@@ -75,14 +68,17 @@ describe('ReportService', () => {
             }
         };
 
+        // Act
         await service.saveReport(report);
 
+        // Assert
         expect(mockCollectionFn).toHaveBeenCalledWith('financial_reports');
         expect(mockDocFn).toHaveBeenCalledWith('TEST_2025_10K');
         expect(mockSet).toHaveBeenCalledWith(report, { merge: true });
     });
 
     test('saveReport_firestoreError_throwsError', async () => {
+        // Arrange
         const report = {
             id: 'TEST_ERR',
             ticker: 'TEST',
@@ -93,23 +89,30 @@ describe('ReportService', () => {
 
         mockSet.mockRejectedValue(new Error("Firestore write failed"));
 
+        // Act & Assert
         await expect(service.saveReport(report)).rejects.toThrow("Firestore write failed");
     });
 
     test('hasReport_documentExists_returnsTrue', async () => {
+        // Arrange
         mockGet.mockResolvedValue({ exists: true });
 
+        // Act
         const exists = await service.hasReport('TEST_EXISTS');
 
+        // Assert
         expect(mockDocFn).toHaveBeenCalledWith('TEST_EXISTS');
         expect(exists).toBe(true);
     });
 
     test('hasReport_documentDoesNotExist_returnsFalse', async () => {
+        // Arrange
         mockGet.mockResolvedValue({ exists: false });
 
+        // Act
         const exists = await service.hasReport('TEST_MISSING');
 
+        // Assert
         expect(exists).toBe(false);
     });
 });

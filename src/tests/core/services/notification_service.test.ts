@@ -1,7 +1,6 @@
 import { FcmNotificationService } from '../../../core/services/notification_service';
 import * as firebaseCore from '../../../core/firebase';
 
-// Mock Logger
 jest.mock('../../../core/logger', () => ({
     Logger: jest.fn().mockImplementation(() => ({
         info: jest.fn(),
@@ -11,7 +10,6 @@ jest.mock('../../../core/logger', () => ({
     }))
 }));
 
-// Mock Firebase
 jest.mock('../../../core/firebase');
 
 describe('FcmNotificationService', () => {
@@ -33,10 +31,13 @@ describe('FcmNotificationService', () => {
 
     describe('sendTopicNotification', () => {
         it('sends message successfully', async () => {
+            // Arrange
             mockSend.mockResolvedValue('msg-id');
 
+            // Act
             await service.sendTopicNotification('test-topic', 'Title', 'Body');
 
+            // Assert
             expect(mockSend).toHaveBeenCalledWith({
                 topic: 'test-topic',
                 notification: {
@@ -48,18 +49,23 @@ describe('FcmNotificationService', () => {
         });
 
         it('handles errors gracefully (does not throw)', async () => {
+            // Arrange
             mockSend.mockRejectedValue(new Error('FCM Error'));
 
+            // Act & Assert
             await expect(service.sendTopicNotification('test-topic', 'Title', 'Body')).resolves.not.toThrow();
         });
     });
 
     describe('sendToToken', () => {
         it('sends message to token successfully', async () => {
+            // Arrange
             mockSend.mockResolvedValue('msg-id');
 
+            // Act
             await service.sendToToken('test-token', 'Private Title', 'Private Body');
 
+            // Assert
             expect(mockSend).toHaveBeenCalledWith({
                 token: 'test-token',
                 notification: {
@@ -71,7 +77,9 @@ describe('FcmNotificationService', () => {
         });
 
         it('handles errors gracefully', async () => {
+            // Arrange
             mockSend.mockRejectedValue(new Error('Invalid Token'));
+            // Act & Assert
             await expect(service.sendToToken('bad-token', 'T', 'B')).resolves.not.toThrow();
         });
     });
