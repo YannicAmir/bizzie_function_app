@@ -262,7 +262,7 @@ export class VertexAiService implements AiService {
                 RULES:
                 1. **Nulls**: If a value cannot be found with certainty, return null. Do not guess.
                 2. **Citations**: Provide the "citationPage" number for every section where data was found.
-                3. **Drivers**: For Drivers, analyze the "Management's Discussion and Analysis" (MD&A) section. Quote specific reasons (e.g., "iphone sales", "tax benefit").
+                3. **Drivers**: For Drivers, analyze the "Management's Discussion and Analysis" (MD&A) section. Provide a COMPLETE SENTENCE explaining the reason (e.g., "Revenue increased primarily due to higher sales of iPhone 15."). Do not just list keywords.
                 4. **Calculations**: Perform the math for Free Cash Flow (unless Free Cash Flow is explicitly provided) and Net Stock Change.
                 5. **Format**: All amounts should be formatted strings (e.g., "$15.4B", "$0.52", "1.5M shares").
 
