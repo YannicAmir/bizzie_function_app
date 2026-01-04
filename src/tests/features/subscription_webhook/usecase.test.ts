@@ -23,45 +23,65 @@ describe('SubscriptionWebhookUseCase', () => {
     });
 
     it('should_setSubscribedTrue_when_initialPurchase', async () => {
+        // Arrange
         const payload = createPayload('INITIAL_PURCHASE');
+        // Act
         await useCase.execute(payload);
+        // Assert
         expect(mockUserService.updateSubscriptionStatus).toHaveBeenCalledWith('test_user', true, 10000);
     });
 
     it('should_setSubscribedTrue_when_renewal', async () => {
+        // Arrange
         const payload = createPayload('RENEWAL');
+        // Act
         await useCase.execute(payload);
+        // Assert
         expect(mockUserService.updateSubscriptionStatus).toHaveBeenCalledWith('test_user', true, 10000);
     });
 
     it('should_setSubscribedTrue_when_uncancellation', async () => {
+        // Arrange
         const payload = createPayload('UNCANCELLATION');
+        // Act
         await useCase.execute(payload);
+        // Assert
         expect(mockUserService.updateSubscriptionStatus).toHaveBeenCalledWith('test_user', true, 10000);
     });
 
     it('should_setSubscribedFalse_when_expiration', async () => {
+        // Arrange
         const payload = createPayload('EXPIRATION');
+        // Act
         await useCase.execute(payload);
+        // Assert
         expect(mockUserService.updateSubscriptionStatus).toHaveBeenCalledWith('test_user', false, 10000);
     });
 
     it('should_notUpdateStatus_when_cancellation', async () => {
-        // Cancellation means auto-renew off, access remains.
+        // Arrange
         const payload = createPayload('CANCELLATION');
+        // Act
         await useCase.execute(payload);
+        // Assert
         expect(mockUserService.updateSubscriptionStatus).not.toHaveBeenCalled();
     });
 
     it('should_notUpdateStatus_when_userIdMissing', async () => {
+        // Arrange
         const payload = createPayload('INITIAL_PURCHASE', '');
+        // Act
         await useCase.execute(payload);
+        // Assert
         expect(mockUserService.updateSubscriptionStatus).not.toHaveBeenCalled();
     });
 
     it('should_logAndIgnore_when_unhandledType', async () => {
+        // Arrange
         const payload = createPayload('UNKNOWN_TYPE');
+        // Act
         await useCase.execute(payload);
+        // Assert
         expect(mockUserService.updateSubscriptionStatus).not.toHaveBeenCalled();
     });
 });

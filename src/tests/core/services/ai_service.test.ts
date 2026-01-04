@@ -43,6 +43,7 @@ describe('VertexAiService', () => {
 
     describe('enrich8k', () => {
         it('enrich8k_validEarnings_returnsData', async () => {
+            // Arrange
             const mockResponse = {
                 topic: 'Earnings',
                 summary: 'Apple reported huge earnings.',
@@ -60,8 +61,10 @@ describe('VertexAiService', () => {
                 }
             });
 
+            // Act
             const result = await service.enrich8k('Sample 8-K text');
 
+            // Assert
             expect(result).toEqual({
                 topic: 'Earnings',
                 summary: 'Apple reported huge earnings.',
@@ -74,6 +77,7 @@ describe('VertexAiService', () => {
         });
 
         it('enrich8k_irrelevantTopic_returnsNull', async () => {
+            // Arrange
             const mockResponse = {
                 topic: null,
                 summary: 'Nothing important'
@@ -87,22 +91,30 @@ describe('VertexAiService', () => {
                 }
             });
 
+            // Act
             const result = await service.enrich8k('Boilerplate text');
+
+            // Assert
             expect(result).toBeNull();
         });
 
         it('enrich8k_emptyAiResponse_returnsNull', async () => {
+            // Arrange
             mockGenerateContent.mockResolvedValue({
                 response: { candidates: [] } // Empty
             });
 
+            // Act
             const result = await service.enrich8k('Text');
+
+            // Assert
             expect(result).toBeNull();
         });
     });
 
     describe('enrichFinancialReport', () => {
         it('enrichFinancialReport_valid10K_returnsData', async () => {
+            // Arrange
             const mockResponse = {
                 revenue: '$10M',
                 eps: '$0.50',
@@ -117,8 +129,10 @@ describe('VertexAiService', () => {
                 }
             });
 
+            // Act
             const result = await service.enrichFinancialReport('10-K Text', '10-K');
 
+            // Assert
             expect(result).toEqual({
                 revenue: '$10M',
                 eps: '$0.50',
@@ -132,6 +146,7 @@ describe('VertexAiService', () => {
         });
 
         it('enrichFinancialReport_valid10Q_returnsData', async () => {
+            // Arrange
             const mockResponse = {
                 revenue: '$5M',
                 eps: '$0.10',
@@ -146,8 +161,10 @@ describe('VertexAiService', () => {
                 }
             });
 
+            // Act
             const result = await service.enrichFinancialReport('10-Q Text', '10-Q');
 
+            // Assert
             expect(result).toEqual(mockResponse);
 
             // Verify prompt contained 10-Q specific instructions
@@ -157,8 +174,10 @@ describe('VertexAiService', () => {
         });
 
         it('enrichFinancialReport_aiFailure_throwsError', async () => {
+            // Arrange
             mockGenerateContent.mockRejectedValue(new Error('API Down'));
 
+            // Act & Assert
             // Since we mocked retry to just call callback, it should throw immediately
             await expect(service.enrichFinancialReport('Text', '10-K'))
                 .rejects.toThrow('API Down');

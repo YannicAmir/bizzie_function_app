@@ -8,3 +8,4 @@ export * from './features/bizzies_picks_notifier/trigger';
 export * from './features/user_subscription_sync/trigger';
 export * from './features/subscription_webhook/trigger';
 export * from './features/sec_filing_analyzer/trigger';
+export * from './features/stock_list_sync/trigger';

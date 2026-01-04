@@ -22,6 +22,7 @@ description: Generates unit tests for features using strict conventions
     *   Generate test code for the UseCase in `src/tests/features/[feature_name]/usecase.test.ts`.
     *   Generate test code for Services in `src/tests/features/[feature_name]/services/[service_name].test.ts`.
     *   **Strictly** follow the naming conventions: `lowerCamelCamel` and `entity_action_result`.
+    *   **Strictly** follow the commenting pattern: REQUIRED `// Arrange`, `// Act`, `// Assert` and NO other comments (unless strictly required like eslint-disable).
     *   Use `jest` and standard mocking (e.g., `jest.mock`, or dependency injection).
 
 3.  **Verification**:
