@@ -250,7 +250,7 @@ export class VertexAiService implements AiService {
                   "stockActivity": {
                     "repurchasedShares": "string (NUMBER OF SHARES, NOT DOLLARS)", 
                     "issuedShares": "string (NUMBER OF SHARES)", 
-                    "netStockChangeShares": "CALCULATE: (Repurchased Shares - Issued Shares)", 
+                    "netStockChangeShares": "CALCULATE: (Issued Shares - Repurchased Shares)", 
                     "citationPage": number
                   },
                   "summary": {
