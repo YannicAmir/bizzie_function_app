@@ -5,9 +5,9 @@ import { Logger } from '../../core/logger';
 
 import { getFirebaseAdmin } from '../../core/firebase';
 
-const logger = new Logger('WatchlistGlobalSyncTrigger');
+const logger = new Logger('SyncWatchlistTrigger');
 
-export const watchlistGlobalSync = onDocumentWritten({
+export const syncWatchlist = onDocumentWritten({
     document: 'users/{userId}/watchlist/{tickerId}',
     memory: '256MiB',
     timeoutSeconds: 60,
@@ -15,12 +15,11 @@ export const watchlistGlobalSync = onDocumentWritten({
 }, async (event) => {
     try {
         getFirebaseAdmin();
-        console.log('DEBUG: Firebase Admin Initialized');
     } catch (e) {
-        console.error('DEBUG: Firebase Admin Init Failed', e);
+        logger.error('Firebase Admin Init Failed', e);
         throw e;
     }
-    logger.info(`Triggered watchlistAggregator for ${event.params.tickerId}`);
+    logger.info(`Triggered syncWatchlist for ${event.params.tickerId}`);
 
     // onDocumentWritten event.data has { before, after }
     const snapshot = event.data;

@@ -14,7 +14,6 @@ export class GlobalWatchlistService {
     async upsertToGlobalList(ticker: string, companyName: string): Promise<void> {
         try {
             const firestore = getFirebaseAdmin().firestore();
-            console.log(`DEBUG: Service getting doc ref for ${ticker}`);
             const docRef = firestore.collection('watchlist').doc(ticker);
 
             const data: WatchlistDocument = {
