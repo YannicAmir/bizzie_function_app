@@ -3,12 +3,10 @@ import { UserService } from './services/user_service';
 
 const _logger = new Logger('Subscription Webhook UseCase');
 
-// Partial Type Definition based on RevenueCat Webhook Payload
 export interface RevenueCatEvent {
     type: string;
     app_user_id: string;
     expiration_at_ms?: number;
-    // We can add more fields if needed
 }
 
 export interface WebhookPayload {
