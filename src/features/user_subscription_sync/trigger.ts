@@ -3,6 +3,9 @@ import { Logger } from '../../core/logger';
 import { UserSubscriptionSyncUseCase, User } from './usecase';
 import { FcmNotificationService } from '../../core/services/notification_service';
 import { FirestoreService } from './services/firestore_service';
+import { getFirebaseAdmin } from '../../core/firebase';
+
+getFirebaseAdmin();
 
 const _logger = new Logger("User Subscription Sync Trigger");
 

@@ -2,6 +2,9 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { Logger } from '../../core/logger';
 import { BizziesPicksNotifierUseCase } from './usecase';
 import { FcmNotificationService } from '../../core/services/notification_service';
+import { getFirebaseAdmin } from '../../core/firebase';
+
+getFirebaseAdmin();
 
 const _logger = new Logger("Bizzies Picks Trigger");
 

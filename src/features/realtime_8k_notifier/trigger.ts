@@ -6,6 +6,9 @@ import { FirebaseFilingHistoryService } from '../../core/services/filing_history
 import { VertexAiService } from '../../core/services/ai_service';
 import { Realtime8kNotifierUseCase } from './usecase';
 import { Logger } from '../../core/logger';
+import { getFirebaseAdmin } from '../../core/firebase';
+
+getFirebaseAdmin();
 
 const logger = new Logger('Realtime8kNotifier');
 

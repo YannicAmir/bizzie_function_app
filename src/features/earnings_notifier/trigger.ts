@@ -5,6 +5,9 @@ import { EarningsNotifierUseCase } from './usecase';
 import { FirebaseWatchlistService } from '../../core/services/watchlist_service';
 import { FmpMarketDataService } from './services/market_data_service';
 import { FcmNotificationService } from '../../core/services/notification_service';
+import { getFirebaseAdmin } from '../../core/firebase';
+
+getFirebaseAdmin();
 
 const fmpApiKey = defineSecret('FMP_API_KEY');
 

@@ -5,6 +5,9 @@ import { FcmNotificationService } from '../../core/services/notification_service
 import { SubscriptionDripUseCase } from './usecase';
 
 import { RemoteConfigService } from './services/config_service';
+import { getFirebaseAdmin } from '../../core/firebase';
+
+getFirebaseAdmin();
 
 const _logger = new Logger('Subscription Drip Trigger');
 

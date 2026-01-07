@@ -6,6 +6,8 @@ import { Logger } from '../../core/logger';
 
 import { getFirebaseAdmin } from '../../core/firebase';
 
+getFirebaseAdmin();
+
 const logger = new Logger('StockListSyncTrigger');
 
 export const stockListSync = onSchedule({
@@ -14,7 +16,6 @@ export const stockListSync = onSchedule({
     memory: '512MiB',
     timeoutSeconds: 300,
 }, async () => {
-    getFirebaseAdmin();
     logger.info('Triggered stockListSync scheduled function');
 
     const fmpService = new FmpService();
