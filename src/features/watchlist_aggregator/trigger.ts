@@ -5,6 +5,9 @@ import { Logger } from '../../core/logger';
 
 import { getFirebaseAdmin } from '../../core/firebase';
 
+// Ensure Firebase is initialized at global scope (Cold Start)
+getFirebaseAdmin();
+
 const logger = new Logger('SyncWatchlistTrigger');
 
 export const syncWatchlist = onDocumentWritten({
@@ -13,12 +16,6 @@ export const syncWatchlist = onDocumentWritten({
     timeoutSeconds: 60,
     retry: true,
 }, async (event) => {
-    try {
-        getFirebaseAdmin();
-    } catch (e) {
-        logger.error('Firebase Admin Init Failed', e);
-        throw e;
-    }
     logger.info(`Triggered syncWatchlist for ${event.params.tickerId}`);
 
     // onDocumentWritten event.data has { before, after }
