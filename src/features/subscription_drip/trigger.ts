@@ -11,8 +11,8 @@ const _logger = new Logger('Subscription Drip Trigger');
 export const subscriptionDrip = onSchedule({
     schedule: 'every day 09:40',
     timeZone: 'America/New_York',
-    memory: '512MiB', // Generator is efficient, but give some headroom
-    timeoutSeconds: 540, // Max 9 minutes for batch processing
+    memory: '512MiB',
+    timeoutSeconds: 540,
 }, async () => {
     _logger.info('Subscription Drip Triggered');
 

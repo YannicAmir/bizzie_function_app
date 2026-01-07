@@ -14,9 +14,6 @@ export class BizziesPicksNotifierUseCase {
 
         const topic = 'premium_notifications';
 
-        // Define message content
-        // TODO: In the future, this could be dynamic based on the actual picks generated for the day.
-        // For now, it's a generic "Check the app" message.
         const title = "Bizzie's picks are now available! 👀";
         const body = "See what companies, brands, and products Bizzie is researching today";
 
@@ -26,7 +23,7 @@ export class BizziesPicksNotifierUseCase {
             body,
             {
                 type: 'bizzies_picks_daily',
-                click_action: 'FLUTTER_NOTIFICATION_CLICK' // Standard for Flutter apps
+                click_action: 'FLUTTER_NOTIFICATION_CLICK'
             }
         );
 

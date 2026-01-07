@@ -3,7 +3,6 @@ import { getFirebaseAdmin } from '../../../core/firebase';
 import { Logger } from '../../../core/logger';
 import { DeepFinancialAnalysis } from '../../../core/services/ai_service';
 
-// Mix the strict analysis interface with our metadata fields
 export interface FinancialReport extends DeepFinancialAnalysis {
     id: string;
     ticker: string;

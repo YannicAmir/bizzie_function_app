@@ -12,7 +12,7 @@ export interface EarningsEvent {
     revenueActual: number | null;
     revenueEstimated: number | null;
     lastUpdated: string;
-    time?: string; // Optional as it wasn't in the provided sample
+    time?: string;
 }
 
 export interface MarketDataService {
@@ -20,7 +20,6 @@ export interface MarketDataService {
 }
 
 
-// Raw DTO matching the external API response exactly
 interface FmpEarningsEventDTO {
     date: string;
     symbol: string;
@@ -51,7 +50,6 @@ export class FmpMarketDataService implements MarketDataService {
 
             const rawData = await response.json() as FmpEarningsEventDTO[];
 
-            // Map raw data to our clean interface
             return rawData.map((item) => {
                 const event: EarningsEvent = {
                     date: item.date,

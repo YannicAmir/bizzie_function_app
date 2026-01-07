@@ -10,10 +10,6 @@ import { Logger } from '../../core/logger';
 const _logger = new Logger('SEC Filing Analyzer Trigger');
 const fmpApiKey = defineSecret('FMP_API_KEY');
 
-// We must instantiate services INSIDE the trigger or lazy load them 
-// because we need access to the secret value at runtime, 
-// and secrets are only available inside the function handler.
-
 export const secFilingAnalyzerTrigger = onDocumentCreated(
     {
         document: 'sec_filings/{docId}',

@@ -4,7 +4,7 @@ import { WatchlistService } from '../../core/services/watchlist_service';
 import { NotificationService } from '../../core/services/notification_service';
 import { SecService } from '../../core/services/sec_service';
 import { FilingHistoryService } from '../../core/services/filing_history_service';
-import { AiService } from '../../core/services/ai_service'; // Import interface
+import { AiService } from '../../core/services/ai_service';
 
 import { getFirebaseAdmin } from '../../core/firebase';
 import * as admin from 'firebase-admin';
@@ -18,13 +18,10 @@ export class SecFilingsNotifierUseCase {
         private secService: SecService,
         private filingHistoryService: FilingHistoryService,
         private notificationService: NotificationService,
-        private aiService: AiService // Injected
+        private aiService: AiService
     ) { }
 
     async execute(targetDate?: Date): Promise<void> {
-        // 1. Calculate Date Range (Yesterday -> Today)
-        // We want to "Catch Up" on anything we might have missed or that was filed late yesterday.
-        // Use targetDate if provided (for testing), otherwise use real Now.
         const today = targetDate ? new Date(targetDate) : new Date();
         const yesterday = new Date(today);
         yesterday.setDate(today.getDate() - 1);
@@ -35,7 +32,6 @@ export class SecFilingsNotifierUseCase {
 
         _logger.info(`Running SEC Filings Check from ${fromDateStr} to ${toDateStr}`);
 
-        // 2. Refresh Watchlist
         _logger.info("Fetching global watchlist...");
         const watchedTickers = await this.watchlistService.getAllWatchedTickers();
         if (watchedTickers.size === 0) {
@@ -44,42 +40,34 @@ export class SecFilingsNotifierUseCase {
         }
         _logger.info(`Monitoring ${watchedTickers.size} tickers.`);
 
-        // 3. Fetch Filings (10-K and 10-Q)
-        // We run these sequentially or parallel, but handle them as distinct lists
         const filings10K = await this.secService.getFilings('10-K', fromDateStr, toDateStr);
         const filings10Q = await this.secService.getFilings('10-Q', fromDateStr, toDateStr);
 
         const allFilings = [...filings10K, ...filings10Q];
         _logger.info(`Fetched ${allFilings.length} total filings (${filings10K.length} 10-Ks, ${filings10Q.length} 10-Qs).`);
 
-        // 4. Filter & Process
         let sentCount = 0;
         let skippedCount = 0;
         let dedupedCount = 0;
 
         for (const filing of allFilings) {
-            // A. Check Watchlist
             if (!watchedTickers.has(filing.symbol)) {
                 skippedCount++;
                 continue;
             }
 
-            // B. Check Deduplication
             const isProcessed = await this.filingHistoryService.hasProcessed(filing);
             if (isProcessed) {
                 dedupedCount++;
                 continue;
             }
 
-            // C. Prepare Data
             const companyName = watchedTickers.get(filing.symbol) || filing.symbol;
             const periodText = filing.formType === '10-K' ? 'year' : 'quarter';
 
-            // Fetch and Analyze Text (AI)
             let aiData = { revenue: null as string | null, eps: null as string | null, summary: `${filing.formType} filed.` };
 
             try {
-                // Ensure we have a link (prefer finalLink)
                 const targetLink = filing.finalLink || filing.link;
                 if (targetLink) {
                     _logger.info(`Analyzing ${filing.formType} for ${filing.symbol}...`);
@@ -94,16 +82,12 @@ export class SecFilingsNotifierUseCase {
                 }
             } catch (err) {
                 _logger.error(`Failed to run AI analysis for ${filing.symbol}`, err);
-                // Continue without AI data (fallback to basic summary)
             }
 
-            // Title: [TICKER] SEC Filing Update
             const title = `${filing.symbol}'s ${filing.formType} is now available`;
 
-            // Body: Use AI summary if available, otherwise fallback
             const body = aiData.summary;
 
-            // D. Send Notification (Sequential Execution for FCM Stability)
             await this.notificationService.sendTopicNotification(
                 filing.symbol,
                 title,
@@ -119,7 +103,6 @@ export class SecFilingsNotifierUseCase {
             );
             sentCount++;
 
-            // D-2. Save to DB (sec_filings)
             await getFirebaseAdmin().firestore().collection('sec_filings').add({
                 symbol: filing.symbol,
                 companyName: companyName,
@@ -127,12 +110,11 @@ export class SecFilingsNotifierUseCase {
                 filingDate: filing.filingDate,
                 link: filing.finalLink,
                 summary: aiData.summary,
-                revenue: aiData.revenue, // Save extracted metric
-                eps: aiData.eps,         // Save extracted metric
+                revenue: aiData.revenue,
+                eps: aiData.eps,
                 createdAt: admin.firestore.FieldValue.serverTimestamp()
             });
 
-            // E. Mark as Processed
             await this.filingHistoryService.markProcessed(filing);
         }
 

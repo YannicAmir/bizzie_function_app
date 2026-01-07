@@ -10,7 +10,7 @@ const fmpApiKey = defineSecret('FMP_API_KEY');
 
 export const earningsNotifier = onSchedule(
     {
-        schedule: 'every mon,tue,wed,thu,fri 08:45', // Weekdays 8:45 AM EST
+        schedule: 'every mon,tue,wed,thu,fri 08:45',
         timeZone: 'America/New_York',
         secrets: [fmpApiKey],
         memory: '512MiB',
@@ -35,7 +35,7 @@ export const earningsNotifier = onSchedule(
             logger.info('earningsNotifier completed successfully');
         } catch (error) {
             logger.error('earningsNotifier failed', error);
-            throw error; // Rethrow to ensure Cloud Scheduler marks it as failed
+            throw error;
         }
     }
 );

@@ -13,10 +13,8 @@ export class StockListSyncUseCase {
     async execute(): Promise<void> {
         logger.info('Starting stock list sync...');
 
-        // 1. Fetch
         const rawStocks = await this.fmpService.fetchAllStocks();
 
-        // 2. Transform / Minify
         const minifiedStocks: StockEntry[] = rawStocks.map(stock => ({
             s: stock.symbol,
             n: stock.companyName
@@ -24,7 +22,6 @@ export class StockListSyncUseCase {
 
         logger.info(`Minified ${minifiedStocks.length} stocks.`);
 
-        // 3. Save
         await this.storageService.saveStockList(minifiedStocks);
 
         logger.info('Stock list sync completed successfully.');

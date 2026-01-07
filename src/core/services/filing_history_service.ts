@@ -20,12 +20,8 @@ export class FirebaseFilingHistoryService implements FilingHistoryService {
 
     async hasProcessed(filing: SecFiling): Promise<boolean> {
         if (!filing.finalLink) {
-            // If no link, we can't uniquely identify it safely ?
-            // Or we could use symbol + date + type?
-            // FMP usually provides a link. If not, log warning and maybe skip or process?
-            // Let's assume unique link is required for safety.
             _logger.warn(`Filing for ${filing.symbol} has no finalLink. Skipping dedupe check (safe fail -> treat as processed to avoid spam?).`, filing);
-            return true; // Treating as processed prevents spamming if data is bad.
+            return true;
         }
 
         const id = this.getHash(filing.finalLink);
@@ -47,7 +43,6 @@ export class FirebaseFilingHistoryService implements FilingHistoryService {
                 processedAt: new Date().toISOString(),
                 originalLink: filing.finalLink
             });
-            // _logger.debug(`Marked filing ${id} as processed.`);
         } catch (error) {
             _logger.error(`Failed to mark filing ${id} as processed`, error);
         }

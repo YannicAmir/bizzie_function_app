@@ -20,7 +20,6 @@ export interface EnrichedFinancialData {
     summary: string;
 }
 
-// Strict Types for Deep Analysis
 export interface MetricWithDriver {
     amount: string | null;
     changeAmount: string | null;
@@ -141,7 +140,7 @@ export class VertexAiService implements AiService {
 
             } catch (error) {
                 _logger.error("Error calling AI service", error);
-                throw error; // Rethrow for retry logic
+                throw error;
             }
         }, { maxAttempts: 3, backoffFactor: 2 });
     }
@@ -150,7 +149,6 @@ export class VertexAiService implements AiService {
         return retry(async () => {
             try {
                 const config = await getRemoteConfig();
-                // Reuse the same model for now, or add a new config param like 'modelNameFinancials'
                 const modelName = config.gemini_model_name || 'gemini-3-flash-preview';
                 const model = getGeminiModel(modelName);
 
@@ -181,9 +179,6 @@ export class VertexAiService implements AiService {
                 TEXT:
                 ${text.substring(0, 1500000)}
                 `;
-                // Note: We send up to 500k chars here (approx 125k tokens). 
-                // The caller (SecService) will strip HTML and handle the main truncation. 
-                // We add a safety substring here just in case.
 
                 const result = await model.generateContent({
                     contents: [{ role: 'user', parts: [{ text: prompt }] }],

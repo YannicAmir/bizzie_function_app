@@ -6,7 +6,6 @@ import { UserService } from './services/user_service';
 
 const _logger = new Logger("RevenueCat Webhook Trigger");
 
-// Define the secret (must match the name we set in CLI)
 const revenueCatSecret = defineSecret('REVENUECAT_SECRET_TOKEN');
 
 export const revenueCatWebhook = onRequest(
@@ -16,7 +15,6 @@ export const revenueCatWebhook = onRequest(
         timeoutSeconds: 60,
     },
     async (request, response) => {
-        // 1. Security Check
         const authHeader = request.headers['authorization'] || '';
         const secretValue = revenueCatSecret.value().trim();
         const incomingAuth = authHeader.trim();
@@ -27,7 +25,6 @@ export const revenueCatWebhook = onRequest(
             return;
         }
 
-        // 2. Parse Body
         const payload = request.body as WebhookPayload;
 
         if (!payload || !payload.event) {
@@ -36,7 +33,6 @@ export const revenueCatWebhook = onRequest(
             return;
         }
 
-        // 3. Execute Logic
         try {
             const userService = new UserService();
             const useCase = new SubscriptionWebhookUseCase(userService);

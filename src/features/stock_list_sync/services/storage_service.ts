@@ -30,7 +30,7 @@ export class StorageService {
             gzip: true,
             contentType: 'application/json',
             metadata: {
-                cacheControl: 'public, max-age=3600', // Cache for 1 hour on CDN
+                cacheControl: 'public, max-age=3600',
             }
         });
 

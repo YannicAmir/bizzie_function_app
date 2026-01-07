@@ -13,7 +13,7 @@ const fmpApiKey = defineSecret('FMP_API_KEY');
 
 export const secFilingsNotifier = onSchedule(
     {
-        schedule: 'every mon,tue,wed,thu,fri 09:15', // Weekdays 9:15 AM EST
+        schedule: 'every mon,tue,wed,thu,fri 09:15',
         timeZone: 'America/New_York',
         secrets: [fmpApiKey],
         memory: '512MiB',
@@ -23,32 +23,28 @@ export const secFilingsNotifier = onSchedule(
         logger.info('Starting secFilingsNotifier scheduled function');
 
         try {
-            // Instantiate Services
             const watchlistService = new FirebaseWatchlistService();
             const notificationService = new FcmNotificationService();
 
-            // FMP Key provided via Secret Manager
             const secService = new FmpSecService(fmpApiKey.value());
 
             const filingHistoryService = new FirebaseFilingHistoryService();
-            const aiService = new VertexAiService(); // Instantiated VertexAiService
+            const aiService = new VertexAiService();
 
-            // Instantiate Use Case
             const useCase = new SecFilingsNotifierUseCase(
                 watchlistService,
                 secService,
                 filingHistoryService,
                 notificationService,
-                aiService // Added aiService to the use case constructor
+                aiService
             );
 
-            // Execute
             await useCase.execute();
 
             logger.info('secFilingsNotifier completed successfully');
         } catch (error) {
             logger.error('secFilingsNotifier failed', error);
-            throw error; // Rethrow to ensure Cloud Scheduler marks it as failed in Console
+            throw error;
         }
     }
 );

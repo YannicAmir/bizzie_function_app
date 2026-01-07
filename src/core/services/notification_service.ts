@@ -28,7 +28,6 @@ export class FcmNotificationService implements NotificationService {
             await getFirebaseAdmin().messaging().send(message);
         } catch (error) {
             _logger.error(`Failed to send notification to topic ${topic}`, error);
-            // We do not throw here to prevent one failure from stopping the entire batch
         }
     }
 
@@ -43,7 +42,6 @@ export class FcmNotificationService implements NotificationService {
         };
 
         try {
-            // _logger.debug(`Sending notification to token: ${token.substring(0, 10)}...`);
             await getFirebaseAdmin().messaging().send(message);
         } catch (error) {
             _logger.error(`Failed to send notification to token ${token.substring(0, 10)}...`, error);
@@ -56,7 +54,7 @@ export class FcmNotificationService implements NotificationService {
             _logger.info(`Subscribed ${Array.isArray(tokens) ? tokens.length : 1} token(s) to topic: ${topic}`);
         } catch (error) {
             _logger.error(`Failed to subscribe to topic ${topic}`, error);
-            throw error; // Rethrow to allow caller to handle cleanup
+            throw error;
         }
     }
 

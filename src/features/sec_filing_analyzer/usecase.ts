@@ -23,16 +23,13 @@ export class SecFilingAnalyzerUseCase {
 
         const { symbol, formType, filingDate, link } = data;
 
-        // Validation
         if (!symbol || !formType || !filingDate || !link) {
             _logger.warn(`Missing required fields in SEC Filing doc ${snap.id}. Skipping.`);
             return;
         }
 
-        // 1. Construct Compound ID
         const reportId = `${symbol}_${filingDate}_${formType}`;
 
-        // 2. Idempotency Check
         const exists = await this.reportService.hasReport(reportId);
         if (exists) {
             _logger.info(`Report ${reportId} already analyzed. Skipping.`);
@@ -41,16 +38,12 @@ export class SecFilingAnalyzerUseCase {
 
         _logger.info(`Starting Deep Analysis for ${reportId} from ${link}`);
 
-        // 3. Fetch Content
-        // Utilizing the link from the document as requested
         const filingText = await this.secService.getFilingText(link);
         if (!filingText) {
             _logger.error(`Failed to fetch text from ${link}`);
             return;
         }
 
-        // 4. AI Analysis
-        // Using the newly added method in AiService
         const analysisResult = await this.aiService.enrichDeepFinancialReport(
             filingText,
             formType,
@@ -63,7 +56,6 @@ export class SecFilingAnalyzerUseCase {
             return;
         }
 
-        // 5. Construct & Save Report
         const report: FinancialReport = {
             id: reportId,
             ticker: symbol,
@@ -75,7 +67,6 @@ export class SecFilingAnalyzerUseCase {
 
         await this.reportService.saveReport(report);
 
-        // 6. Update Original Document (Optional, but good for tracing)
         await snap.ref.update({
             deepAnalysisStatus: 'completed',
             deepAnalysisId: reportId,

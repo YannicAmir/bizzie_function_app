@@ -17,7 +17,6 @@ export class Logger {
     }
 
     error(message: string, error?: unknown): void {
-        // Ensure error objects are properly serialized/attached
         const payload = error ? { error, context: this.context } : { context: this.context };
         firebaseLogger.error(`[${this.context}] ${message}`, payload);
     }
