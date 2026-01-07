@@ -18,7 +18,6 @@ export class EarningsNotifierUseCase {
         const nextWeek = new Date();
         nextWeek.setDate(today.getDate() + 7);
 
-        // Helper to format YYYY-MM-DD
         const formatDate = (d: Date) => d.toISOString().substring(0, 10);
 
         const yesterday = new Date(today);
@@ -29,39 +28,30 @@ export class EarningsNotifierUseCase {
 
         _logger.info(`Running Earnings Notification cycle for ${fromDateStr} to ${toDateStr}`);
 
-        // 1. Get Watchlist
         const watchedTickers = await this.watchlistService.getAllWatchedTickers();
         if (watchedTickers.size === 0) {
             _logger.info('No tickers in watchlist. Skipping.');
             return;
         }
 
-        // 2. Get Earnings
         const earnings = await this.marketDataService.getEarningsCalendar(fromDateStr, toDateStr);
         _logger.info(`Fetched ${earnings.length} earnings events.`);
 
-        // 3. Process
         let notificationsSent = 0;
         for (const event of earnings) {
             if (watchedTickers.has(event.symbol)) {
-                // Get company name, defaulting to symbol if something went wrong
                 const companyName = watchedTickers.get(event.symbol) || event.symbol;
 
-                // Normalize current date to midnight for accurate day-diff
                 const now = new Date();
                 now.setHours(0, 0, 0, 0);
 
-                // Normalize event date (default parsing is usually UTC midnight, so ensure local midnight consistency if needed)
-                // Actually, simplest is direct string comparison for "TODAY" and date diff for others.
-                // Let's use timestamp diffing for safety.
-                const target = new Date(event.date + 'T00:00:00'); // Force midnight
+                const target = new Date(event.date + 'T00:00:00');
 
                 const diffTime = target.getTime() - now.getTime();
                 const daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
                 if (daysDiff < -1 || daysDiff > 7) continue;
 
-                // Construct Title and Body
                 const title = `${event.symbol} Earnings Update`;
                 let body = '';
 

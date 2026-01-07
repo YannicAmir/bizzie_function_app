@@ -16,17 +16,15 @@ export class SubscriptionDripUseCase {
     async execute(): Promise<void> {
         _logger.info('Starting Subscription Drip cycle...');
 
-        // Fetch Campaign Configuration
         const campaign = await this.configService.getDripCampaign();
 
-        // Look back up to 8 days to catch the "Day 7" cohort comfortably
         const userStream = this.userService.streamRecentFreeUsers(8);
 
         let processedCount = 0;
         let sentCount = 0;
 
         const now = new Date();
-        now.setHours(0, 0, 0, 0); // Normalize "Today"
+        now.setHours(0, 0, 0, 0);
 
         for await (const batch of userStream) {
             _logger.info(`Processing batch of ${batch.length} users...`);
@@ -37,13 +35,10 @@ export class SubscriptionDripUseCase {
                 if (!user.createdAt) continue;
 
                 const createdDate = new Date(user.createdAt);
-                createdDate.setHours(0, 0, 0, 0); // Normalize
+                createdDate.setHours(0, 0, 0, 0);
 
-                // Diff in Days
                 const diffTime = now.getTime() - createdDate.getTime();
                 const daysDiff = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-                // _logger.debug(`User ${user.id} created ${daysDiff} days ago.`);
 
                 const message = campaign[daysDiff];
 

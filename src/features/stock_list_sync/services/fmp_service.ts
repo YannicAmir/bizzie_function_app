@@ -27,7 +27,6 @@ export class FmpService {
             }
             const data = await response.json();
 
-            // Runtime Validation
             const parsedData = z.array(FmpStockSchema).parse(data);
 
             logger.info(`Fetched ${parsedData.length} stocks from FMP`);

@@ -59,7 +59,7 @@ export class ValidatedAIService implements AIService {
   }
 
   async generateAllSectorsProducts(excludedProducts: Product[]): Promise<Product[]> {
-    const excludedNames = excludedProducts.map(p => p.name).join(", ").slice(0, 1000); // Truncate to avoid token limits if necessary
+    const excludedNames = excludedProducts.map(p => p.name).join(", ").slice(0, 1000);
 
     const prompt = `
       Task: Generate a list of 6 popular products from major US companies.
@@ -126,7 +126,7 @@ export class ValidatedAIService implements AIService {
           return parsed.products;
         } catch (error) {
           _logger.warn("Generation attempt failed:", { error });
-          throw error; // Ensure retry catches it
+          throw error;
         }
       }, {
         maxAttempts: 3,

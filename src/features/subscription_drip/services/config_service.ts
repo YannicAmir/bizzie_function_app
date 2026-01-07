@@ -13,7 +13,7 @@ export interface ConfigService {
 }
 
 export class RemoteConfigService implements ConfigService {
-    async getDripCampaign(): Promise<Record<string, DripMessage>> { // Key is number-string in JSON
+    async getDripCampaign(): Promise<Record<string, DripMessage>> {
         const config = await getRemoteConfig();
 
         try {

@@ -25,10 +25,9 @@ export class FirebaseWatchlistService implements WatchlistService {
             }
 
             snapshot.forEach((doc: GenericFirestoreDocument) => {
-                // The document ID is the ticker symbol (e.g. "AAPL")
                 const ticker = doc.id;
                 const data = doc.data();
-                const name = data.companyName || data.name || ticker; // Fallback to ticker if name missing
+                const name = data.companyName || data.name || ticker;
                 tickers.set(ticker, name);
             });
 
