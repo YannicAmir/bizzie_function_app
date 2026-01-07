@@ -5,7 +5,6 @@ import { Logger } from '../../core/logger';
 
 import { getFirebaseAdmin } from '../../core/firebase';
 
-// Ensure Firebase is initialized at global scope (Cold Start)
 getFirebaseAdmin();
 
 const logger = new Logger('SyncWatchlistTrigger');
@@ -18,7 +17,6 @@ export const syncWatchlist = onDocumentWritten({
 }, async (event) => {
     logger.info(`Triggered syncWatchlist for ${event.params.tickerId}`);
 
-    // onDocumentWritten event.data has { before, after }
     const snapshot = event.data;
     if (!snapshot) {
         logger.warn('No data associated with the event');
@@ -26,16 +24,11 @@ export const syncWatchlist = onDocumentWritten({
     }
 
     const after = snapshot.after;
-    const before = snapshot.before;
 
-    // If 'after' doesn't exist, it's a Deletion. We don't remove from global watchlist (append-only).
     if (!after.exists) {
         logger.info('Document deleted. Global watchlist is append-only, ignoring.');
         return;
     }
-
-    // If 'before' exists and 'after' exists, it's an Update.
-    // We proceed to sync in case the company name usage changed or just to ensure consistency.
 
     const data = after.data();
     if (!data) {
