@@ -13,6 +13,7 @@ export class WatchlistAggregatorUseCase {
         }
 
         logger.info(`Processing watchlist addition for ${ticker}`);
+        console.log(`DEBUG: UseCase executing for ${ticker}`);
 
         await this.globalWatchlistService.upsertToGlobalList(ticker, companyName);
     }

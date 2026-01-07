@@ -13,7 +13,13 @@ export const watchlistAggregator = onDocumentCreated({
     timeoutSeconds: 60,
     retry: true,
 }, async (event) => {
-    getFirebaseAdmin();
+    try {
+        getFirebaseAdmin();
+        console.log('DEBUG: Firebase Admin Initialized');
+    } catch (e) {
+        console.error('DEBUG: Firebase Admin Init Failed', e);
+        throw e;
+    }
     logger.info(`Triggered watchlistAggregator for ${event.params.tickerId}`);
 
     const snapshot = event.data;
