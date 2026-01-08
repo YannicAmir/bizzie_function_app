@@ -3,6 +3,9 @@ import { defineSecret } from 'firebase-functions/params';
 import { Logger } from '../../core/logger';
 import { SubscriptionWebhookUseCase, WebhookPayload } from './usecase';
 import { UserService } from './services/user_service';
+import { getFirebaseAdmin } from '../../core/firebase';
+
+getFirebaseAdmin();
 
 const _logger = new Logger("RevenueCat Webhook Trigger");
 

@@ -21,8 +21,6 @@ export class UserService {
                 updateData.subscriptionExpiryDate = new Date(expiryDateMs).toISOString();
             }
 
-            // Using merge just in case, but usually update is fine if doc exists. 
-            // set with merge=true handles case where user doc might be missing (rare but safe)
             await getFirebaseAdmin().firestore().collection('users').doc(userId).set(updateData, { merge: true });
 
             _logger.info(`Updated user ${userId} subscription status to ${isSubscribed}`);

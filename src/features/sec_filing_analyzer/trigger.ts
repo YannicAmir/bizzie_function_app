@@ -6,6 +6,9 @@ import { SecFilingAnalyzerUseCase } from './usecase';
 import { ReportService } from './services/report_service';
 import { FmpSecService } from '../../core/services/sec_service';
 import { Logger } from '../../core/logger';
+import { getFirebaseAdmin } from '../../core/firebase';
+
+getFirebaseAdmin();
 
 const _logger = new Logger('SEC Filing Analyzer Trigger');
 const fmpApiKey = defineSecret('FMP_API_KEY');

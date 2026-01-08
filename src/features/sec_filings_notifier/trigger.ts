@@ -8,6 +8,9 @@ import { FirebaseWatchlistService } from '../../core/services/watchlist_service'
 import { FcmNotificationService } from '../../core/services/notification_service';
 import { FmpSecService } from '../../core/services/sec_service';
 import { FirebaseFilingHistoryService } from '../../core/services/filing_history_service';
+import { getFirebaseAdmin } from '../../core/firebase';
+
+getFirebaseAdmin();
 
 const fmpApiKey = defineSecret('FMP_API_KEY');
 

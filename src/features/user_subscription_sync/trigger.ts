@@ -3,28 +3,26 @@ import { Logger } from '../../core/logger';
 import { UserSubscriptionSyncUseCase, User } from './usecase';
 import { FcmNotificationService } from '../../core/services/notification_service';
 import { FirestoreService } from './services/firestore_service';
+import { getFirebaseAdmin } from '../../core/firebase';
+
+getFirebaseAdmin();
 
 const _logger = new Logger("User Subscription Sync Trigger");
 
 export const userSubscriptionSyncTrigger = onDocumentWritten(
     "users/{userId}",
     async (event) => {
-        // _logger.info("Triggered");
-
         if (!event.data) {
             return;
         }
 
-        // 1. Skip Deletions (Handled by userDeletionCleanup)
         if (!event.data.after.exists) {
             return;
         }
 
-        // 2. Extract Data (Handle Creation where before is undefined)
         const beforeData = event.data.before.data();
         const afterData = event.data.after.data();
 
-        // Map Firestore data to User Entity
         const beforeUser: User = {
             id: event.params.userId,
             isSubscribed: !!beforeData?.isSubscribed,

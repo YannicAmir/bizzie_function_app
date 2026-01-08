@@ -4,7 +4,9 @@ import { refreshDailyBrands } from './usecase';
 import { ValidatedAIService } from './services/ai_service';
 import { FirestoreService } from './services/firestore_service';
 import { getRemoteConfig } from '../../core/remote-config';
+import { getFirebaseAdmin } from '../../core/firebase';
 
+getFirebaseAdmin();
 
 const _logger = new Logger("Daily Brands Trigger");
 
