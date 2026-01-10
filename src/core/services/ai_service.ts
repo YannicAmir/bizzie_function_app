@@ -274,7 +274,11 @@ export class VertexAiService implements AiService {
                     return null;
                 }
 
-                return JSON.parse(responseText);
+                const parsed = JSON.parse(responseText);
+                if (Array.isArray(parsed)) {
+                    return parsed[0];
+                }
+                return parsed;
 
             } catch (error) {
                 _logger.error(`Error performing deep analysis for ${ticker}`, error);
