@@ -178,9 +178,36 @@ describe('VertexAiService', () => {
             mockGenerateContent.mockRejectedValue(new Error('API Down'));
 
             // Act & Assert
-            // Since we mocked retry to just call callback, it should throw immediately
             await expect(service.enrichFinancialReport('Text', '10-K'))
                 .rejects.toThrow('API Down');
+        });
+    });
+    describe('enrichDeepFinancialReport', () => {
+        it('enrichDeepFinancialReport_returnsArray_unwrapsCorrectly', async () => {
+            // Arrange
+            const mockData = {
+                income: { revenue: { amount: '$100B', changeAmount: '$10B', changePercent: '10%', driver: 'Sales', citationPage: 1 } },
+                cashFlow: { freeCashFlow: { amount: '$50B', changeAmount: '$5B', changePercent: '10%', driver: 'Ops', citationPage: 2 } },
+                balanceSheet: { totalAssets: { amount: '$200B', changeAmount: '$20B', changePercent: '10%', citationPage: 3 } },
+                stockActivity: { repurchasedShares: '1M', issuedShares: '2M', netStockChangeShares: '1M', citationPage: 4 },
+                summary: { forwardLooking: 'Good outlook', citationPage: 5 }
+            };
+
+            const mockResponse = [mockData];
+
+            mockGenerateContent.mockResolvedValue({
+                response: {
+                    candidates: [{
+                        content: { parts: [{ text: JSON.stringify(mockResponse) }] }
+                    }]
+                }
+            });
+
+            // Act
+            const result = await service.enrichDeepFinancialReport('Text', '10-K', 'AAPL', '2025-01-01');
+
+            // Assert
+            expect(result).toEqual(mockData);
         });
     });
 });
