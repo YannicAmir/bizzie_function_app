@@ -15,6 +15,7 @@ import { getFirebaseAdmin } from '../core/firebase';
 import { EarningsNotifierUseCase } from '../features/earnings_notifier/usecase';
 import { FirebaseWatchlistService } from '../core/services/watchlist_service';
 import { FmpMarketDataService } from '../features/earnings_notifier/services/market_data_service';
+import { FirestoreEarningsStorageService } from '../features/earnings_notifier/services/earnings_storage_service';
 import { FcmNotificationService } from '../core/services/notification_service';
 import { Logger } from '../core/logger'; // Using the public wrapper
 
@@ -69,12 +70,14 @@ async function run() {
         const watchlistService = new FirebaseWatchlistService();
         const marketDataService = new FmpMarketDataService(fmpKey);
         const notificationService = new FcmNotificationService();
+        const earningsStorageService = new FirestoreEarningsStorageService();
 
         // 3. Instantiate Use Case
         const useCase = new EarningsNotifierUseCase(
             watchlistService,
             marketDataService,
-            notificationService
+            notificationService,
+            earningsStorageService
         );
 
         // 4. Execute

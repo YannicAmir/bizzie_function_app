@@ -64,8 +64,7 @@ describe('FmpMarketDataService', () => {
                 epsEstimated: 1.4,
                 revenueActual: 1000000,
                 revenueEstimated: 900000,
-                lastUpdated: '2023-10-01',
-                time: 'bmo'
+                lastUpdated: '2023-10-01'
             });
             expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('earnings-calendar'));
             expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('apikey=test-api-key'));

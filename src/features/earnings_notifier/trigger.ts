@@ -4,6 +4,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { EarningsNotifierUseCase } from './usecase';
 import { FirebaseWatchlistService } from '../../core/services/watchlist_service';
 import { FmpMarketDataService } from './services/market_data_service';
+import { FirestoreEarningsStorageService } from './services/earnings_storage_service';
 import { FcmNotificationService } from '../../core/services/notification_service';
 import { getFirebaseAdmin } from '../../core/firebase';
 
@@ -26,11 +27,13 @@ export const earningsNotifier = onSchedule(
             const watchlistService = new FirebaseWatchlistService();
             const marketDataService = new FmpMarketDataService(fmpApiKey.value());
             const notificationService = new FcmNotificationService();
+            const earningsStorageService = new FirestoreEarningsStorageService();
 
             const useCase = new EarningsNotifierUseCase(
                 watchlistService,
                 marketDataService,
-                notificationService
+                notificationService,
+                earningsStorageService
             );
 
             await useCase.execute();
