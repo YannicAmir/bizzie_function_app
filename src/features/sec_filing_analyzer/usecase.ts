@@ -28,7 +28,8 @@ export class SecFilingAnalyzerUseCase {
             return;
         }
 
-        const reportId = `${symbol}_${filingDate}_${formType}`;
+        const filingDateOnly = filingDate.split(' ')[0];
+        const reportId = `${symbol}_${filingDateOnly}_${formType}`;
 
         const exists = await this.reportService.hasReport(reportId);
         if (exists) {
