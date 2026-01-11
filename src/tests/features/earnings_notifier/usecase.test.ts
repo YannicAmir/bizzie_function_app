@@ -1,6 +1,7 @@
 import { EarningsNotifierUseCase } from '../../../features/earnings_notifier/usecase';
 import { WatchlistService } from '../../../core/services/watchlist_service';
 import { MarketDataService, EarningsEvent } from '../../../features/earnings_notifier/services/market_data_service';
+import { EarningsStorageService } from '../../../features/earnings_notifier/services/earnings_storage_service';
 import { NotificationService } from '../../../core/services/notification_service';
 
 jest.mock('../../../core/logger', () => ({
@@ -17,6 +18,7 @@ describe('EarningsNotifierUseCase', () => {
     let mockWatchlistService: jest.Mocked<WatchlistService>;
     let mockMarketDataService: jest.Mocked<MarketDataService>;
     let mockNotificationService: jest.Mocked<NotificationService>;
+    let mockEarningsStorageService: jest.Mocked<EarningsStorageService>;
 
     beforeEach(() => {
         mockWatchlistService = {
@@ -31,11 +33,15 @@ describe('EarningsNotifierUseCase', () => {
             subscribeToTopic: jest.fn(),
             unsubscribeFromTopic: jest.fn(),
         };
+        mockEarningsStorageService = {
+            saveUpcomingEarnings: jest.fn()
+        };
 
         useCase = new EarningsNotifierUseCase(
             mockWatchlistService,
             mockMarketDataService,
-            mockNotificationService
+            mockNotificationService,
+            mockEarningsStorageService
         );
     });
 

@@ -2,6 +2,7 @@ import { Logger } from '../../core/logger';
 import { WatchlistService } from '../../core/services/watchlist_service';
 import { MarketDataService } from './services/market_data_service';
 import { NotificationService } from '../../core/services/notification_service';
+import { EarningsStorageService } from './services/earnings_storage_service';
 
 const _logger = new Logger('Earnings Notifier Usecase');
 
@@ -10,7 +11,8 @@ export class EarningsNotifierUseCase {
     constructor(
         private watchlistService: WatchlistService,
         private marketDataService: MarketDataService,
-        private notificationService: NotificationService
+        private notificationService: NotificationService,
+        private earningsStorageService: EarningsStorageService
     ) { }
 
     async execute(): Promise<void> {
@@ -37,44 +39,47 @@ export class EarningsNotifierUseCase {
         const earnings = await this.marketDataService.getEarningsCalendar(fromDateStr, toDateStr);
         _logger.info(`Fetched ${earnings.length} earnings events.`);
 
+        const relevantEarnings = earnings.filter(event => watchedTickers.has(event.symbol));
+        _logger.info(`Found ${relevantEarnings.length} relevant earnings events locally.`);
+
+        await this.earningsStorageService.saveUpcomingEarnings(relevantEarnings);
+
         let notificationsSent = 0;
-        for (const event of earnings) {
-            if (watchedTickers.has(event.symbol)) {
-                const companyName = watchedTickers.get(event.symbol) || event.symbol;
+        for (const event of relevantEarnings) {
+            const companyName = watchedTickers.get(event.symbol) || event.symbol;
 
-                const now = new Date();
-                now.setHours(0, 0, 0, 0);
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
 
-                const target = new Date(event.date + 'T00:00:00');
+            const target = new Date(event.date + 'T00:00:00');
 
-                const diffTime = target.getTime() - now.getTime();
-                const daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const diffTime = target.getTime() - now.getTime();
+            const daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                if (daysDiff < -1 || daysDiff > 7) continue;
+            if (daysDiff < -1 || daysDiff > 7) continue;
 
-                const title = `${event.symbol} Earnings Update`;
-                let body = '';
+            const title = `${event.symbol} Earnings Update`;
+            let body = '';
 
-                if (daysDiff === -1) {
-                    body = `${companyName} released their earnings yesterday. Check out how they did last period!`;
-                } else {
-                    const daysText = daysDiff === 0 ? 'today' : `in ${daysDiff} day${daysDiff > 1 ? 's' : ''}`;
-                    body = `${companyName} is releasing their earnings ${daysText}!`;
-                }
-
-                await this.notificationService.sendTopicNotification(
-                    event.symbol,
-                    title,
-                    body,
-                    {
-                        type: 'earnings_reminder',
-                        ticker: event.symbol,
-                        eventDate: event.date,
-                        daysRemaining: daysDiff.toString()
-                    }
-                );
-                notificationsSent++;
+            if (daysDiff === -1) {
+                body = `${companyName} released their earnings yesterday. Check out how they did last period!`;
+            } else {
+                const daysText = daysDiff === 0 ? 'today' : `in ${daysDiff} day${daysDiff > 1 ? 's' : ''}`;
+                body = `${companyName} is releasing their earnings ${daysText}!`;
             }
+
+            await this.notificationService.sendTopicNotification(
+                event.symbol,
+                title,
+                body,
+                {
+                    type: 'earnings_reminder',
+                    ticker: event.symbol,
+                    eventDate: event.date,
+                    daysRemaining: daysDiff.toString()
+                }
+            );
+            notificationsSent++;
         }
         _logger.info(`Cycle complete. Sent ${notificationsSent} notifications.`);
     }

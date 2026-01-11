@@ -12,7 +12,6 @@ export interface EarningsEvent {
     revenueActual: number | null;
     revenueEstimated: number | null;
     lastUpdated: string;
-    time?: string;
 }
 
 export interface MarketDataService {
@@ -28,7 +27,6 @@ interface FmpEarningsEventDTO {
     revenueActual: number | null;
     revenueEstimated: number | null;
     lastUpdated: string;
-    time?: string;
 }
 
 export class FmpMarketDataService implements MarketDataService {
@@ -60,10 +58,6 @@ export class FmpMarketDataService implements MarketDataService {
                     revenueEstimated: item.revenueEstimated,
                     lastUpdated: item.lastUpdated
                 };
-
-                if (item.time) {
-                    event.time = item.time;
-                }
 
                 return event;
             });
