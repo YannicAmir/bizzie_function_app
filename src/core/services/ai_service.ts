@@ -278,7 +278,7 @@ export class VertexAiService implements AiService {
                    - **netStockChangeShares** = Issued Shares - Repurchased Shares
                 5. **Format**: All money/share amounts must be raw **NUMBERS** (e.g., 10500000000, not "$10.5B"). 
                    - **CRITICAL**: Do NOT lose precision. If the report says "12.5 Billion", output 12500000000. If it says "12,543 million", output 12543000000.
-                 6. **Percentages**: All changes must be raw **NUMBERS** (e.g., 15.2, not "15.2%").
+                 6. **Percentages**: All changes must be raw **NUMBERS** representing the percentage value (e.g., return 15.2 for 15.2%, NOT 0.152).
                  7. **Currency**: Explicitly identify the reporting currency and add it to the summary.reportingCurrency field.
 
                 TEXT:
