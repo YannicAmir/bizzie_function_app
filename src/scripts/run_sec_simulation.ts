@@ -86,7 +86,7 @@ const MOCK_DATA: SecFiling[] = [
 class MockSecService implements SecService {
     constructor(private mockFilings: SecFiling[]) { }
 
-    async getFilings(type: '10-K' | '10-Q' | '8-K', _startDate: string, _endDate: string): Promise<SecFiling[]> {
+    async getFilings(type: '10-K' | '10-Q' | '8-K'): Promise<SecFiling[]> {
         logger.info(`[MockSecService] Returning mock data for type: ${type}`);
         return this.mockFilings.filter(f => f.formType === type);
     }

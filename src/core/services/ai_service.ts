@@ -25,7 +25,7 @@ export interface EnrichedFinancialData {
 export interface MetricWithDriver {
     amount: number | null;
     changeAmount: number | null;
-    changePercent: string | null;
+    changePercent: number | null;
     driver: string | null;
     citationPage: number | null;
 }
@@ -33,7 +33,7 @@ export interface MetricWithDriver {
 export interface MetricSimple {
     amount: number | null;
     changeAmount: number | null;
-    changePercent: string | null;
+    changePercent: number | null;
     citationPage: number | null;
 }
 
@@ -168,10 +168,11 @@ export class VertexAiService implements AiService {
                 if 10-Q is provided, focus STRICTLY on the columns labeled 'Three Months Ended [Current Period]'. Do NOT extract data from the 'Nine Months Ended' columns.
 
                 EXTRACT:
-                1. "revenue": The total revenue for the period (e.g. "$25.2B").
-                2. "eps": Diluted Earnings Per Share (e.g. "$0.72/share").
-                3. "summary": A 1-sentence summary explaining WHY the financial performance was up or down. 
-                   - Focus on the "Results of Operations" or "Management's Discussion". 
+                1. "revenue": The total revenue for the period (e.g. 25200000000). **MUST** be drawn from the Consolidated Statement of Operations / Income Statement.
+                2. "eps": Diluted Earnings Per Share (e.g. 0.72). **MUST** be drawn from the Consolidated Statement of Operations / Income Statement.
+                3. "summary": A 1-sentence summary explaining WHY the financial performance was up or down.  
+                   - Focus on the "Results of Operations" or "Management's Discussion" section.
+                   - **CRITICAL**: Do NOT return generic text like "10-Q filed". You must read the "Management's Discussion" and explain the drivers.
                    - e.g., "Revenue increased 16% due to record iPhone 15 sales." 
                    - e.g., "Net income fell due to higher R&D costs and legal settlements."
                    - Max 25 words. Simple language.
@@ -235,24 +236,24 @@ export class VertexAiService implements AiService {
                 STRICT OUTPUT SCHEMA (JSON ONLY):
                 {
                   "income": {
-                    "revenue": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
-                    "costOfRevenue": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "citationPage": number },
-                    "totalExpenses": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
-                    "netIncome": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
-                    "eps": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "citationPage": number }
+                    "revenue": { "amount": number, "changeAmount": number, "changePercent": number, "driver": "Reason for change", "citationPage": number },
+                    "costOfRevenue": { "amount": number, "changeAmount": number, "changePercent": number, "citationPage": number },
+                    "totalExpenses": { "amount": number, "changeAmount": number, "changePercent": number, "driver": "Reason for change", "citationPage": number },
+                    "netIncome": { "amount": number, "changeAmount": number, "changePercent": number, "driver": "Reason for change", "citationPage": number },
+                    "eps": { "amount": number, "changeAmount": number, "changePercent": number, "citationPage": number }
                   },
                   "cashFlow": {
                     "freeCashFlow": { 
                         "amount": number, 
-                        "changeAmount": number, "changePercent": "string", 
-                        "driver": "Reason for change (Analyze components: Net Income, Working Capital, CapEx)", 
+                        "changeAmount": number, "changePercent": number, 
+                        "driver": "Reason for change", 
                         "citationPage": number 
                     }
                   },
                   "balanceSheet": {
-                    "totalAssets": { "amount": number, "changeAmount": number, "changePercent": "string", "citationPage": number },
-                    "totalLiabilities": { "amount": number, "changeAmount": number, "changePercent": "string", "citationPage": number },
-                    "equity": { "amount": number, "changeAmount": number, "changePercent": "string", "citationPage": number }
+                    "totalAssets": { "amount": number, "changeAmount": number, "changePercent": number, "citationPage": number },
+                    "totalLiabilities": { "amount": number, "changeAmount": number, "changePercent": number, "citationPage": number },
+                    "equity": { "amount": number, "changeAmount": number, "changePercent": number, "citationPage": number }
                   },
                   "stockActivity": {
                     "repurchasedShares": number, 
@@ -277,7 +278,8 @@ export class VertexAiService implements AiService {
                    - **netStockChangeShares** = Issued Shares - Repurchased Shares
                 5. **Format**: All money/share amounts must be raw **NUMBERS** (e.g., 10500000000, not "$10.5B"). 
                    - **CRITICAL**: Do NOT lose precision. If the report says "12.5 Billion", output 12500000000. If it says "12,543 million", output 12543000000.
-                6. **Currency**: Explicitly identify the reporting currency and add it to the summary.reportingCurrency field.
+                 6. **Percentages**: All changes must be raw **NUMBERS** representing the percentage value (e.g., return 15.2 for 15.2%, NOT 0.152).
+                 7. **Currency**: Explicitly identify the reporting currency and add it to the summary.reportingCurrency field.
 
                 TEXT:
                 ${text.substring(0, 1500000)}
