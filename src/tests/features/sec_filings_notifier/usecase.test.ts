@@ -171,8 +171,9 @@ describe('SecFilingsNotifierUseCase', () => {
 
         mockSecService.getFilingText.mockResolvedValue('Raw 10-Q Content');
         mockAiService.enrichFinancialReport.mockResolvedValue({
-            revenue: '$100B',
-            eps: '$1.50',
+            revenue: 100000000000,
+            eps: 1.50,
+            reportingCurrency: 'USD',
             summary: 'Apple had a great quarter due to iPhone sales.'
         });
 
@@ -200,8 +201,8 @@ describe('SecFilingsNotifierUseCase', () => {
         expect(mockFirestoreAdd).toHaveBeenCalledWith(expect.objectContaining({
             symbol: 'AAPL',
             summary: 'Apple had a great quarter due to iPhone sales.',
-            revenue: '$100B',
-            eps: '$1.50'
+            revenue: 100000000000,
+            eps: 1.50
         }));
 
         // 4. Mark Processed
