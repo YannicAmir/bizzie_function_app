@@ -34,31 +34,49 @@ const logger = new Logger('SEC-Simulator-Script');
 // --- MOCK DATA ---
 const MOCK_DATA: SecFiling[] = [
     {
-        symbol: "NVDA",
-        cik: "0001045810",
-        filingDate: "2026-01-11 00:00:00",
-        acceptedDate: "2026-01-11 17:56:38",
+        symbol: "UBER",
+        cik: "0001543151",
+        filingDate: "2026-01-12 00:00:00",
+        acceptedDate: "2026-01-12 17:56:38",
         formType: "10-K",
-        link: "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/0001045810-25-000023-index.htm",
-        finalLink: "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/nvda-20250126.htm"
+        link: "https://www.sec.gov/Archives/edgar/data/1543151/000154315125000008/0001543151-25-000008-index.htm",
+        finalLink: "https://www.sec.gov/Archives/edgar/data/1543151/000154315125000008/uber-20241231.htm"
     },
     {
-        symbol: "NVDA",
-        cik: "0001045810",
-        filingDate: "2026-01-11 00:00:00",
-        acceptedDate: "2026-01-11 17:56:38",
+        symbol: "UBER",
+        cik: "0001543151",
+        filingDate: "2026-01-12 00:00:00",
+        acceptedDate: "2026-01-12 17:56:38",
         formType: "10-Q",
-        link: "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/0001045810-25-000230-index.htm",
-        finalLink: "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000230/nvda-20251026.htm"
+        link: "https://www.sec.gov/Archives/edgar/data/1543151/000154315125000033/0001543151-25-000033-index.htm",
+        finalLink: "https://www.sec.gov/Archives/edgar/data/1543151/000154315125000033/uber-20250930.htm"
     },
     {
-        symbol: "NVDA",
-        cik: "0001045810",
-        filingDate: "2026-01-11 00:00:00",
-        acceptedDate: "2026-01-11 17:56:38",
+        symbol: "UBER",
+        cik: "0001543151",
+        filingDate: "2026-01-12 00:00:00",
+        acceptedDate: "2026-01-12 17:56:38",
         formType: "8-K",
-        link: "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000228/0001045810-25-000228-index.htm",
-        finalLink: "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000228/q3fy26pr.htm"
+        link: "https://www.sec.gov/Archives/edgar/data/1543151/000154315125000030/0001543151-25-000030-index.htm",
+        finalLink: "https://www.sec.gov/Archives/edgar/data/1543151/000154315125000030/uberq325earningspressrelea.htm"
+    },
+    {
+        symbol: "UBER",
+        cik: "0001543151",
+        filingDate: "2026-01-12 00:00:00",
+        acceptedDate: "2026-01-12 17:56:38",
+        formType: "8-K",
+        link: "https://www.sec.gov/Archives/edgar/data/1543151/000155278125000287/0001552781-25-000287-index.htm",
+        finalLink: "https://www.sec.gov/Archives/edgar/data/1543151/000155278125000287/e25325_ex4-1.htm"
+    },
+    {
+        symbol: "UBER",
+        cik: "0001543151",
+        filingDate: "2026-01-12 00:00:00",
+        acceptedDate: "2026-01-12 17:56:38",
+        formType: "8-K",
+        link: "https://www.sec.gov/Archives/edgar/data/1543151/000155278125000203/0001552781-25-000203-index.htm",
+        finalLink: "https://www.sec.gov/Archives/edgar/data/1543151/000155278125000203/e25233_uber-8k.htm"
     }
 ];
 

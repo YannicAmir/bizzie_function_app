@@ -16,7 +16,7 @@ const fmpApiKey = defineSecret('FMP_API_KEY');
 
 export const secFilingsNotifier = onSchedule(
     {
-        schedule: 'every mon,tue,wed,thu,fri 09:15',
+        schedule: '0 5-22 * * 1-5',
         timeZone: 'America/New_York',
         secrets: [fmpApiKey],
         memory: '512MiB',

@@ -23,11 +23,8 @@ export class SecFilingsNotifierUseCase {
 
     async execute(targetDate?: Date): Promise<void> {
         const today = targetDate ? new Date(targetDate) : new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(today.getDate() - 1);
-
         const formatDate = (d: Date) => d.toISOString().substring(0, 10);
-        const fromDateStr = formatDate(yesterday);
+        const fromDateStr = formatDate(today);
         const toDateStr = formatDate(today);
 
         _logger.info(`Running SEC Filings Check from ${fromDateStr} to ${toDateStr}`);
@@ -65,7 +62,7 @@ export class SecFilingsNotifierUseCase {
             const companyName = watchedTickers.get(filing.symbol) || filing.symbol;
             const periodText = filing.formType === '10-K' ? 'year' : 'quarter';
 
-            let aiData = { revenue: null as string | null, eps: null as string | null, summary: `${filing.formType} filed.` };
+            let aiData = { revenue: null as number | null, eps: null as number | null, summary: `${filing.formType} filed.` };
 
             try {
                 const targetLink = filing.finalLink || filing.link;

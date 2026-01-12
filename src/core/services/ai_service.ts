@@ -8,29 +8,31 @@ const _logger = new Logger('AI Service');
 export interface Enriched8kData {
     topic: string;
     summary: string;
-    revenue?: string | null;
-    eps?: string | null;
+    revenue?: number | null;
+    eps?: number | null;
+    reportingCurrency?: string | null;
     sentiment: 'Positive' | 'Negative' | 'Neutral';
     isEarnings: boolean;
 }
 
 export interface EnrichedFinancialData {
-    revenue: string | null;
-    eps: string | null;
+    revenue: number | null;
+    eps: number | null;
+    reportingCurrency?: string | null;
     summary: string;
 }
 
 export interface MetricWithDriver {
-    amount: string | null;
-    changeAmount: string | null;
+    amount: number | null;
+    changeAmount: number | null;
     changePercent: string | null;
     driver: string | null;
     citationPage: number | null;
 }
 
 export interface MetricSimple {
-    amount: string | null;
-    changeAmount: string | null;
+    amount: number | null;
+    changeAmount: number | null;
     changePercent: string | null;
     citationPage: number | null;
 }
@@ -52,13 +54,14 @@ export interface DeepFinancialAnalysis {
         equity: MetricSimple;
     };
     stockActivity: {
-        repurchasedShares: string | null;
-        issuedShares: string | null;
-        netStockChangeShares: string | null;
+        repurchasedShares: number | null;
+        issuedShares: number | null;
+        netStockChangeShares: number | null;
         citationPage: number | null;
     };
     summary: {
         forwardLooking: string | null;
+        reportingCurrency: string | null;
         citationPage: number | null;
     };
 }
@@ -100,12 +103,16 @@ export class VertexAiService implements AiService {
                    "topic": "The Topic Name (e.g. Earnings, M&A) or null if invalid",
                    "isEarnings": boolean,
                    "summary": "Start with the company name. Specific, punchy tagline citing key details (e.g. 'Apple announced a $50M deal'). Max 20 words. Use simple, easy to understand language.",
-                   "revenue": "Extracted revenue number (e.g. $25.2B) OR null",
-                   "eps": "Extracted EPS number (e.g. $0.72/share) OR null",
+                   "revenue": "Extracted revenue number (e.g. 25200000000) OR null",
+                   "eps": "Extracted EPS number (e.g. 0.72) OR null",
+                   "reportingCurrency": "ISO 4217 Currency Code (e.g., USD, EUR, JPY) OR null",
                    "sentiment": "Positive" | "Negative" | "Neutral"
                 }
 
-                If the text is just boilerplate or doesn't match the topics, set "topic": null.
+                RULES:
+                 1. **Format**: All money/share amounts must be raw **NUMBERS** (e.g., 10500000000, not "$10.5B"). 
+                   - **CRITICAL**: Do NOT lose precision. If the report says "12.5 Billion", output 12500000000. If it says "12,543 million", output 12543000000.
+                 2. If the text is just boilerplate or doesn't match the topics, set "topic": null.
 
                 TEXT:
                 ${text.substring(0, 1500000)} 
@@ -134,6 +141,7 @@ export class VertexAiService implements AiService {
                     summary: data.summary,
                     revenue: data.revenue || null,
                     eps: data.eps || null,
+                    reportingCurrency: data.reportingCurrency || null,
                     sentiment: data.sentiment || 'Neutral',
                     isEarnings: !!data.isEarnings
                 };
@@ -171,10 +179,15 @@ export class VertexAiService implements AiService {
                 Output JSON strictly.
                 Format:
                 {
-                   "revenue": "string OR null",
-                   "eps": "string OR null",
+                   "revenue": "Extracted revenue number (e.g. 25200000000) OR null",
+                   "eps": "Extracted EPS number (e.g. 0.72) OR null",
+                   "reportingCurrency": "ISO 4217 Currency Code (e.g., USD, EUR, JPY) OR null",
                    "summary": "string"
                 }
+
+                RULES:
+                 1. **Format**: All money/share amounts must be raw **NUMBERS** (e.g., 10500000000, not "$10.5B"). 
+                   - **CRITICAL**: Do NOT lose precision. If the report says "12.5 Billion", output 12500000000. If it says "12,543 million", output 12543000000.
 
                 TEXT:
                 ${text.substring(0, 1500000)}
@@ -196,6 +209,7 @@ export class VertexAiService implements AiService {
                 return {
                     revenue: data.revenue || null,
                     eps: data.eps || null,
+                    reportingCurrency: data.reportingCurrency || null,
                     summary: data.summary || `${formType} analyzed.`
                 };
 
@@ -221,33 +235,34 @@ export class VertexAiService implements AiService {
                 STRICT OUTPUT SCHEMA (JSON ONLY):
                 {
                   "income": {
-                    "revenue": { "amount": "string ($)", "changeAmount": "string ($)", "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
-                    "costOfRevenue": { "amount": "string ($)", "changeAmount": "string ($)", "changePercent": "string (%)", "citationPage": number },
-                    "totalExpenses": { "amount": "string ($)", "changeAmount": "string ($)", "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
-                    "netIncome": { "amount": "string ($)", "changeAmount": "string ($)", "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
-                    "eps": { "amount": "string ($/share)", "changeAmount": "string", "changePercent": "string (%)", "citationPage": number }
+                    "revenue": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
+                    "costOfRevenue": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "citationPage": number },
+                    "totalExpenses": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
+                    "netIncome": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "driver": "Reason for change", "citationPage": number },
+                    "eps": { "amount": number, "changeAmount": number, "changePercent": "string (%)", "citationPage": number }
                   },
                   "cashFlow": {
                     "freeCashFlow": { 
-                        "amount": "CALCULATE: (Net Cash from Operating Activities - Capital Expenditures (ex: Purchase of Property Plant Equipment))", 
-                        "changeAmount": "string", "changePercent": "string", 
+                        "amount": number, 
+                        "changeAmount": number, "changePercent": "string", 
                         "driver": "Reason for change (Analyze components: Net Income, Working Capital, CapEx)", 
                         "citationPage": number 
                     }
                   },
                   "balanceSheet": {
-                    "totalAssets": { "amount": "string", "changeAmount": "string", "changePercent": "string", "citationPage": number },
-                    "totalLiabilities": { "amount": "string", "changeAmount": "string", "changePercent": "string", "citationPage": number },
-                    "equity": { "amount": "string", "changeAmount": "string", "changePercent": "string", "citationPage": number }
+                    "totalAssets": { "amount": number, "changeAmount": number, "changePercent": "string", "citationPage": number },
+                    "totalLiabilities": { "amount": number, "changeAmount": number, "changePercent": "string", "citationPage": number },
+                    "equity": { "amount": number, "changeAmount": number, "changePercent": "string", "citationPage": number }
                   },
                   "stockActivity": {
-                    "repurchasedShares": "string (NUMBER OF SHARES, NOT DOLLARS)", 
-                    "issuedShares": "string (NUMBER OF SHARES)", 
-                    "netStockChangeShares": "CALCULATE: (Issued Shares - Repurchased Shares)", 
+                    "repurchasedShares": number, 
+                    "issuedShares": number, 
+                    "netStockChangeShares": number, 
                     "citationPage": number
                   },
                   "summary": {
                     "forwardLooking": "Summary of forward-looking statements (Outlook/Guidance)",
+                    "reportingCurrency": "ISO 4217 Currency Code (e.g., USD, EUR, JPY)",
                     "citationPage": number
                   }
                 }
@@ -256,8 +271,13 @@ export class VertexAiService implements AiService {
                 1. **Nulls**: If a value cannot be found with certainty, return null. Do not guess.
                 2. **Citations**: Provide the "citationPage" number for every section where data was found.
                 3. **Drivers**: For Drivers, analyze the "Management's Discussion and Analysis" (MD&A) section. Provide a COMPLETE SENTENCE explaining the reason (e.g., "Revenue increased primarily due to higher sales of iPhone 15."). Do not just list keywords.
-                4. **Calculations**: Perform the math for Free Cash Flow (unless Free Cash Flow is explicitly provided) and Net Stock Change.
-                5. **Format**: All amounts should be formatted strings (e.g., "$15.4B", "$0.52", "1.5M shares").
+                4. **Calculations**: 
+                   - **totalExpenses** = Revenue - Net Income
+                   - **freeCashFlow** = Net Cash from Operating Activities - Capital Expenditures
+                   - **netStockChangeShares** = Issued Shares - Repurchased Shares
+                5. **Format**: All money/share amounts must be raw **NUMBERS** (e.g., 10500000000, not "$10.5B"). 
+                   - **CRITICAL**: Do NOT lose precision. If the report says "12.5 Billion", output 12500000000. If it says "12,543 million", output 12543000000.
+                6. **Currency**: Explicitly identify the reporting currency and add it to the summary.reportingCurrency field.
 
                 TEXT:
                 ${text.substring(0, 1500000)}
