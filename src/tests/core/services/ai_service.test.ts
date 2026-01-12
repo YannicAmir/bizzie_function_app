@@ -48,8 +48,9 @@ describe('VertexAiService', () => {
                 topic: 'Earnings',
                 summary: 'Apple reported huge earnings.',
                 isEarnings: true,
-                revenue: '$100B',
-                eps: '$2.00',
+                revenue: 100000000000,
+                eps: 2.00,
+                reportingCurrency: 'USD',
                 sentiment: 'Positive'
             };
 
@@ -69,8 +70,9 @@ describe('VertexAiService', () => {
                 topic: 'Earnings',
                 summary: 'Apple reported huge earnings.',
                 isEarnings: true,
-                revenue: '$100B',
-                eps: '$2.00',
+                revenue: 100000000000,
+                eps: 2.00,
+                reportingCurrency: 'USD',
                 sentiment: 'Positive'
             });
             expect(vertexAi.getGeminiModel).toHaveBeenCalledWith('gemini-test-model');
@@ -116,8 +118,9 @@ describe('VertexAiService', () => {
         it('enrichFinancialReport_valid10K_returnsData', async () => {
             // Arrange
             const mockResponse = {
-                revenue: '$10M',
-                eps: '$0.50',
+                revenue: 10000000,
+                eps: 0.50,
+                reportingCurrency: 'USD',
                 summary: 'Revenue up due to sales.'
             };
 
@@ -134,8 +137,9 @@ describe('VertexAiService', () => {
 
             // Assert
             expect(result).toEqual({
-                revenue: '$10M',
-                eps: '$0.50',
+                revenue: 10000000,
+                eps: 0.50,
+                reportingCurrency: 'USD',
                 summary: 'Revenue up due to sales.'
             });
 
@@ -148,8 +152,9 @@ describe('VertexAiService', () => {
         it('enrichFinancialReport_valid10Q_returnsData', async () => {
             // Arrange
             const mockResponse = {
-                revenue: '$5M',
-                eps: '$0.10',
+                revenue: 5000000,
+                eps: 0.10,
+                reportingCurrency: 'USD',
                 summary: 'Revenue down seasonally.'
             };
 
@@ -186,11 +191,11 @@ describe('VertexAiService', () => {
         it('enrichDeepFinancialReport_returnsArray_unwrapsCorrectly', async () => {
             // Arrange
             const mockData = {
-                income: { revenue: { amount: '$100B', changeAmount: '$10B', changePercent: '10%', driver: 'Sales', citationPage: 1 } },
-                cashFlow: { freeCashFlow: { amount: '$50B', changeAmount: '$5B', changePercent: '10%', driver: 'Ops', citationPage: 2 } },
-                balanceSheet: { totalAssets: { amount: '$200B', changeAmount: '$20B', changePercent: '10%', citationPage: 3 } },
-                stockActivity: { repurchasedShares: '1M', issuedShares: '2M', netStockChangeShares: '1M', citationPage: 4 },
-                summary: { forwardLooking: 'Good outlook', citationPage: 5 }
+                income: { revenue: { amount: 100000000000, changeAmount: 10000000000, changePercent: '10%', driver: 'Sales', citationPage: 1 } },
+                cashFlow: { freeCashFlow: { amount: 50000000000, changeAmount: 5000000000, changePercent: '10%', driver: 'Ops', citationPage: 2 } },
+                balanceSheet: { totalAssets: { amount: 200000000000, changeAmount: 20000000000, changePercent: '10%', citationPage: 3 } },
+                stockActivity: { repurchasedShares: 1000000, issuedShares: 2000000, netStockChangeShares: 1000000, citationPage: 4 },
+                summary: { forwardLooking: 'Good outlook', reportingCurrency: 'USD', citationPage: 5 }
             };
 
             const mockResponse = [mockData];

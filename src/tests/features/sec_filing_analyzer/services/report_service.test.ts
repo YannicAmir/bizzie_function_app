@@ -42,28 +42,29 @@ describe('ReportService', () => {
             formType: '10-K',
             dateAnalyzed: '2025-01-02',
             income: {
-                revenue: { amount: "$100", changeAmount: "$10", changePercent: "10%", driver: "Growth", citationPage: 1 },
-                costOfRevenue: { amount: "$50", changeAmount: "$5", changePercent: "10%", citationPage: 1 },
-                totalExpenses: { amount: "$80", changeAmount: "$8", changePercent: "10%", driver: "Costs", citationPage: 1 },
-                netIncome: { amount: "$20", changeAmount: "$2", changePercent: "10%", driver: null, citationPage: 1 },
-                eps: { amount: "$1.5", changeAmount: "$0.1", changePercent: "6%", citationPage: 1 }
+                revenue: { amount: 100, changeAmount: 10, changePercent: "10%", driver: "Growth", citationPage: 1 },
+                costOfRevenue: { amount: 50, changeAmount: 5, changePercent: "10%", citationPage: 1 },
+                totalExpenses: { amount: 80, changeAmount: 8, changePercent: "10%", driver: "Costs", citationPage: 1 },
+                netIncome: { amount: 20, changeAmount: 2, changePercent: "10%", driver: null, citationPage: 1 },
+                eps: { amount: 1.5, changeAmount: 0.1, changePercent: "6%", citationPage: 1 }
             },
             balanceSheet: {
-                totalAssets: { amount: "$500", changeAmount: "$0", changePercent: "0%", citationPage: 2 },
-                totalLiabilities: { amount: "$200", changeAmount: "$0", changePercent: "0%", citationPage: 2 },
-                equity: { amount: "$300", changeAmount: "$0", changePercent: "0%", citationPage: 2 }
+                totalAssets: { amount: 500, changeAmount: 0, changePercent: "0%", citationPage: 2 },
+                totalLiabilities: { amount: 200, changeAmount: 0, changePercent: "0%", citationPage: 2 },
+                equity: { amount: 300, changeAmount: 0, changePercent: "0%", citationPage: 2 }
             },
             cashFlow: {
-                freeCashFlow: { amount: "$10", changeAmount: "$1", changePercent: "10%", driver: "CapEx", citationPage: 3 }
+                freeCashFlow: { amount: 10, changeAmount: 1, changePercent: "10%", driver: "CapEx", citationPage: 3 }
             },
             stockActivity: {
-                repurchasedShares: "0",
-                issuedShares: "0",
-                netStockChangeShares: "0",
+                repurchasedShares: 0,
+                issuedShares: 0,
+                netStockChangeShares: 0,
                 citationPage: 4
             },
             summary: {
                 forwardLooking: "Positive outlook",
+                reportingCurrency: "USD",
                 citationPage: 1
             }
         };
