@@ -73,7 +73,7 @@ export class EarningsNotifierUseCase {
                 title,
                 body,
                 {
-                    type: 'earnings_reminder',
+                    type: 'earnings_notification',
                     ticker: event.symbol,
                     eventDate: event.date,
                     daysRemaining: daysDiff.toString()
