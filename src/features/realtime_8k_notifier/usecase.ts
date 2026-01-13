@@ -86,8 +86,9 @@ export class Realtime8kNotifierUseCase {
                 title,
                 body,
                 {
-                    type: '8k_filing',
+                    type: 'sec_filing',
                     ticker: filing.symbol,
+                    formType: "8-K",
                     topic: enriched.topic,
                     isEarnings: String(enriched.isEarnings),
                     link: targetLink

@@ -216,7 +216,8 @@ describe('Realtime8kNotifierUseCase', () => {
             'AAPL Breaking News',
             'Apple buys startup.',
             expect.objectContaining({
-                type: '8k_filing',
+                type: 'sec_filing',
+                formType: '8-K',
                 topic: 'M&A'
             })
         );

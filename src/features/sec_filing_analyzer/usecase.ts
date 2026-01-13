@@ -28,6 +28,14 @@ export class SecFilingAnalyzerUseCase {
             return;
         }
 
+        if (formType === '8-K') {
+            const isEarnings = data.isEarnings === true || data.isEarnings === 'true';
+            if (!isEarnings) {
+                _logger.info(`Skipping Deep Analysis for non-earnings 8-K: ${symbol}`);
+                return;
+            }
+        }
+
         const filingDateOnly = filingDate.split(' ')[0];
         const reportId = `${symbol}_${filingDateOnly}_${formType}`;
 

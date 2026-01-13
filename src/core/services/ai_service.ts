@@ -168,8 +168,8 @@ export class VertexAiService implements AiService {
                 if 10-Q is provided, focus STRICTLY on the columns labeled 'Three Months Ended [Current Period]'. Do NOT extract data from the 'Nine Months Ended' columns.
 
                 EXTRACT:
-                1. "revenue": The total revenue for the period (e.g. 25200000000). **MUST** be drawn from the Consolidated Statement of Operations / Income Statement.
-                2. "eps": Diluted Earnings Per Share (e.g. 0.72). **MUST** be drawn from the Consolidated Statement of Operations / Income Statement.
+                1. "revenue": The total revenue for the period (e.g. 25200000000). **MUST** be drawn from the Consolidated Statement of Operations / Income Statement OR "Financial Highlights" (for 8-K).
+                2. "eps": Diluted Earnings Per Share (e.g. 0.72). **MUST** be drawn from the Consolidated Statement of Operations / Income Statement OR "Financial Highlights" (for 8-K).
                 3. "summary": A 1-sentence summary explaining WHY the financial performance was up or down.  
                    - Focus on the "Results of Operations" or "Management's Discussion" section.
                    - **CRITICAL**: Do NOT return generic text like "10-Q filed". You must read the "Management's Discussion" and explain the drivers.
