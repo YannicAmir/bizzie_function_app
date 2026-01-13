@@ -90,7 +90,7 @@ describe('EarningsNotifierUseCase', () => {
             'AAPL',
             'AAPL Earnings Update',
             'Apple Inc. is releasing their earnings today!',
-            expect.objectContaining({ type: 'earnings_reminder', daysRemaining: '0' })
+            expect.objectContaining({ type: 'earnings_notification', daysRemaining: '0' })
         );
     });
 
@@ -121,7 +121,7 @@ describe('EarningsNotifierUseCase', () => {
             'AAPL',
             'AAPL Earnings Update',
             'Apple Inc. is releasing their earnings in 1 day!',
-            expect.objectContaining({ type: 'earnings_reminder', daysRemaining: '1' })
+            expect.objectContaining({ type: 'earnings_notification', daysRemaining: '1' })
         );
     });
 
