@@ -20,7 +20,7 @@ A `401` error often happens because the API key is stored incorrectly (e.g., wra
 6.  **Update Cloud Functions**:
     *   **The Good News**: Most deployments are set to use the `latest` version automatically. If yours is, it will pick up the new key on the next cold start.
     *   **How to Verify**:
-        1. On the page you are viewing (**Cloud Run Service Details**):
+        1. Go to the [Cloud Functions](https://console.cloud.google.com/functions/list) page.
         2. Click the **Revisions** tab.
         3. Click on the **active revision** (it has a green checkmark next to it, like `realtime8knotifier-00029`).
         4. In the side-panel that opens on the right, look at the **Container** tab.
