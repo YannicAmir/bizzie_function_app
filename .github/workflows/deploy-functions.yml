@@ -82,5 +82,27 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
+      - name: Force Latest Secret Versions
+        run: |
+          echo "Synchronizing secrets to latest version for project: ${{ env.FIREBASE_ALIAS }}"
+          # Get all Cloud Run services in the region
+          SERVICES=$(gcloud run services list --format="value(metadata.name)" --region=us-central1)
+          
+          for SVC in $SERVICES; do
+            # Check if service uses either secret before attempting update
+            # We fetch environment variable names to see if the service depends on these secrets
+            ENV_VARS=$(gcloud run services describe $SVC --region=us-central1 --format="value(spec.template.spec.containers[0].env.name)")
+            
+            if echo "$ENV_VARS" | grep -q "FMP_API_KEY"; then
+              echo "Updating FMP_API_KEY to latest for $SVC..."
+              gcloud run services update $SVC --region=us-central1 --update-secrets=FMP_API_KEY=FMP_API_KEY:latest --quiet || true
+            fi
+            
+            if echo "$ENV_VARS" | grep -q "REVENUECAT_SECRET_TOKEN"; then
+              echo "Updating REVENUECAT_SECRET_TOKEN to latest for $SVC..."
+              gcloud run services update $SVC --region=us-central1 --update-secrets=REVENUECAT_SECRET_TOKEN=REVENUECAT_SECRET_TOKEN:latest --quiet || true
+            fi
+          done
+
       - name: Deploy to Firebase
         run: firebase deploy --only functions --project ${{ env.FIREBASE_ALIAS }} --force
