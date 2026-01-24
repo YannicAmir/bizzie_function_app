@@ -1,4 +1,5 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { defineSecret } from 'firebase-functions/params';
 import { StockListSyncUseCase } from './usecase';
 import { FmpService } from './services/fmp_service';
 import { StorageService } from './services/storage_service';
@@ -9,12 +10,14 @@ import { getFirebaseAdmin } from '../../core/firebase';
 getFirebaseAdmin();
 
 const logger = new Logger('StockListSyncTrigger');
+const fmpApiKey = defineSecret('FMP_API_KEY');
 
 export const stockListSync = onSchedule({
     schedule: '0 9 * * *',
     timeZone: 'America/New_York',
     memory: '512MiB',
     timeoutSeconds: 300,
+    secrets: [fmpApiKey]
 }, async () => {
     logger.info('Triggered stockListSync scheduled function');
 
