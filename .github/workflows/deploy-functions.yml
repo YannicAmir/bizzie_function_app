@@ -82,5 +82,10 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
+      - name: Force Latest Secret Versions
+        run: |
+          firebase functions:secrets:use FMP_API_KEY@latest --project ${{ env.FIREBASE_ALIAS }} --force
+          firebase functions:secrets:use REVENUECAT_SECRET_TOKEN@latest --project ${{ env.FIREBASE_ALIAS }} --force
+
       - name: Deploy to Firebase
         run: firebase deploy --only functions --project ${{ env.FIREBASE_ALIAS }} --force
