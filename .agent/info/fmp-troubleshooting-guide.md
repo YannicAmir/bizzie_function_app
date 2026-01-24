@@ -27,7 +27,6 @@ A `401` error often happens because the API key is stored incorrectly (e.g., wra
         5. Scroll down to the **Variables** or **Secrets** section.
         6. Find `FMP_API_KEY`.
         7. **Look at the end of the line**: If you see **`:1`** (like in your screenshot), it means you are trapped on the old version!
-        8. **How to fix it**: Click **Edit & Deploy New Revision** at the top of the page. Scroll down to the Secrets section, find `FMP_API_KEY`, and change the version from `1` to **`latest`**. Then click **Deploy**.
 
 ## 2. Grant IAM Permissions (Secret Accessor)
 The service account running your code must have permission to "read" that secret. Based on your view, you are already in the right place!
