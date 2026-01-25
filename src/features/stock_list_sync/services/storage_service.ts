@@ -15,8 +15,13 @@ interface StockListDocument {
 
 export class StorageService {
     private bucket = getFirebaseAdmin().storage().bucket();
+    private initialized = false;
 
     async saveStockList(stocks: StockEntry[]): Promise<void> {
+        if (!this.initialized) {
+            logger.info(`StorageService initialized with bucket: ${this.bucket.name}`);
+            this.initialized = true;
+        }
         const file = this.bucket.file('system_data/stock_list.json');
 
         const payload: StockListDocument = {
