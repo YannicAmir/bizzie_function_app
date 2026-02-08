@@ -26,12 +26,14 @@ export const userSubscriptionSyncTrigger = onDocumentWritten(
         const beforeUser: User = {
             id: event.params.userId,
             isSubscribed: !!beforeData?.isSubscribed,
+            notificationsEnabled: beforeData?.notificationsEnabled !== false,
             fcmTokens: beforeData?.fcmTokens || {}
         };
 
         const afterUser: User = {
             id: event.params.userId,
             isSubscribed: !!afterData!.isSubscribed,
+            notificationsEnabled: afterData!.notificationsEnabled !== false,
             fcmTokens: afterData!.fcmTokens || {}
         };
 
@@ -63,6 +65,7 @@ export const userDeletionCleanup = onDocumentDeleted(
         const deletedUser: User = {
             id: event.params.userId,
             isSubscribed: !!deletedData.isSubscribed,
+            notificationsEnabled: deletedData.notificationsEnabled !== false,
             fcmTokens: deletedData.fcmTokens || {}
         };
 
