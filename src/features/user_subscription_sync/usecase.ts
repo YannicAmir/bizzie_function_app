@@ -8,6 +8,7 @@ const _logger = new Logger('User Subscription Sync Usecase');
 export interface User {
     id: string;
     isSubscribed: boolean;
+    notificationsEnabled: boolean;
     fcmTokens?: Record<string, string>;
 }
 
@@ -37,6 +38,7 @@ export class UserSubscriptionSyncUseCase {
     async execute(before: User, after: User): Promise<void> {
 
         if (before.isSubscribed === after.isSubscribed &&
+            before.notificationsEnabled === after.notificationsEnabled &&
             isEqual(before.fcmTokens, after.fcmTokens)) {
             return;
         }
@@ -52,12 +54,22 @@ export class UserSubscriptionSyncUseCase {
 
         for (const [deviceId, token] of Object.entries(afterTokens)) {
             const isNewToken = beforeTokens[deviceId] !== token;
-            const statusChanged = before.isSubscribed !== after.isSubscribed;
-            if (isNewToken || statusChanged) {
+            const subStatusChanged = before.isSubscribed !== after.isSubscribed;
+            const notifToggleChanged = before.notificationsEnabled !== after.notificationsEnabled;
+
+            if (!after.notificationsEnabled) {
+                if (before.notificationsEnabled || isNewToken) {
+                    tasks.push(this.unsubscribeSafe(token, this.PREMIUM_TOPIC));
+                    tasks.push(this.unsubscribeSafe(token, this.BASIC_TOPIC));
+                }
+                continue;
+            }
+
+            if (notifToggleChanged || isNewToken || subStatusChanged) {
                 tasks.push(this.subscribeSafe(after.id, deviceId, token, targetTopic));
             }
 
-            if (statusChanged) {
+            if (subStatusChanged && after.notificationsEnabled) {
                 tasks.push(this.unsubscribeSafe(token, oldTopic));
             }
         }

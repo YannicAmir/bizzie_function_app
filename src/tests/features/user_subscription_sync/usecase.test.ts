@@ -22,9 +22,10 @@ describe('UserSubscriptionSyncUseCase', () => {
         useCase = new UserSubscriptionSyncUseCase(mockNotificationService, mockFirestoreService);
     });
 
-    const userSubscribed = (id: string, token: string, subscribed: boolean = true): User => ({
+    const userSubscribed = (id: string, token: string, subscribed: boolean = true, notificationsEnabled: boolean = true): User => ({
         id,
         isSubscribed: subscribed,
+        notificationsEnabled,
         fcmTokens: { 'dev1': token }
     });
 
@@ -45,11 +46,13 @@ describe('UserSubscriptionSyncUseCase', () => {
         const before: User = {
             id: 'u1',
             isSubscribed: true,
+            notificationsEnabled: true,
             fcmTokens: { 'dev1': 'tok1', 'dev2': 'tok2' }
         };
         const after: User = {
             id: 'u1',
             isSubscribed: true,
+            notificationsEnabled: true,
             fcmTokens: { 'dev2': 'tok2', 'dev1': 'tok1' }
         };
 
@@ -88,8 +91,8 @@ describe('UserSubscriptionSyncUseCase', () => {
 
     it('should_subscribeBasic_when_newUserCreated', async () => {
         // Arrange
-        const before: User = { id: 'u1', isSubscribed: false, fcmTokens: {} };
-        const after: User = { id: 'u1', isSubscribed: false, fcmTokens: { 'dev1': 'tok1' } };
+        const before: User = { id: 'u1', isSubscribed: false, notificationsEnabled: true, fcmTokens: {} };
+        const after: User = { id: 'u1', isSubscribed: false, notificationsEnabled: true, fcmTokens: { 'dev1': 'tok1' } };
 
         // Act
         await useCase.execute(before, after);
@@ -101,8 +104,8 @@ describe('UserSubscriptionSyncUseCase', () => {
 
     it('should_subscribeNewTokens_toPremium_when_alreadyPremium', async () => {
         // Arrange
-        const before: User = { id: 'u1', isSubscribed: true, fcmTokens: { 'dev1': 'tok1' } };
-        const after: User = { id: 'u1', isSubscribed: true, fcmTokens: { 'dev1': 'tok1', 'dev2': 'tok2' } };
+        const before: User = { id: 'u1', isSubscribed: true, notificationsEnabled: true, fcmTokens: { 'dev1': 'tok1' } };
+        const after: User = { id: 'u1', isSubscribed: true, notificationsEnabled: true, fcmTokens: { 'dev1': 'tok1', 'dev2': 'tok2' } };
 
         // Act
         await useCase.execute(before, after);
@@ -114,8 +117,8 @@ describe('UserSubscriptionSyncUseCase', () => {
 
     it('should_unsubscribeRemovedTokens_fromBoth_when_tokenRemoved', async () => {
         // Arrange
-        const before: User = { id: 'u1', isSubscribed: true, fcmTokens: { 'dev1': 'tok1' } };
-        const after: User = { id: 'u1', isSubscribed: true, fcmTokens: {} };
+        const before: User = { id: 'u1', isSubscribed: true, notificationsEnabled: true, fcmTokens: { 'dev1': 'tok1' } };
+        const after: User = { id: 'u1', isSubscribed: true, notificationsEnabled: true, fcmTokens: {} };
 
         // Act
         await useCase.execute(before, after);
@@ -161,6 +164,7 @@ describe('UserSubscriptionSyncUseCase', () => {
         const user: User = {
             id: 'u1',
             isSubscribed: true,
+            notificationsEnabled: true,
             fcmTokens: { 'dev1': 'tok1', 'dev2': 'tok2' }
         };
 
@@ -173,5 +177,48 @@ describe('UserSubscriptionSyncUseCase', () => {
         expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledWith('tok2', 'premium_notifications');
         expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledWith('tok2', 'basic_notifications');
         expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledTimes(4);
+    });
+
+    describe('Notification Toggle Logic', () => {
+        it('should_unsubscribeFromAllTopics_when_notificationsDisabled', async () => {
+            // Arrange
+            const before = userSubscribed('u1', 'tok1', true, true);
+            const after = userSubscribed('u1', 'tok1', true, false);
+
+            // Act
+            await useCase.execute(before, after);
+
+            // Assert
+            expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledWith('tok1', 'premium_notifications');
+            expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledWith('tok1', 'basic_notifications');
+        });
+
+        it('should_subscribeToCorrectTopic_when_notificationsEnabled', async () => {
+            // Arrange
+            const before = userSubscribed('u1', 'tok1', true, false);
+            const after = userSubscribed('u1', 'tok1', true, true);
+
+            // Act
+            await useCase.execute(before, after);
+
+            // Assert
+            expect(mockNotificationService.subscribeToTopic).toHaveBeenCalledWith('tok1', 'premium_notifications');
+            expect(mockNotificationService.unsubscribeFromTopic).not.toHaveBeenCalled();
+        });
+
+        it('should_doNothing_when_newTokensAddedWhileDisabled', async () => {
+            // Arrange
+            const before: User = { id: 'u1', isSubscribed: true, notificationsEnabled: false, fcmTokens: {} };
+            const after: User = { id: 'u1', isSubscribed: true, notificationsEnabled: false, fcmTokens: { 'dev1': 'tok1' } };
+
+            // Act
+            await useCase.execute(before, after);
+
+            // Assert
+            // It should actually try to unsubscribe to be safe (idempotency), but not subscribe
+            expect(mockNotificationService.subscribeToTopic).not.toHaveBeenCalled();
+            expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledWith('tok1', 'premium_notifications');
+            expect(mockNotificationService.unsubscribeFromTopic).toHaveBeenCalledWith('tok1', 'basic_notifications');
+        });
     });
 });
