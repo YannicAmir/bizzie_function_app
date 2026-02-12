@@ -17,7 +17,7 @@ export class SubscriptionCleanupUseCase {
     ) { }
 
     async execute(): Promise<CleanupMetrics> {
-        _logger.info('Starting subscription cleanup cycle...');
+        _logger.info('Starting bidirectional subscription sync...');
 
         const metrics: CleanupMetrics = {
             totalScanned: 0,
@@ -26,34 +26,41 @@ export class SubscriptionCleanupUseCase {
         };
 
         try {
-            const ghosts = await this.firestoreService.getGhostSubscribers(50);
-            metrics.totalScanned = ghosts.length;
+            const outOfSyncUsers = await this.firestoreService.getOutOfSyncSubscribers(50);
+            metrics.totalScanned = outOfSyncUsers.length;
 
-            if (ghosts.length === 0) {
-                _logger.info('No ghost subscribers found to clean up.');
+            if (outOfSyncUsers.length === 0) {
+                _logger.info('No out-of-sync subscribers found.');
                 return metrics;
             }
 
-            _logger.info(`Found ${ghosts.length} potential ghost subscribers. Starting verification...`);
+            _logger.info(`Found ${outOfSyncUsers.length} potential out-of-sync users. Starting verification...`);
 
-            for (const ghost of ghosts) {
+            for (const user of outOfSyncUsers) {
                 try {
-                    const isActuallySubscribed = await this.revenueCatService.isUserSubscribed(ghost.id);
+                    const rcStatus = await this.revenueCatService.isUserSubscribed(user.id);
+                    const needsCorrection = rcStatus.active !== user.isSubscribed;
 
-                    if (!isActuallySubscribed) {
-                        _logger.info(`User ${ghost.id} is confirmed as EXPIRED in RevenueCat. Syncing Firestore...`);
-                        await this.firestoreService.updateSubscriptionStatus(ghost.id, false);
+                    if (needsCorrection) {
+                        const action = rcStatus.active ? 'PROMOTING' : 'REVOKING';
+                        _logger.info(`${action} user ${user.id}. RevenueCat: ${rcStatus.active}, Firestore: ${user.isSubscribed}`);
+
+                        await this.firestoreService.updateSubscriptionStatus(
+                            user.id,
+                            rcStatus.active,
+                            rcStatus.expiryDate || undefined
+                        );
                         metrics.totalCorrected++;
                     } else {
-                        _logger.info(`User ${ghost.id} is still active in RevenueCat (likely a late renewal). Access remains.`);
+                        _logger.debug(`User ${user.id} is already in sync.`);
                     }
                 } catch (error) {
-                    _logger.error(`Failed to verify/update ghost user ${ghost.id}. Skipping to next.`, error);
+                    _logger.error(`Failed to verify/update user ${user.id}. Skipping.`, error);
                     metrics.totalFailed++;
                 }
             }
 
-            _logger.info('Subscription cleanup cycle complete.', metrics);
+            _logger.info('Subscription sync cycle complete.', metrics);
             return metrics;
 
         } catch (error) {

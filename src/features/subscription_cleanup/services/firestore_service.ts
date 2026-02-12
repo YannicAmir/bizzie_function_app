@@ -3,45 +3,67 @@ import { Logger } from '../../../core/logger';
 
 const _logger = new Logger('Subscription Cleanup Firestore Service');
 
-export interface GhostUser {
+export interface SyncUser {
     id: string;
     isSubscribed: boolean;
     subscriptionExpiryDate?: string;
 }
 
 export class FirestoreService {
-    async getGhostSubscribers(limit: number = 50): Promise<GhostUser[]> {
+    async getOutOfSyncSubscribers(limit: number = 50): Promise<SyncUser[]> {
         try {
             const now = new Date().toISOString();
-            const snapshot = await getFirebaseAdmin().firestore()
-                .collection('users')
+            const db = getFirebaseAdmin().firestore();
+            const usersRef = db.collection('users');
+
+            const ghostTask = usersRef
                 .where('isSubscribed', '==', true)
                 .where('subscriptionExpiryDate', '<', now)
                 .limit(limit)
                 .get();
 
-            return snapshot.docs.map(doc => ({
+            const promoTask = usersRef
+                .where('isSubscribed', '==', false)
+                .where('subscriptionExpiryDate', '>', now)
+                .limit(limit)
+                .get();
+
+            const [ghostSnap, promoSnap] = await Promise.all([ghostTask, promoTask]);
+
+            const mapDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot) => ({
                 id: doc.id,
                 isSubscribed: doc.data().isSubscribed,
                 subscriptionExpiryDate: doc.data().subscriptionExpiryDate
-            }));
+            });
+
+            return [...ghostSnap.docs.map(mapDoc), ...promoSnap.docs.map(mapDoc)].slice(0, limit);
         } catch (error) {
-            _logger.error('Failed to query ghost subscribers', error);
+            _logger.error('Failed to query out-of-sync subscribers', error);
             throw error;
         }
     }
 
-    async updateSubscriptionStatus(userId: string, isSubscribed: boolean): Promise<void> {
+    async updateSubscriptionStatus(userId: string, isSubscribed: boolean, expiryDate?: string): Promise<void> {
         try {
+            const updateData: {
+                isSubscribed: boolean;
+                updatedAt: string;
+                subscriptionExpiryDate?: string;
+            } = {
+                isSubscribed,
+                updatedAt: new Date().toISOString()
+            };
+
+            if (expiryDate) {
+                updateData.subscriptionExpiryDate = expiryDate;
+            }
+
             await getFirebaseAdmin().firestore()
                 .collection('users')
                 .doc(userId)
-                .update({
-                    isSubscribed,
-                    updatedAt: new Date().toISOString()
-                });
+                .update(updateData);
 
-            _logger.info(`Successfully updated user ${userId} isSubscribed to ${isSubscribed}`);
+            _logger.info(`Successfully updated user ${userId} isSubscribed to ${isSubscribed}${expiryDate ? ' and synced expiry date' : ''}`);
         } catch (error) {
             _logger.error(`Failed to update subscription status for user ${userId}`, error);
             throw error;

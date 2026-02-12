@@ -1,5 +1,5 @@
 import { SubscriptionCleanupUseCase } from '../../../features/subscription_cleanup/usecase';
-import { FirestoreService, GhostUser } from '../../../features/subscription_cleanup/services/firestore_service';
+import { FirestoreService, SyncUser } from '../../../features/subscription_cleanup/services/firestore_service';
 import { RevenueCatService } from '../../../features/subscription_cleanup/services/revenuecat_service';
 
 jest.mock('../../../features/subscription_cleanup/services/firestore_service');
@@ -23,13 +23,13 @@ describe('SubscriptionCleanupUseCase', () => {
         // Arrange
         jest.clearAllMocks();
         firestoreService = new FirestoreService() as jest.Mocked<FirestoreService>;
-        revenueCatService = new RevenueCatService() as jest.Mocked<RevenueCatService>;
+        revenueCatService = new RevenueCatService('test-key') as unknown as jest.Mocked<RevenueCatService>;
         useCase = new SubscriptionCleanupUseCase(firestoreService, revenueCatService);
     });
 
-    it('execute_noGhostsFound_skipsVerification', async () => {
+    it('execute_noUsersFound_returnsEmptyMetrics', async () => {
         // Arrange
-        firestoreService.getGhostSubscribers.mockResolvedValue([]);
+        firestoreService.getOutOfSyncSubscribers.mockResolvedValue([]);
 
         // Act
         const metrics = await useCase.execute();
@@ -39,67 +39,85 @@ describe('SubscriptionCleanupUseCase', () => {
         expect(revenueCatService.isUserSubscribed).not.toHaveBeenCalled();
     });
 
-    it('execute_ghostsFound_allExpired_correctsAll', async () => {
+    it('execute_outOfSyncUsersFound_revocationNeeded_updatesFirestore', async () => {
         // Arrange
-        const mockGhosts: GhostUser[] = [
-            { id: 'user_1', isSubscribed: true },
-            { id: 'user_2', isSubscribed: true }
+        const mockUsers: SyncUser[] = [
+            { id: 'ghost_1', isSubscribed: true, subscriptionExpiryDate: '2025-01-01' }
         ];
-        firestoreService.getGhostSubscribers.mockResolvedValue(mockGhosts);
-        revenueCatService.isUserSubscribed.mockResolvedValue(false);
+        firestoreService.getOutOfSyncSubscribers.mockResolvedValue(mockUsers);
+        revenueCatService.isUserSubscribed.mockResolvedValue({ active: false, expiryDate: '2025-01-01' });
 
         // Act
         const metrics = await useCase.execute();
 
         // Assert
-        expect(metrics.totalScanned).toBe(2);
-        expect(metrics.totalCorrected).toBe(2);
-        expect(firestoreService.updateSubscriptionStatus).toHaveBeenCalledTimes(2);
-    });
-
-    it('execute_ghostsFound_someActive_skipsActive', async () => {
-        // Arrange
-        const mockGhosts: GhostUser[] = [
-            { id: 'user_expired', isSubscribed: true },
-            { id: 'user_active', isSubscribed: true }
-        ];
-        firestoreService.getGhostSubscribers.mockResolvedValue(mockGhosts);
-        revenueCatService.isUserSubscribed.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-
-        // Act
-        const metrics = await useCase.execute();
-
-        // Assert
-        expect(metrics.totalScanned).toBe(2);
+        expect(metrics.totalScanned).toBe(1);
         expect(metrics.totalCorrected).toBe(1);
-        expect(firestoreService.updateSubscriptionStatus).toHaveBeenCalledWith('user_expired', false);
-        expect(firestoreService.updateSubscriptionStatus).toHaveBeenCalledTimes(1);
+        expect(firestoreService.updateSubscriptionStatus).toHaveBeenCalledWith('ghost_1', false, '2025-01-01');
     });
 
-    it('execute_ghostsFound_oneFailure_continuesRemaining', async () => {
+    it('execute_outOfSyncUsersFound_promotionNeeded_updatesFirestore', async () => {
         // Arrange
-        const mockGhosts: GhostUser[] = [
-            { id: 'user_1', isSubscribed: true },
-            { id: 'user_failed', isSubscribed: true },
-            { id: 'user_2', isSubscribed: true }
+        const futureDate = '2027-01-01';
+        const mockUsers: SyncUser[] = [
+            { id: 'promo_1', isSubscribed: false, subscriptionExpiryDate: '2027-01-01' }
         ];
-        firestoreService.getGhostSubscribers.mockResolvedValue(mockGhosts);
-        revenueCatService.isUserSubscribed.mockResolvedValueOnce(false).mockRejectedValueOnce(new Error('API Failure')).mockResolvedValueOnce(false);
+        firestoreService.getOutOfSyncSubscribers.mockResolvedValue(mockUsers);
+        revenueCatService.isUserSubscribed.mockResolvedValue({ active: true, expiryDate: futureDate });
+
+        // Act
+        const metrics = await useCase.execute();
+
+        // Assert
+        expect(metrics.totalScanned).toBe(1);
+        expect(metrics.totalCorrected).toBe(1);
+        expect(firestoreService.updateSubscriptionStatus).toHaveBeenCalledWith('promo_1', true, futureDate);
+    });
+
+    it('execute_outOfSyncUsersFound_alreadyInSync_doesNothing', async () => {
+        // Arrange
+        const mockUsers: SyncUser[] = [
+            { id: 'user_ok', isSubscribed: true, subscriptionExpiryDate: '2027-01-01' }
+        ];
+        firestoreService.getOutOfSyncSubscribers.mockResolvedValue(mockUsers);
+        revenueCatService.isUserSubscribed.mockResolvedValue({ active: true, expiryDate: '2027-01-01' });
+
+        // Act
+        const metrics = await useCase.execute();
+
+        // Assert
+        expect(metrics.totalScanned).toBe(1);
+        expect(metrics.totalCorrected).toBe(0);
+        expect(firestoreService.updateSubscriptionStatus).not.toHaveBeenCalled();
+    });
+
+    it('execute_mixedResults_processesAllAndReportsMetrics', async () => {
+        // Arrange
+        const mockUsers: SyncUser[] = [
+            { id: 'user_revoke', isSubscribed: true },
+            { id: 'user_ok', isSubscribed: true },
+            { id: 'user_fail', isSubscribed: false }
+        ];
+        firestoreService.getOutOfSyncSubscribers.mockResolvedValue(mockUsers);
+        revenueCatService.isUserSubscribed
+            .mockResolvedValueOnce({ active: false, expiryDate: '2025-01-01' })
+            .mockResolvedValueOnce({ active: true, expiryDate: '2027-01-01' })
+            .mockRejectedValueOnce(new Error('API Error'));
 
         // Act
         const metrics = await useCase.execute();
 
         // Assert
         expect(metrics.totalScanned).toBe(3);
-        expect(metrics.totalCorrected).toBe(2);
+        expect(metrics.totalCorrected).toBe(1);
         expect(metrics.totalFailed).toBe(1);
-        expect(firestoreService.updateSubscriptionStatus).toHaveBeenCalledTimes(2);
+        expect(firestoreService.updateSubscriptionStatus).toHaveBeenCalledTimes(1);
     });
 
-    it('execute_criticalFailure_throws', async () => {
+    it('execute_criticalQueryFailure_throwsError', async () => {
         // Arrange
-        const mockError = new Error('Database down');
-        firestoreService.getGhostSubscribers.mockRejectedValue(mockError);
+        const mockError = new Error('DB Error');
+        firestoreService.getOutOfSyncSubscribers.mockRejectedValue(mockError);
 
         // Act & Assert
         await expect(useCase.execute()).rejects.toThrow(mockError);

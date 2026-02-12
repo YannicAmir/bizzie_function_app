@@ -37,40 +37,61 @@ describe('FirestoreService', () => {
         service = new FirestoreService();
     });
 
-    it('getGhostSubscribers_success_returnsMappedGhostUsers', async () => {
+    it('getOutOfSyncSubscribers_validData_returnsMergedUsers', async () => {
         // Arrange
-        const mockDocs = [
-            { id: 'user_1', data: () => ({ isSubscribed: true, subscriptionExpiryDate: '2025-01-01' }) },
-            { id: 'user_2', data: () => ({ isSubscribed: true, subscriptionExpiryDate: '2025-01-02' }) }
+        const mockGhostDocs = [
+            { id: 'ghost_1', data: () => ({ isSubscribed: true, subscriptionExpiryDate: '2025-01-01' }) }
+        ];
+        const mockPromoDocs = [
+            { id: 'promo_1', data: () => ({ isSubscribed: false, subscriptionExpiryDate: '2027-01-01' }) }
         ];
 
-        mockFirestore.get.mockResolvedValue({
-            docs: mockDocs
-        });
+        mockFirestore.get
+            .mockResolvedValueOnce({ docs: mockGhostDocs })
+            .mockResolvedValueOnce({ docs: mockPromoDocs });
 
         // Act
-        const result = await service.getGhostSubscribers(10);
+        const result = await service.getOutOfSyncSubscribers(10);
 
         // Assert
         expect(result).toHaveLength(2);
-        expect(result[0]).toEqual({ id: 'user_1', isSubscribed: true, subscriptionExpiryDate: '2025-01-01' });
-        expect(mockFirestore.collection).toHaveBeenCalledWith('users');
-        expect(mockFirestore.where).toHaveBeenCalledWith('isSubscribed', '==', true);
-        expect(mockFirestore.limit).toHaveBeenCalledWith(10);
+        expect(result[0]!.id).toBe('ghost_1');
+        expect(result[1]!.id).toBe('promo_1');
+        expect(mockFirestore.where).toHaveBeenCalledTimes(4);
     });
 
-    it('getGhostSubscribers_failure_throwsAndLogs', async () => {
+    it('getOutOfSyncSubscribers_error_throwsException', async () => {
         // Arrange
         const mockError = new Error('Firestore Error');
         mockFirestore.get.mockRejectedValue(mockError);
 
         // Act & Assert
-        await expect(service.getGhostSubscribers()).rejects.toThrow(mockError);
+        await expect(service.getOutOfSyncSubscribers()).rejects.toThrow(mockError);
     });
 
-    it('updateSubscriptionStatus_success_updatesDocument', async () => {
+    it('updateSubscriptionStatus_withExpiry_updatesDocumentWithExpiry', async () => {
         // Arrange
         const userId = 'user_123';
+        const isSubscribed = true;
+        const expiryDate = '2027-01-01';
+        mockFirestore.update.mockResolvedValue(undefined);
+
+        // Act
+        await service.updateSubscriptionStatus(userId, isSubscribed, expiryDate);
+
+        // Assert
+        expect(mockFirestore.collection).toHaveBeenCalledWith('users');
+        expect(mockFirestore.doc).toHaveBeenCalledWith(userId);
+        expect(mockFirestore.update).toHaveBeenCalledWith(expect.objectContaining({
+            isSubscribed,
+            subscriptionExpiryDate: expiryDate,
+            updatedAt: expect.any(String)
+        }));
+    });
+
+    it('updateSubscriptionStatus_withoutExpiry_updatesDocumentWithoutExpiry', async () => {
+        // Arrange
+        const userId = 'user_456';
         const isSubscribed = false;
         mockFirestore.update.mockResolvedValue(undefined);
 
@@ -78,17 +99,15 @@ describe('FirestoreService', () => {
         await service.updateSubscriptionStatus(userId, isSubscribed);
 
         // Assert
-        expect(mockFirestore.collection).toHaveBeenCalledWith('users');
-        expect(mockFirestore.doc).toHaveBeenCalledWith(userId);
-        expect(mockFirestore.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(mockFirestore.update).toHaveBeenCalledWith({
             isSubscribed,
             updatedAt: expect.any(String)
-        }));
+        });
     });
 
-    it('updateSubscriptionStatus_failure_throwsAndLogs', async () => {
+    it('updateSubscriptionStatus_error_throwsException', async () => {
         // Arrange
-        const mockError = new Error('Update Error');
+        const mockError = new Error('Update Failed');
         mockFirestore.update.mockRejectedValue(mockError);
 
         // Act & Assert

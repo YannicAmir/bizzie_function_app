@@ -22,7 +22,7 @@ export class RevenueCatService {
 
     constructor(private readonly apiKey: string) { }
 
-    async isUserSubscribed(userId: string): Promise<boolean> {
+    async isUserSubscribed(userId: string): Promise<{ active: boolean; expiryDate: string | null }> {
         _logger.debug('Starting subscription status check', { userId });
 
         return retry(async () => {
@@ -42,7 +42,7 @@ export class RevenueCatService {
                 if (!response.ok) {
                     if (response.status === 404) {
                         _logger.warn('User not found in RevenueCat', { userId, status: 404 });
-                        return false;
+                        return { active: false, expiryDate: null };
                     }
 
                     const errorBody = await response.text();
@@ -64,18 +64,37 @@ export class RevenueCatService {
                 const data = await response.json() as RevenueCatSubscriberDTO;
                 const entitlements = data.subscriber?.entitlements || {};
 
-                const hasActiveEntitlement = Object.values(entitlements).some(entitlement => {
-                    if (!entitlement.expires_date) return true;
-                    return new Date(entitlement.expires_date) > new Date();
-                });
+                let active = false;
+                let latestExpiry: string | null = null;
+
+                for (const entitlement of Object.values(entitlements)) {
+                    const isInfinite = !entitlement.expires_date;
+                    if (isInfinite) {
+                        active = true;
+                        latestExpiry = null;
+                        break;
+                    }
+
+                    const expiryDateStr = entitlement.expires_date as string;
+                    const expiry = new Date(expiryDateStr);
+
+                    if (expiry > new Date()) {
+                        active = true;
+                    }
+
+                    if (!latestExpiry || expiry > new Date(latestExpiry)) {
+                        latestExpiry = expiryDateStr;
+                    }
+                }
 
                 _logger.debug('Subscription check complete', {
                     userId,
-                    hasActiveEntitlement,
+                    active,
+                    latestExpiry,
                     entitlementCount: Object.keys(entitlements).length
                 });
 
-                return hasActiveEntitlement;
+                return { active, expiryDate: latestExpiry };
 
             } catch (error) {
                 const isAbort = error instanceof Error && error.name === 'AbortError';
