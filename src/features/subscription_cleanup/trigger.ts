@@ -1,8 +1,8 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import { Logger } from '../../core/logger';
-import { FirestoreService } from './services/firestore_service';
-import { RevenueCatService } from './services/revenuecat_service';
+import { FirestoreService } from '../../core/services/subscription/firestore_service';
+import { RevenueCatService } from '../../core/services/subscription/revenuecat_service';
 import { SubscriptionCleanupUseCase } from './usecase';
 import { getFirebaseAdmin } from '../../core/firebase';
 

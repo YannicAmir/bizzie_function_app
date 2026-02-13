@@ -1,4 +1,4 @@
-import { RevenueCatService } from '../../../../features/subscription_cleanup/services/revenuecat_service';
+import { RevenueCatService } from '../../../../core/services/subscription/revenuecat_service';
 import { retry } from '../../../../core/retry';
 
 if (typeof global.fetch === 'undefined') {
@@ -26,15 +26,12 @@ describe('RevenueCatService', () => {
     beforeEach(() => {
         // Arrange
         jest.clearAllMocks();
-
         (global.fetch as unknown as jest.Mock) = jest.fn();
-
         (retry as unknown as jest.Mock).mockImplementation((fn: () => Promise<unknown>) => fn());
-
         service = new RevenueCatService(mockApiKey);
     });
 
-    it('isUserSubscribed_activeEntitlement_returnsActiveWithLatestExpiry', async () => {
+    it('isUserSubscribed_activeMultipleEntitlements_returnsActiveWithLatestExpiry', async () => {
         // Arrange
         const futureDate1 = new Date(Date.now() + 100000).toISOString();
         const futureDate2 = new Date(Date.now() + 200000).toISOString();
@@ -70,7 +67,7 @@ describe('RevenueCatService', () => {
             expect.stringContaining(userId),
             expect.objectContaining({
                 headers: expect.objectContaining({
-                    'Authorization': `Bearer ${mockApiKey}`
+                    'Authorization': `Bearer sk_test_key`
                 })
             })
         );
@@ -103,7 +100,7 @@ describe('RevenueCatService', () => {
         expect(result.expiryDate).toBeNull();
     });
 
-    it('isUserSubscribed_expiredEntitlement_returnsInactiveWithExpiry', async () => {
+    it('isUserSubscribed_allEntitlementsExpired_returnsInactiveWithLatestExpiry', async () => {
         // Arrange
         const pastDate = new Date(Date.now() - 100000).toISOString();
         const mockResponse = {
@@ -146,7 +143,7 @@ describe('RevenueCatService', () => {
         expect(result.expiryDate).toBeNull();
     });
 
-    it('isUserSubscribed_transientError_throwsForRetry', async () => {
+    it('isUserSubscribed_transientErrors_throwsTransientErrorForRetry', async () => {
         // Arrange
         (global.fetch as unknown as jest.Mock).mockResolvedValue({
             ok: false,
@@ -158,7 +155,7 @@ describe('RevenueCatService', () => {
         await expect(service.isUserSubscribed(userId)).rejects.toThrow('RevenueCat API transient error (500)');
     });
 
-    it('isUserSubscribed_nonTransientError_throwsImmediate', async () => {
+    it('isUserSubscribed_nonTransientErrors_throwsNonRetryableError', async () => {
         // Arrange
         (global.fetch as unknown as jest.Mock).mockResolvedValue({
             ok: false,
@@ -168,5 +165,15 @@ describe('RevenueCatService', () => {
 
         // Act & Assert
         await expect(service.isUserSubscribed(userId)).rejects.toThrow('RevenueCat API non-retryable error (400)');
+    });
+
+    it('isUserSubscribed_requestTimeout_throwsAbortError', async () => {
+        // Arrange
+        const abortError = new Error('The user aborted a request.');
+        abortError.name = 'AbortError';
+        (global.fetch as unknown as jest.Mock).mockRejectedValue(abortError);
+
+        // Act & Assert
+        await expect(service.isUserSubscribed(userId)).rejects.toThrow('The user aborted a request.');
     });
 });

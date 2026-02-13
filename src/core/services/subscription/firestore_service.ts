@@ -1,13 +1,8 @@
-import { getFirebaseAdmin } from '../../../core/firebase';
-import { Logger } from '../../../core/logger';
+import { getFirebaseAdmin } from '../../firebase';
+import { Logger } from '../../logger';
+import { SyncUser } from './dtos';
 
 const _logger = new Logger('Subscription Cleanup Firestore Service');
-
-export interface SyncUser {
-    id: string;
-    isSubscribed: boolean;
-    subscriptionExpiryDate?: string;
-}
 
 export class FirestoreService {
     async getOutOfSyncSubscribers(limit: number = 50): Promise<SyncUser[]> {

@@ -1,6 +1,6 @@
 import { Logger } from '../../core/logger';
-import { FirestoreService } from './services/firestore_service';
-import { RevenueCatService } from './services/revenuecat_service';
+import { FirestoreService } from '../../core/services/subscription/firestore_service';
+import { RevenueCatService } from '../../core/services/subscription/revenuecat_service';
 
 const _logger = new Logger('Subscription Cleanup UseCase');
 

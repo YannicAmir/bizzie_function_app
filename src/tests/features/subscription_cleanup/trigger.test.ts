@@ -29,8 +29,8 @@ jest.mock('../../../core/logger', () => ({
     }))
 }));
 
-jest.mock('../../../features/subscription_cleanup/services/firestore_service');
-jest.mock('../../../features/subscription_cleanup/services/revenuecat_service');
+jest.mock('../../../core/services/subscription/firestore_service');
+jest.mock('../../../core/services/subscription/revenuecat_service');
 jest.mock('../../../features/subscription_cleanup/usecase');
 
 if (typeof global.fetch === 'undefined') {

@@ -1,9 +1,10 @@
 import { SubscriptionCleanupUseCase } from '../../../features/subscription_cleanup/usecase';
-import { FirestoreService, SyncUser } from '../../../features/subscription_cleanup/services/firestore_service';
-import { RevenueCatService } from '../../../features/subscription_cleanup/services/revenuecat_service';
+import { FirestoreService } from '../../../core/services/subscription/firestore_service';
+import { SyncUser } from '../../../core/services/subscription/dtos';
+import { RevenueCatService } from '../../../core/services/subscription/revenuecat_service';
 
-jest.mock('../../../features/subscription_cleanup/services/firestore_service');
-jest.mock('../../../features/subscription_cleanup/services/revenuecat_service');
+jest.mock('../../../core/services/subscription/firestore_service');
+jest.mock('../../../core/services/subscription/revenuecat_service');
 
 jest.mock('../../../core/logger', () => ({
     Logger: jest.fn().mockImplementation(() => ({

@@ -1,21 +1,8 @@
-import { Logger } from '../../../core/logger';
-import { retry } from '../../../core/retry';
+import { Logger } from '../../logger';
+import { retry } from '../../retry';
+import { RevenueCatSubscriberDTO } from './dtos';
 
 const _logger = new Logger('RevenueCat Service');
-
-export interface RevenueCatSubscriberDTO {
-    subscriber: {
-        entitlements: Record<string, {
-            expires_date: string | null;
-            product_identifier: string;
-            purchase_date: string;
-        }>;
-        subscriptions: Record<string, {
-            expires_date: string | null;
-            period_type: string;
-        }>;
-    };
-}
 
 export class RevenueCatService {
     private readonly baseUrl = 'https://api.revenuecat.com/v1/subscribers';

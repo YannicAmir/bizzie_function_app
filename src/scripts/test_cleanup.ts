@@ -1,8 +1,8 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-import { FirestoreService } from '../features/subscription_cleanup/services/firestore_service';
-import { RevenueCatService } from '../features/subscription_cleanup/services/revenuecat_service';
+import { RevenueCatService } from '../core/services/subscription/revenuecat_service';
+import { FirestoreService } from '../core/services/subscription/firestore_service';
 import { SubscriptionCleanupUseCase } from '../features/subscription_cleanup/usecase';
 import { getFirebaseAdmin } from '../core/firebase';
 

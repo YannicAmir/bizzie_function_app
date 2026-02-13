@@ -1,4 +1,4 @@
-import { FirestoreService } from '../../../../features/subscription_cleanup/services/firestore_service';
+import { FirestoreService } from '../../../../core/services/subscription/firestore_service';
 import { getFirebaseAdmin } from '../../../../core/firebase';
 
 jest.mock('../../../../core/firebase', () => ({
@@ -37,7 +37,7 @@ describe('FirestoreService', () => {
         service = new FirestoreService();
     });
 
-    it('getOutOfSyncSubscribers_validData_returnsMergedUsers', async () => {
+    it('getOutOfSyncSubscribers_validQueries_returnsMergedUsers', async () => {
         // Arrange
         const mockGhostDocs = [
             { id: 'ghost_1', data: () => ({ isSubscribed: true, subscriptionExpiryDate: '2025-01-01' }) }
@@ -55,21 +55,22 @@ describe('FirestoreService', () => {
 
         // Assert
         expect(result).toHaveLength(2);
-        expect(result[0]!.id).toBe('ghost_1');
-        expect(result[1]!.id).toBe('promo_1');
+        expect(result[0]?.id).toBe('ghost_1');
+        expect(result[1]?.id).toBe('promo_1');
+        expect(mockFirestore.collection).toHaveBeenCalledWith('users');
         expect(mockFirestore.where).toHaveBeenCalledTimes(4);
     });
 
-    it('getOutOfSyncSubscribers_error_throwsException', async () => {
+    it('getOutOfSyncSubscribers_queryFailure_throwsInternalError', async () => {
         // Arrange
-        const mockError = new Error('Firestore Error');
+        const mockError = new Error('Firestore Failure');
         mockFirestore.get.mockRejectedValue(mockError);
 
         // Act & Assert
         await expect(service.getOutOfSyncSubscribers()).rejects.toThrow(mockError);
     });
 
-    it('updateSubscriptionStatus_withExpiry_updatesDocumentWithExpiry', async () => {
+    it('updateSubscriptionStatus_withExpiry_updatesDocumentSuccessfully', async () => {
         // Arrange
         const userId = 'user_123';
         const isSubscribed = true;
@@ -89,7 +90,7 @@ describe('FirestoreService', () => {
         }));
     });
 
-    it('updateSubscriptionStatus_withoutExpiry_updatesDocumentWithoutExpiry', async () => {
+    it('updateSubscriptionStatus_withoutExpiry_updatesSubscriptionOnly', async () => {
         // Arrange
         const userId = 'user_456';
         const isSubscribed = false;
@@ -105,7 +106,7 @@ describe('FirestoreService', () => {
         });
     });
 
-    it('updateSubscriptionStatus_error_throwsException', async () => {
+    it('updateSubscriptionStatus_updateFailure_throwsInternalError', async () => {
         // Arrange
         const mockError = new Error('Update Failed');
         mockFirestore.update.mockRejectedValue(mockError);
