@@ -6,9 +6,10 @@ const _logger = new Logger('User Service');
 
 export interface User {
     id: string;
-    fcmToken: string;
+    fcmTokens?: Record<string, string>;
     createdAt: string;
     isSubscribed: boolean;
+    notificationsEnabled?: boolean;
 }
 
 export interface UserService {
@@ -16,10 +17,14 @@ export interface UserService {
 }
 
 export class FirebaseUserService implements UserService {
+    private db: FirebaseFirestore.Firestore;
+
+    constructor(db?: FirebaseFirestore.Firestore) {
+        this.db = db || getFirebaseAdmin().firestore();
+    }
 
     async *streamRecentFreeUsers(days: number, batchSize: number = 100): AsyncGenerator<User[]> {
-        const db = getFirebaseAdmin().firestore();
-        const usersRef = db.collection('users');
+        const usersRef = this.db.collection('users');
 
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - days);
@@ -55,11 +60,12 @@ export class FirebaseUserService implements UserService {
                 const data = doc.data();
                 return {
                     id: doc.id,
-                    fcmToken: data.fcmToken,
+                    fcmTokens: data.fcmTokens || {},
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-                    isSubscribed: data.isSubscribed
+                    isSubscribed: data.isSubscribed,
+                    notificationsEnabled: data.notificationsEnabled
                 } as User;
-            }).filter(u => u.fcmToken);
+            });
 
             yield users;
 

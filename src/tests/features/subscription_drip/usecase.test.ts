@@ -1,14 +1,14 @@
+
 import { SubscriptionDripUseCase } from '../../../features/subscription_drip/usecase';
-import { UserService, User } from '../../../features/subscription_drip/services/user_service';
+import { UserService } from '../../../features/subscription_drip/services/user_service';
 import { NotificationService } from '../../../core/services/notification_service';
 import { ConfigService, DripMessage } from '../../../features/subscription_drip/services/config_service';
 
 jest.mock('../../../core/logger', () => ({
     Logger: jest.fn().mockImplementation(() => ({
         info: jest.fn(),
-        warn: jest.fn(),
         error: jest.fn(),
-        debug: jest.fn()
+        warn: jest.fn()
     }))
 }));
 
@@ -19,15 +19,18 @@ describe('SubscriptionDripUseCase', () => {
     let mockConfigService: jest.Mocked<ConfigService>;
 
     beforeEach(() => {
+        // Arrange
         mockUserService = {
             streamRecentFreeUsers: jest.fn()
         };
+
         mockNotificationService = {
-            sendTopicNotification: jest.fn(),
             sendToToken: jest.fn(),
+            sendTopicNotification: jest.fn(),
             subscribeToTopic: jest.fn(),
-            unsubscribeFromTopic: jest.fn(),
+            unsubscribeFromTopic: jest.fn()
         };
+
         mockConfigService = {
             getDripCampaign: jest.fn()
         };
@@ -37,90 +40,129 @@ describe('SubscriptionDripUseCase', () => {
             mockNotificationService,
             mockConfigService
         );
+        jest.useFakeTimers().setSystemTime(new Date('2023-10-10T12:00:00Z'));
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
         jest.useRealTimers();
     });
 
-    it('sends notifications based on config mapping', async () => {
+    it('execute_notificationsDisabled_skipsUser', async () => {
         // Arrange
-        const mockCampaign: Record<number, DripMessage> = {
-            1: { title: 'Day 1', body: 'Body 1' },
-            2: { title: 'Day 2', body: 'Body 2' },
-            7: { title: 'Day 7', body: 'Body 7' }
+        const mockCampaign: Record<string, DripMessage> = {
+            '3': { title: 'Day 3 Check-in', body: 'How is it going?' }
         };
         mockConfigService.getDripCampaign.mockResolvedValue(mockCampaign);
 
-        const mockNow = new Date('2023-10-10T12:00:00Z');
-        jest.useFakeTimers().setSystemTime(mockNow);
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
-        const daysAgo = (n: number) => {
-            const d = new Date(mockNow);
-            d.setDate(d.getDate() - n);
-            return d.toISOString();
+        const user = {
+            id: 'u1',
+            fcmTokens: { 'd1': 't1' },
+            createdAt: threeDaysAgo.toISOString(),
+            isSubscribed: false,
+            notificationsEnabled: false // TARGET
         };
 
-        const mockUsers: User[] = [
-            { id: 'u1', fcmToken: 't1', isSubscribed: false, createdAt: daysAgo(1) },
-            { id: 'u2', fcmToken: 't2', isSubscribed: false, createdAt: daysAgo(2) },
-            { id: 'u3', fcmToken: 't3', isSubscribed: false, createdAt: daysAgo(7) },
-            { id: 'u4', fcmToken: 't4', isSubscribed: false, createdAt: daysAgo(8) },
-        ];
-        async function* mockGenerator() {
-            yield mockUsers;
+        // Async generator mock
+        async function* mockStream() {
+            yield [user];
         }
-        mockUserService.streamRecentFreeUsers.mockReturnValue(mockGenerator());
+        mockUserService.streamRecentFreeUsers.mockReturnValue(mockStream());
 
         // Act
         await useCase.execute();
 
         // Assert
-        expect(mockNotificationService.sendToToken).toHaveBeenCalledTimes(3);
-
-        expect(mockNotificationService.sendToToken).toHaveBeenCalledWith(
-            't1', 'Day 1', 'Body 1', expect.any(Object)
-        );
-        expect(mockNotificationService.sendToToken).toHaveBeenCalledWith(
-            't2', 'Day 2', 'Body 2', expect.any(Object)
-        );
-        expect(mockNotificationService.sendToToken).toHaveBeenCalledWith(
-            't3', 'Day 7', 'Body 7', expect.any(Object)
-        );
+        expect(mockNotificationService.sendToToken).not.toHaveBeenCalled();
     });
 
-    it('handles pagination (multiple batches)', async () => {
+    it('execute_validUser_sendsToAllTokens', async () => {
         // Arrange
-        mockConfigService.getDripCampaign.mockResolvedValue({ 1: { title: 'T', body: 'B' } });
+        const mockCampaign: Record<string, DripMessage> = {
+            '3': { title: 'Welcome', body: 'Hello' }
+        };
+        mockConfigService.getDripCampaign.mockResolvedValue(mockCampaign);
 
-        const mockNow = new Date('2023-10-10T12:00:00Z');
-        jest.useFakeTimers().setSystemTime(mockNow);
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
-        const batch1 = [{ id: 'u1', fcmToken: 't1', isSubscribed: false, createdAt: new Date(mockNow.getTime() - 24 * 60 * 60 * 1000).toISOString() } as User]; // Day 1
-        const batch2 = [{ id: 'u2', fcmToken: 't2', isSubscribed: false, createdAt: new Date(mockNow.getTime() - 24 * 60 * 60 * 1000).toISOString() } as User]; // Day 1 again
+        const user = {
+            id: 'u2',
+            fcmTokens: { 'd1': 'tokenA', 'd2': 'tokenB' },
+            createdAt: threeDaysAgo.toISOString(),
+            isSubscribed: false,
+            notificationsEnabled: true
+        };
 
-        async function* mockGenerator() {
-            yield batch1;
-            yield batch2;
+        async function* mockStream() {
+            yield [user];
         }
-        mockUserService.streamRecentFreeUsers.mockReturnValue(mockGenerator());
+        mockUserService.streamRecentFreeUsers.mockReturnValue(mockStream());
 
         // Act
         await useCase.execute();
 
         // Assert
         expect(mockNotificationService.sendToToken).toHaveBeenCalledTimes(2);
+        expect(mockNotificationService.sendToToken).toHaveBeenCalledWith('tokenA', 'Welcome', 'Hello', expect.any(Object));
+        expect(mockNotificationService.sendToToken).toHaveBeenCalledWith('tokenB', 'Welcome', 'Hello', expect.any(Object));
     });
 
-    it('skips users without tokens or createdAt', async () => {
+    it('execute_deduplicateTokens_sendsOnce', async () => {
         // Arrange
-        mockConfigService.getDripCampaign.mockResolvedValue({});
-        async function* mockGenerator() {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            yield [{ id: 'u1', isSubscribed: false } as any];
+        const mockCampaign: Record<string, DripMessage> = {
+            '3': { title: 'Welcome', body: 'Hello' }
+        };
+        mockConfigService.getDripCampaign.mockResolvedValue(mockCampaign);
+
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+        const user = {
+            id: 'u3',
+            fcmTokens: { 'd1': 'tokenA', 'd2': 'tokenA' },
+            createdAt: threeDaysAgo.toISOString(),
+            isSubscribed: false,
+            notificationsEnabled: true
+        };
+
+        async function* mockStream() {
+            yield [user];
         }
-        mockUserService.streamRecentFreeUsers.mockReturnValue(mockGenerator());
+        mockUserService.streamRecentFreeUsers.mockReturnValue(mockStream());
+
+        // Act
+        await useCase.execute();
+
+        // Assert
+        expect(mockNotificationService.sendToToken).toHaveBeenCalledTimes(1);
+        expect(mockNotificationService.sendToToken).toHaveBeenCalledWith('tokenA', 'Welcome', 'Hello', expect.any(Object));
+    });
+
+    it('execute_noMatchDay_sendsNothing', async () => {
+        // Arrange
+        const mockCampaign: Record<string, DripMessage> = {
+            '3': { title: 'Welcome', body: 'Hello' }
+        };
+        mockConfigService.getDripCampaign.mockResolvedValue(mockCampaign);
+
+        const twoDaysAgo = new Date();
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
+        const user = {
+            id: 'u4',
+            fcmTokens: { 'd1': 'tokenA' },
+            createdAt: twoDaysAgo.toISOString(),
+            isSubscribed: false,
+            notificationsEnabled: true
+        };
+
+        async function* mockStream() {
+            yield [user];
+        }
+        mockUserService.streamRecentFreeUsers.mockReturnValue(mockStream());
 
         // Act
         await useCase.execute();

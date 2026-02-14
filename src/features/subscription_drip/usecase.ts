@@ -32,7 +32,7 @@ export class SubscriptionDripUseCase {
             for (const user of batch) {
                 processedCount++;
 
-                if (!user.createdAt) continue;
+                if (user.notificationsEnabled === false) continue; // Privacy Check
 
                 const createdDate = new Date(user.createdAt);
                 createdDate.setHours(0, 0, 0, 0);
@@ -43,13 +43,20 @@ export class SubscriptionDripUseCase {
                 const message = campaign[daysDiff];
 
                 if (message && message.title && message.body) {
-                    await this.notificationService.sendToToken(
-                        user.fcmToken,
-                        message.title,
-                        message.body,
-                        { type: 'subscription_drip', daysSinceSignup: daysDiff.toString() }
-                    );
-                    sentCount++;
+                    const tokens = Object.values(user.fcmTokens || {});
+                    const uniqueTokens = [...new Set(tokens)];
+
+                    for (const token of uniqueTokens) {
+                        await this.notificationService.sendToToken(
+                            token,
+                            message.title,
+                            message.body,
+                            { type: 'subscription_drip', daysSinceSignup: daysDiff.toString() }
+                        );
+                    }
+                    if (uniqueTokens.length > 0) {
+                        sentCount++;
+                    }
                 }
             }
         }
