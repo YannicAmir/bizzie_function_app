@@ -1,46 +1,54 @@
 
 import { RemoteConfigService } from '../../../../features/subscription_drip/services/config_service';
-import * as remoteConfigCore from '../../../../core/remote-config';
 
-jest.mock('../../../../core/remote-config');
+const mockGetRemoteConfig = jest.fn();
+
+jest.mock('../../../../core/remote-config', () => ({
+    getRemoteConfig: () => mockGetRemoteConfig()
+}));
+
+jest.mock('../../../../core/logger', () => ({
+    Logger: jest.fn().mockImplementation(() => ({
+        error: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn()
+    }))
+}));
 
 describe('RemoteConfigService', () => {
     let service: RemoteConfigService;
-    let mockGetRemoteConfig: jest.Mock;
 
     beforeEach(() => {
+        // Arrange
         service = new RemoteConfigService();
-        mockGetRemoteConfig = remoteConfigCore.getRemoteConfig as jest.Mock;
-    });
-
-    afterEach(() => {
         jest.clearAllMocks();
     });
 
-    it('getDripCampaign_success_returnsParsedJson', async () => {
+    it('getDripCampaign_validJson_returnsCampaign', async () => {
         // Arrange
-        const mockJson = JSON.stringify({
-            1: { title: 'Day 1', body: 'Messages' }
-        });
-
-        mockGetRemoteConfig.mockResolvedValue({
-            subscriptionDripCampaign: mockJson
-        });
+        const mockCampaign = {
+            '1': { title: 'Day 1', body: 'Hello' },
+            '3': { title: 'Day 3', body: 'Check-in' }
+        };
+        const mockConfig = {
+            subscriptionDripCampaign: JSON.stringify(mockCampaign)
+        };
+        mockGetRemoteConfig.mockResolvedValue(mockConfig);
 
         // Act
         const result = await service.getDripCampaign();
 
         // Assert
-        expect(result).toEqual({
-            1: { title: 'Day 1', body: 'Messages' }
-        });
+        expect(result).toEqual(mockCampaign);
+        expect(mockGetRemoteConfig).toHaveBeenCalled();
     });
 
-    it('getDripCampaign_malformedJson_returnsEmpty', async () => {
+    it('getDripCampaign_invalidJson_returnsEmptyObject', async () => {
         // Arrange
-        mockGetRemoteConfig.mockResolvedValue({
-            subscriptionDripCampaign: "{ invalid json "
-        });
+        const mockConfig = {
+            subscriptionDripCampaign: 'invalid json string'
+        };
+        mockGetRemoteConfig.mockResolvedValue(mockConfig);
 
         // Act
         const result = await service.getDripCampaign();
@@ -49,9 +57,12 @@ describe('RemoteConfigService', () => {
         expect(result).toEqual({});
     });
 
-    it('getDripCampaign_missingProp_returnsEmpty', async () => {
+    it('getDripCampaign_emptyString_returnsEmptyObject', async () => {
         // Arrange
-        mockGetRemoteConfig.mockResolvedValue({});
+        const mockConfig = {
+            subscriptionDripCampaign: ''
+        };
+        mockGetRemoteConfig.mockResolvedValue(mockConfig);
 
         // Act
         const result = await service.getDripCampaign();

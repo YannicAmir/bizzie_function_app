@@ -19,7 +19,8 @@ export const subscriptionDrip = onSchedule({
 }, async () => {
     _logger.info('Subscription Drip Triggered');
 
-    const userService = new FirebaseUserService();
+    const db = getFirebaseAdmin().firestore();
+    const userService = new FirebaseUserService(db);
     const notificationService = new FcmNotificationService();
     const configService = new RemoteConfigService();
 
@@ -30,9 +31,5 @@ export const subscriptionDrip = onSchedule({
         _logger.info('Subscription Drip Completed Successfully');
     } catch (error) {
         _logger.error('Subscription Drip Failed', error);
-        // We log but don't rethrow to avoid automatic retries spamming users, 
-        // unless we built robust idempotency. Current design is stateless/idempotent via diff calculation,
-        // so retrying IS safe, but might be annoying if partial batch succeeded. 
-        // For now, fail silently after logging.
     }
 });
