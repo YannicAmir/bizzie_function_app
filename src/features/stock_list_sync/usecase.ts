@@ -17,7 +17,7 @@ export class StockListSyncUseCase {
 
         const minifiedStocks: StockEntry[] = rawStocks.map(stock => ({
             s: stock.symbol,
-            n: stock.companyName
+            n: stock.companyName ?? stock.symbol
         }));
 
         logger.info(`Minified ${minifiedStocks.length} stocks.`);
