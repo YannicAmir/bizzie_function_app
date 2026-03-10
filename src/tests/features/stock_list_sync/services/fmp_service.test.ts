@@ -67,7 +67,7 @@ describe('FmpService', () => {
     });
 
     it('should_parseSuccessfully_when_companyNameIsNull', async () => {
-        // Arrange — reproduces exact prod failure: FMP returns null companyName
+        // Arrange
         const mockResponse = [
             { symbol: 'AAPL', companyName: 'Apple Inc.' },
             { symbol: 'XXXX', companyName: null }
