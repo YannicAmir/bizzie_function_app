@@ -58,4 +58,23 @@ describe('StockListSyncUseCase', () => {
         // Act & Assert
         await expect(useCase.execute()).rejects.toThrow(error);
     });
+
+    it('should_fallbackToSymbol_when_companyNameIsNull', async () => {
+        // Arrange 
+        const mockStocks = [
+            { symbol: 'AAPL', companyName: 'Apple Inc.' },
+            { symbol: 'XXXX', companyName: null }
+        ];
+        mockFmpService.fetchAllStocks.mockResolvedValue(mockStocks);
+
+        // Act
+        await useCase.execute();
+
+        // Assert
+        const expectedMinified = [
+            { s: 'AAPL', n: 'Apple Inc.' },
+            { s: 'XXXX', n: 'XXXX' }
+        ];
+        expect(mockStorageService.saveStockList).toHaveBeenCalledWith(expectedMinified);
+    });
 });

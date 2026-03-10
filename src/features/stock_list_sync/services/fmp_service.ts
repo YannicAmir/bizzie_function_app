@@ -9,7 +9,7 @@ const logger = new Logger('FmpService');
 
 const FmpStockSchema = z.object({
     symbol: z.string(),
-    companyName: z.string(),
+    companyName: z.string().nullable(),
 });
 
 type FmpStockDTO = z.infer<typeof FmpStockSchema>;

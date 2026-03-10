@@ -65,4 +65,24 @@ describe('FmpService', () => {
         // Act & Assert
         await expect(service.fetchAllStocks()).rejects.toThrow();
     });
+
+    it('should_parseSuccessfully_when_companyNameIsNull', async () => {
+        // Arrange
+        const mockResponse = [
+            { symbol: 'AAPL', companyName: 'Apple Inc.' },
+            { symbol: 'XXXX', companyName: null }
+        ];
+
+        (global.fetch as jest.Mock).mockResolvedValue({
+            ok: true,
+            json: async () => mockResponse
+        });
+
+        // Act
+        const result = await service.fetchAllStocks();
+
+        // Assert
+        expect(result).toHaveLength(2);
+        expect(result[1]).toEqual({ symbol: 'XXXX', companyName: null });
+    });
 });
