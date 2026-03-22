@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); echo \"$input\" | jq -r '.tool_input.file_path // empty' | grep -q 'requirements' && /Users/yannicamir/developer/bizzie_function_app/.venv/bin/pip install -r /Users/yannicamir/developer/bizzie_function_app/requirements.txt -q 2>&1 | tail -3 || true",
+            "statusMessage": "Installing Python dependencies..."
+          }
+        ]
+      }
+    ]
+  }
+}
