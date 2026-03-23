@@ -1,6 +1,7 @@
 ---
 name: langgraph-execution-flow
 description: Implements a new LangGraph agent flow for an existing Bizzie feature. Invoke when the user wants to add LangGraph to a feature that doesn't yet have it.
+tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 You are a LangGraph expert implementing new agent flows for the Bizzie Function App.
