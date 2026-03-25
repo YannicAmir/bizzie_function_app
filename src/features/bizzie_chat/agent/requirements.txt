@@ -1,0 +1,26 @@
+# bizzie_chat LangGraph service — production dependencies
+# All versions pinned for reproducible builds.
+
+# ── LangGraph + LangChain core ────────────────────────────────────────────────
+langgraph==0.2.70
+langchain-core==0.3.59
+langchain-google-genai>=4.2.1
+langchain-community==0.3.24
+langchain-mcp-adapters==0.1.4
+
+# ── Checkpointer ──────────────────────────────────────────────────────────────
+langgraph-checkpoint-redis==0.0.4
+
+# ── Serving ───────────────────────────────────────────────────────────────────
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+
+# ── GCP ───────────────────────────────────────────────────────────────────────
+google-cloud-firestore==2.20.2
+google-cloud-logging==3.11.4
+
+# ── HTTP / validation ─────────────────────────────────────────────────────────
+httpx==0.28.1
+pydantic==2.11.3
+python-dotenv==1.1.0
+tavily-python>=0.5.0

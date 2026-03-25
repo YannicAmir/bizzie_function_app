@@ -3,5 +3,7 @@
   "dependencies": [
     "."
   ],
-  "graphs": {}
+  "graphs": {
+    "bizzie_chat": "src/features/bizzie_chat/agent/graph.py:graph"
+  }
 }

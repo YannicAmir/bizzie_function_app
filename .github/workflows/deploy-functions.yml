@@ -111,6 +111,16 @@ jobs:
               echo "Updating REVENUECAT_SECRET_TOKEN to latest for $SVC..."
               gcloud run services update $SVC --region=us-central1 --update-secrets=REVENUECAT_SECRET_TOKEN=REVENUECAT_SECRET_TOKEN:latest --quiet || true
             fi
+
+            if echo "$ENV_VARS" | grep -q "TAVILY_API_KEY"; then
+              echo "Updating TAVILY_API_KEY to latest for $SVC..."
+              gcloud run services update $SVC --region=us-central1 --update-secrets=TAVILY_API_KEY=TAVILY_API_KEY:latest --quiet || true
+            fi
+
+            if echo "$ENV_VARS" | grep -q "REDIS_URL"; then
+              echo "Updating REDIS_URL to latest for $SVC..."
+              gcloud run services update $SVC --region=us-central1 --update-secrets=REDIS_URL=REDIS_URL:latest --quiet || true
+            fi
           done
 
       - name: Deploy to Firebase
@@ -123,11 +133,16 @@ jobs:
             echo "Deploying $GRAPH_COUNT LangGraph service(s) to Cloud Run..."
             python3 -c "import json; d=json.load(open('langgraph.json')); [print(k) for k in d.get('graphs', {}).keys()]" | while read GRAPH; do
               echo "Deploying langgraph-$GRAPH..."
+              if [ "$GRAPH" = "bizzie_chat" ]; then
+                EXTRA_SECRETS=",TAVILY_API_KEY=TAVILY_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FMP_API_KEY=FMP_API_KEY:latest"
+              else
+                EXTRA_SECRETS=""
+              fi
               gcloud run deploy langgraph-$GRAPH \
-                --source ./src/features/$GRAPH/langgraph \
+                --source ./src/features/$GRAPH/agent \
                 --region us-central1 \
                 --no-allow-unauthenticated \
-                --update-secrets=LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest,LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest \
+                --update-secrets=LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest,LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest$EXTRA_SECRETS \
                 --quiet
             done
           else

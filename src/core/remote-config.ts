@@ -12,6 +12,11 @@ export interface AppConfig {
     v3Url: string;
     v4Url: string;
   };
+  bizzie_chat: {
+    chat_model: string;
+    chat_model_lite: string;
+    llm_responses_per_day: number;
+  };
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -42,7 +47,12 @@ const DEFAULT_CONFIG: AppConfig = {
     baseUrl: "https://financialmodelingprep.com/stable",
     v3Url: "https://financialmodelingprep.com/api/v3",
     v4Url: "https://financialmodelingprep.com/api/v4"
-  }
+  },
+  bizzie_chat: {
+    chat_model: "gemini-3.1-pro-preview",
+    chat_model_lite: "gemini-3.1-flash-lite-preview",
+    llm_responses_per_day: 20,
+  },
 };
 
 let configCache: AppConfig | null = null;
@@ -65,6 +75,9 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const rawModelName = (template.parameters['gemini_model_name']?.defaultValue as { value?: string } | undefined)?.value;
     const rawDrip = (template.parameters['subscription_drip_campaign']?.defaultValue as { value?: string } | undefined)?.value;
     const rawFmp = (template.parameters['fmp_config']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawChatModel = (template.parameters['chat_model']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawChatModelLite = (template.parameters['chat_model_lite']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawLlmResponsesPerDay = (template.parameters['llm_responses_per_day']?.defaultValue as { value?: string } | undefined)?.value;
 
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;
     const gemini_model_name = (rawModelName as string) || DEFAULT_CONFIG.gemini_model_name;
@@ -75,7 +88,14 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
       sectors,
       gemini_model_name,
       subscriptionDripCampaign,
-      fmp
+      fmp,
+      bizzie_chat: {
+        chat_model: rawChatModel || DEFAULT_CONFIG.bizzie_chat.chat_model,
+        chat_model_lite: rawChatModelLite || DEFAULT_CONFIG.bizzie_chat.chat_model_lite,
+        llm_responses_per_day: rawLlmResponsesPerDay
+          ? parseInt(rawLlmResponsesPerDay, 10)
+          : DEFAULT_CONFIG.bizzie_chat.llm_responses_per_day,
+      },
     };
 
     configCache = newConfig;

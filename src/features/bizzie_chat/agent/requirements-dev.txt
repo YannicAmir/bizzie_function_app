@@ -1,0 +1,7 @@
+# bizzie_chat LangGraph service — dev/test dependencies
+-r requirements.txt
+
+pytest>=7.0
+pytest-asyncio>=0.23
+mypy>=1.8
+ruff>=0.3
