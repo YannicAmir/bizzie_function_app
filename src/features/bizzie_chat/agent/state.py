@@ -1,50 +1,50 @@
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
 class BizzieState(TypedDict):
-    # ── Input fields (set at graph entry, never mutated) ──────────────────────
+    # Input fields
     uid: str
     session_id: str
     query: str
     company_ticker: str
     company_name: str
-    investing_experience: str          # "beginner" | "intermediate" | "expert"
-    conversation_history: list[dict]   # last 4 turns, uid+ticker scoped
-    model_pro: str | None              # overrides config.model_pro (from Remote Config)
-    model_flash: str | None            # overrides config.model_flash (from Remote Config)
-    model_flash_lite: str | None       # overrides config.model_flash_lite (from Remote Config)
+    investing_experience: str
+    conversation_history: list[dict[str, Any]]
+    model_pro: str | None
+    model_flash: str | None
+    model_flash_lite: str | None
 
-    # ── Guardian classifier output ───────────────────────────────────────────
-    classification: dict | None        # raw guardian tool_use output
-    references_different_company: bool # true → query is primarily about another company
-    referenced_ticker: str | None      # ticker of referenced company (untrusted — validate before FMP use)
-    required_data_categories: list[str] | None # e.g. ["NEWS", "PRICE_PERFORMANCE"]
+    # Guardian classifier output
+    classification: dict[str, Any] | None
+    references_different_company: bool
+    referenced_ticker: str | None
+    required_data_categories: list[str] | None
+    requires_deep_reasoning: bool | None
 
-    # ── Routing ──────────────────────────────────────────────────────────────
-    route_path: str | None             # exit|ambassador|doc_summary|fmp|fallback|error
+    # Routing
+    route_path: str | None
 
-    # ── FMP / ambassador path ────────────────────────────────────────────────
-    fmp_company_profile: dict | None   # profile data fetched by ambassador_fmp_call
-    fmp_result: str | None             # stock query FMP result text
+    # FMP / ambassador path
+    fmp_company_profile: dict[str, Any] | None
+    fmp_result: str | None
     fmp_error: str | None
-    fmp_available: bool                # circuit breaker gate — closed=True, open=False
-    ambassador_used_fmp_data: bool     # true if ambassador_llm_node had FMP data
+    fmp_available: bool
+    ambassador_used_fmp_data: bool
 
-    # ── Tavily fallback path ─────────────────────────────────────────────────
+    # Tavily fallback path
     tavily_result: str | None
     tavily_error: str | None
 
-    # ── Response construction ────────────────────────────────────────────────
-    raw_response: str | None           # unsanitized LLM response text
-    sanitized_response: str | None     # after response_sanitizer
-    follow_ups: list[str]              # 3 contextual follow-up questions
-    final_response: str | None         # assembled final message for client
+    # Response construction
+    raw_response: str | None
+    sanitized_response: str | None
+    follow_ups: list[str]
+    final_response: str | None
 
-    # ── Metadata ─────────────────────────────────────────────────────────────
-    source: str | None                 # fmp|tavily|fmp_profile|llm_knowledge|static
-    comparison_mode: bool              # true when references_different_company=true
-    retry_after_seconds: int | None    # only on error path
+    # Metadata
+    source: str | None
+    comparison_mode: bool
+    retry_after_seconds: int | None
 
-    # ── Observability ────────────────────────────────────────────────────────
-    metadata: dict                     # start_time, fmp_attempted, fallback_source,
-                                       # estimated_token_cost, latency_ms
+    # Observability
+    metadata: dict[str, Any]

@@ -5,11 +5,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the full feature langgraph directory as a package
 COPY . ./src/features/bizzie_chat/agent/
 
-# Create __init__.py stubs so Python treats the directories as packages
-RUN touch src/__init__.py \
+RUN mkdir -p src/features/bizzie_chat/agent && \
+    touch src/__init__.py \
     && touch src/features/__init__.py \
     && touch src/features/bizzie_chat/__init__.py
 

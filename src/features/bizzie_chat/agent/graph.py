@@ -1,26 +1,4 @@
-"""
-StateGraph wiring for the bizzie_chat LangGraph service.
-
-Topology (simplified):
-  START
-    └─ guardian_classifier
-         ├─ exit       → exit_agent ──────────────────────────────────────────► END
-         ├─ doc_summary → doc_summary_node ──────────────────────────────────┐
-         ├─ ambassador  → ambassador_circuit_breaker_check                   │
-         │                   ├─ (open)  → ambassador_llm_node ───────────────┤
-         │                   └─ (closed)→ ambassador_fmp_call                │
-         │                                  └─ ambassador_llm_node ──────────┤
-         ├─ fmp         → stock_query_circuit_breaker_check                  │
-         │                   ├─ (open)  → tavily_fallback_agent ─────────────┤
-         │                   └─ (closed)→ fmp_agent                          │
-         │                                  ├─ (error) → tavily_fallback     ┤
-         │                                  └─ (ok)   ─► response_sanitizer  │  (parallel)
-         │                                              ─► follow_up_generator┤
-         └─ error       → error_response_node ────────────────────────────► END
-
-  response_sanitizer  ─┐
-  follow_up_generator  ─┴─► response_assembler ──────────────────────────► END
-"""
+"""StateGraph wiring for the bizzie_chat LangGraph service."""
 
 import logging
 from typing import Literal
@@ -49,13 +27,11 @@ from src.features.bizzie_chat.agent.state import BizzieState
 
 logger = logging.getLogger(__name__)
 
-# ── Routing functions ──────────────────────────────────────────────────────────
-
 
 def route_after_guardian(
     state: BizzieState,
 ) -> Literal["exit_agent", "doc_summary_node", "ambassador_circuit_breaker_check", "stock_query_circuit_breaker_check", "error_response_node"]:
-    """Route after guardian_classifier based on classification + route_path."""
+    """Route after guardian_classifier based on classification."""
     route = state.get("route_path")
     if route == "exit":
         return "exit_agent"
@@ -65,18 +41,13 @@ def route_after_guardian(
         return "ambassador_circuit_breaker_check"
     if route == "error":
         return "error_response_node"
-    # Default: stock FMP path (route == "fmp" or anything else)
     return "stock_query_circuit_breaker_check"
 
 
 def route_after_ambassador_cb(
     state: BizzieState,
 ) -> Literal["ambassador_fmp_call", "ambassador_llm_node"]:
-    """
-    After ambassador circuit breaker check:
-    - circuit open (fmp_available=False)  → skip FMP fetch, go straight to LLM
-    - circuit closed (fmp_available=True) → fetch company profile from FMP first
-    """
+    """Route after ambassador circuit breaker check."""
     if state.get("fmp_available", True):
         return "ambassador_fmp_call"
     return "ambassador_llm_node"
@@ -85,11 +56,7 @@ def route_after_ambassador_cb(
 def route_after_stock_cb(
     state: BizzieState,
 ) -> Literal["fmp_agent", "tavily_fallback_agent"]:
-    """
-    After stock query circuit breaker check:
-    - circuit open (fmp_available=False) → skip FMP, use Tavily
-    - circuit closed (fmp_available=True) → use FMP agent
-    """
+    """Route after stock query circuit breaker check."""
     if state.get("fmp_available", True):
         return "fmp_agent"
     return "tavily_fallback_agent"
@@ -98,11 +65,7 @@ def route_after_stock_cb(
 def route_after_fmp_agent(
     state: BizzieState,
 ) -> list[str] | str:
-    """
-    After fmp_agent:
-    - FMP failed → fall back to Tavily
-    - FMP succeeded → parallel fan-out to sanitizer + follow-up generator
-    """
+    """Route after fmp_agent — handles fallback or parallel fan-out."""
     if state.get("fmp_error"):
         return "tavily_fallback_agent"
     return ["response_sanitizer", "follow_up_generator"]
@@ -111,41 +74,25 @@ def route_after_fmp_agent(
 def route_after_ambassador_llm(
     state: BizzieState,
 ) -> list[str]:
-    """Ambassador LLM always fans out to sanitizer + follow-up generator."""
     return ["response_sanitizer", "follow_up_generator"]
 
 
 def route_after_doc_summary(
     state: BizzieState,
 ) -> list[str]:
-    """Doc summary always fans out to sanitizer + follow-up generator."""
     return ["response_sanitizer", "follow_up_generator"]
 
 
 def route_after_tavily(
     state: BizzieState,
 ) -> list[str]:
-    """Tavily always fans out to sanitizer + follow-up generator (even on error)."""
     return ["response_sanitizer", "follow_up_generator"]
 
 
-# ── Graph builder ─────────────────────────────────────────────────────────────
-
-
 def build_graph(checkpointer=None) -> CompiledStateGraph:
-    """
-    Assemble and compile the bizzie_chat StateGraph.
-
-    Args:
-        checkpointer: LangGraph checkpointer (MemorySaver for local/tests,
-                      AsyncRedisSaver for production).
-
-    Returns:
-        Compiled LangGraph graph ready for ainvoke().
-    """
+    """Assemble and compile the bizzie_chat StateGraph."""
     builder = StateGraph(BizzieState)
 
-    # ── Register all nodes ────────────────────────────────────────────────────
     builder.add_node("guardian_classifier", guardian_classifier)
     builder.add_node("exit_agent", exit_agent)
     builder.add_node("doc_summary_node", doc_summary_node)
@@ -160,10 +107,8 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
     builder.add_node("follow_up_generator", follow_up_generator)
     builder.add_node("response_assembler", response_assembler)
 
-    # ── Edges: entry ──────────────────────────────────────────────────────────
     builder.add_edge(START, "guardian_classifier")
 
-    # ── Edges: guardian routing ───────────────────────────────────────────────
     builder.add_conditional_edges(
         "guardian_classifier",
         route_after_guardian,
@@ -176,11 +121,9 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
         },
     )
 
-    # ── Edges: terminal paths ─────────────────────────────────────────────────
     builder.add_edge("exit_agent", END)
     builder.add_edge("error_response_node", END)
 
-    # ── Edges: ambassador path ────────────────────────────────────────────────
     builder.add_conditional_edges(
         "ambassador_circuit_breaker_check",
         route_after_ambassador_cb,
@@ -189,7 +132,6 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
             "ambassador_llm_node": "ambassador_llm_node",
         },
     )
-    # FMP profile fetch always flows into the LLM (FMP data may be partial/missing)
     builder.add_edge("ambassador_fmp_call", "ambassador_llm_node")
     builder.add_conditional_edges(
         "ambassador_llm_node",
@@ -200,7 +142,6 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
         },
     )
 
-    # ── Edges: doc summary path ───────────────────────────────────────────────
     builder.add_conditional_edges(
         "doc_summary_node",
         route_after_doc_summary,
@@ -210,7 +151,6 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
         },
     )
 
-    # ── Edges: stock query / FMP path ─────────────────────────────────────────
     builder.add_conditional_edges(
         "stock_query_circuit_breaker_check",
         route_after_stock_cb,
@@ -229,7 +169,6 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
         },
     )
 
-    # ── Edges: Tavily fallback path ───────────────────────────────────────────
     builder.add_conditional_edges(
         "tavily_fallback_agent",
         route_after_tavily,
@@ -239,7 +178,6 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
         },
     )
 
-    # ── Edges: fan-in to assembler ────────────────────────────────────────────
     builder.add_edge("response_sanitizer", "response_assembler")
     builder.add_edge("follow_up_generator", "response_assembler")
     builder.add_edge("response_assembler", END)
@@ -249,23 +187,13 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
     return compiled
 
 
-# ── Module-level graph instance ───────────────────────────────────────────────
-# Imported by main.py. Checkpointer is selected at startup based on config.env.
-
 def make_checkpointer():
-    """
-    Create the checkpointer instance.
-    - local: MemorySaver (in-process, no Redis needed)
-    - production: AsyncRedisSaver (call asetup() before serving requests)
-    """
+    """Create the checkpointer instance."""
     if config.env == "local":
-        logger.info("Using MemorySaver checkpointer (local mode)")
         return MemorySaver()
     try:
         from langgraph.checkpoint.redis.aio import AsyncRedisSaver
-        checkpointer = AsyncRedisSaver(redis_url=config.redis_url)
-        logger.info("Using AsyncRedisSaver checkpointer (production mode)")
-        return checkpointer
+        return AsyncRedisSaver(redis_url=config.redis_url)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Redis checkpointer init failed — falling back to MemorySaver",
@@ -274,7 +202,4 @@ def make_checkpointer():
         return MemorySaver()
 
 
-# ── Module-level graph instance ───────────────────────────────────────────────
-# Exported for LangGraph Studio and LangGraph CLI discovery.
-# LangGraph Studio/API handles persistence automatically; do NOT pass a checkpointer here.
 graph = build_graph(None)

@@ -14,6 +14,7 @@ export interface AppConfig {
   };
   bizzie_chat: {
     chat_model: string;
+    chat_model_flash: string;
     chat_model_lite: string;
     llm_responses_per_day: number;
   };
@@ -50,6 +51,7 @@ const DEFAULT_CONFIG: AppConfig = {
   },
   bizzie_chat: {
     chat_model: "gemini-3.1-pro-preview",
+    chat_model_flash: "gemini-3-flash-preview",
     chat_model_lite: "gemini-3.1-flash-lite-preview",
     llm_responses_per_day: 20,
   },
@@ -76,6 +78,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const rawDrip = (template.parameters['subscription_drip_campaign']?.defaultValue as { value?: string } | undefined)?.value;
     const rawFmp = (template.parameters['fmp_config']?.defaultValue as { value?: string } | undefined)?.value;
     const rawChatModel = (template.parameters['chat_model']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawChatModelFlash = (template.parameters['chat_model_flash']?.defaultValue as { value?: string } | undefined)?.value;
     const rawChatModelLite = (template.parameters['chat_model_lite']?.defaultValue as { value?: string } | undefined)?.value;
     const rawLlmResponsesPerDay = (template.parameters['llm_responses_per_day']?.defaultValue as { value?: string } | undefined)?.value;
 
@@ -91,6 +94,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
       fmp,
       bizzie_chat: {
         chat_model: rawChatModel || DEFAULT_CONFIG.bizzie_chat.chat_model,
+        chat_model_flash: rawChatModelFlash || DEFAULT_CONFIG.bizzie_chat.chat_model_flash,
         chat_model_lite: rawChatModelLite || DEFAULT_CONFIG.bizzie_chat.chat_model_lite,
         llm_responses_per_day: rawLlmResponsesPerDay
           ? parseInt(rawLlmResponsesPerDay, 10)

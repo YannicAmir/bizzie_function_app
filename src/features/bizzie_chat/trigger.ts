@@ -29,7 +29,7 @@ export const bizzieChat = onRequest(
             return;
         }
 
-        // ── Parse Authorization header ────────────────────────────────────────
+        // Parse Authorization header
         const authHeader = request.headers['authorization'] ?? '';
         if (!authHeader.startsWith('Bearer ')) {
             response.status(401).json({ error: 'Missing or invalid Authorization header' });
@@ -37,7 +37,7 @@ export const bizzieChat = onRequest(
         }
         const authToken = authHeader.slice('Bearer '.length).trim();
 
-        // ── Parse body ────────────────────────────────────────────────────────
+        // Parse body
         const body = request.body as Record<string, unknown>;
         const idempotencyKey = (body?.idempotencyKey as string) || '';
         const query = (body?.query as string) || '';

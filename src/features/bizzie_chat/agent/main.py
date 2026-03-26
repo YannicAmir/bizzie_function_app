@@ -1,15 +1,3 @@
-"""
-FastAPI entry point for the bizzie_chat LangGraph Cloud Run service.
-
-Endpoints:
-  POST /invoke  — run the bizzie_chat graph; returns final state fields
-  GET  /health  — liveness probe; used by Cloud Run health checks
-
-Integration contract (with usecase.ts caller):
-  Request:  { "input": { <BizzieState input fields> }, "thread_id": "<string>" }
-  Response: { "output": { "message": str, "followUps": [...], "metadata": {...} }, "run_id": str }
-"""
-
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -20,26 +8,21 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-# Load .env then .env.local (override) — for local development only; no-op if files absent
 load_dotenv()
 load_dotenv(".env.local", override=True)
 
 from src.features.bizzie_chat.agent.config import config
 from src.features.bizzie_chat.agent.graph import build_graph, make_checkpointer
 
-# ── Cloud Logging setup ───────────────────────────────────────────────────────
 if config.env != "local":
     google.cloud.logging.Client(project=config.gcp_project).setup_logging()
 
 logger = logging.getLogger(__name__)
 
-# ── LangSmith tracing ─────────────────────────────────────────────────────────
 if config.langsmith_api_key:
     os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     os.environ.setdefault("LANGCHAIN_API_KEY", config.langsmith_api_key)
     os.environ.setdefault("LANGCHAIN_PROJECT", config.langsmith_project)
-
-# ── Lifespan ──────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,8 +33,6 @@ async def lifespan(app: FastAPI):
     logger.info("Graph initialized", extra={"json_fields": {"checkpointer": type(checkpointer).__name__}})
     yield
 
-# ── FastAPI app ───────────────────────────────────────────────────────────────
-
 app = FastAPI(
     title="bizzie-chat",
     description="LangGraph AI chat service for Bizzie stock app.",
@@ -59,19 +40,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
-# ── Request / response models ─────────────────────────────────────────────────
-
 class InvokeRequest(BaseModel):
-    """
-    HTTP request body for POST /invoke.
-
-    `input` maps directly to BizzieState input fields (set at graph entry).
-    `thread_id` is used as the LangGraph checkpointer thread key.
-    """
+    """BizzieState input fields and thread_id for checkpointer."""
     input: dict = Field(..., description="BizzieState input fields")
     thread_id: str = Field(..., description="Checkpointer thread ID (uid+ticker scoped)")
-
 
 class ChatOutput(BaseModel):
     message: str | None = None
@@ -81,26 +53,13 @@ class ChatOutput(BaseModel):
     retry_after_seconds: int | None = None
     metadata: dict = Field(default_factory=dict)
 
-
 class InvokeResponse(BaseModel):
     output: ChatOutput
     run_id: str
 
-
-# ── Endpoints ─────────────────────────────────────────────────────────────────
-
 @app.post("/invoke", response_model=InvokeResponse)
 async def invoke(request: Request, req: InvokeRequest) -> InvokeResponse:
-    """
-    Invoke the bizzie_chat graph with the given input state.
-
-    The thread_id binds this invocation to its Redis checkpoint key so that
-    retries resume from the last completed node rather than restarting.
-
-    Raises:
-        422 — validation error (Pydantic, automatic)
-        500 — unhandled graph exception
-    """
+    """Invoke the bizzie_chat graph with the given input state."""
     run_config = {
         "configurable": {"thread_id": req.thread_id},
         "recursion_limit": 25,
@@ -142,14 +101,10 @@ async def invoke(request: Request, req: InvokeRequest) -> InvokeResponse:
 
     return InvokeResponse(output=output, run_id=req.thread_id)
 
-
 @app.get("/health")
 async def health() -> JSONResponse:
-    """Liveness probe. Returns 200 when the service is up."""
+    """Liveness probe."""
     return JSONResponse(content={"status": "ok"})
-
-
-# ── Exception handler ─────────────────────────────────────────────────────────
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

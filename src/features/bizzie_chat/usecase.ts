@@ -9,7 +9,7 @@ import { LangGraphService, LangGraphChatResponse } from './services/langgraph_se
 
 const _logger = new Logger('BizzieChat UseCase');
 
-// ── Input sanitization ────────────────────────────────────────────────────────
+// Input sanitization
 
 const MAX_QUERY_LENGTH = 500;
 
@@ -42,7 +42,7 @@ function hasInjectionPattern(text: string): boolean {
     return INJECTION_PATTERNS.some((pattern) => pattern.test(text));
 }
 
-// ── Request / response types ──────────────────────────────────────────────────
+// Request / response types
 
 export interface BizzieChatRequest {
     authToken: string;
@@ -63,7 +63,7 @@ export interface BizzieChatResponse {
     };
 }
 
-// ── Use case ──────────────────────────────────────────────────────────────────
+// Use case
 
 export class BizzieChatUseCase {
     constructor(
@@ -73,34 +73,34 @@ export class BizzieChatUseCase {
         private readonly idempotencyService: IdempotencyService,
         private readonly conversationService: ConversationService,
         private readonly langGraphService: LangGraphService,
-    ) {}
+    ) { }
 
     async execute(req: BizzieChatRequest): Promise<BizzieChatResponse> {
-        // ── Step 0: Fetch Remote Config (cached — sub-millisecond on warm hit) ──
+        // Step 0: Fetch Remote Config (cached)
         const remoteConfig = await getRemoteConfig();
-        const { chat_model, chat_model_lite, llm_responses_per_day } = remoteConfig.bizzie_chat;
+        const { chat_model, chat_model_flash, chat_model_lite, llm_responses_per_day } = remoteConfig.bizzie_chat;
 
-        // ── Step 1: Verify Firebase ID token ─────────────────────────────────
+        // Step 1: Verify Firebase ID token
         const { uid } = await this.authService.verifyIdToken(req.authToken);
 
-        // ── Step 2: Parallel fetch — user doc + idempotency check ─────────────
+        // Step 2: Parallel fetch — user doc + idempotency check
         const [user, idempotency] = await Promise.all([
             this.userService.getUser(uid),
             this.idempotencyService.get(uid, req.idempotencyKey),
         ]);
 
-        // ── Step 3: Return cached response for duplicate requests ─────────────
+        // Step 3: Return cached response for duplicate requests
         if (idempotency.exists && idempotency.cachedResponse) {
             _logger.info('Returning cached idempotent response');
             return idempotency.cachedResponse as BizzieChatResponse;
         }
 
-        // ── Step 4: User existence check ──────────────────────────────────────
+        // Step 4: User existence check
         if (!user) {
             throw Object.assign(new Error('User not found'), { code: 'USER_NOT_FOUND', status: 404 });
         }
 
-        // ── Step 5: Primary subscription check ───────────────────────────────
+        // Step 5: Primary subscription check
         if (!user.isSubscribed) {
             throw Object.assign(new Error('Active subscription required'), {
                 code: 'NOT_SUBSCRIBED',
@@ -108,7 +108,7 @@ export class BizzieChatUseCase {
             });
         }
 
-        // ── Step 6: Secondary subscription expiry check ────────────────────────
+        // Step 6: Secondary subscription expiry check
         if (user.subscriptionExpiryDate) {
             const expiry = new Date(user.subscriptionExpiryDate).getTime();
             if (Date.now() > expiry) {
@@ -119,7 +119,7 @@ export class BizzieChatUseCase {
             }
         }
 
-        // ── Step 7: Input sanitization ────────────────────────────────────────
+        // Step 7: Input sanitization
         const sanitizedQuery = sanitizeInput(req.query);
         if (!sanitizedQuery) {
             throw Object.assign(new Error('Empty query after sanitization'), {
@@ -128,7 +128,7 @@ export class BizzieChatUseCase {
             });
         }
 
-        // ── Step 8: Injection / jailbreak scan ────────────────────────────────
+        // Step 8: Injection / jailbreak scan
         if (hasInjectionPattern(sanitizedQuery)) {
             throw Object.assign(new Error('Query rejected: injection pattern detected'), {
                 code: 'INJECTION_DETECTED',
@@ -136,7 +136,7 @@ export class BizzieChatUseCase {
             });
         }
 
-        // ── Step 9: Ticker validation ─────────────────────────────────────────
+        // Step 9: Ticker validation
         if (!/^[A-Z]{1,5}$/.test(req.companyTicker)) {
             throw Object.assign(new Error('Invalid ticker symbol'), {
                 code: 'INVALID_TICKER',
@@ -144,7 +144,7 @@ export class BizzieChatUseCase {
             });
         }
 
-        // ── Step 10: Rate limit check ─────────────────────────────────────────
+        // Step 10: Rate limit check
         const rateStatus = await this.rateLimitService.checkStatus(uid, llm_responses_per_day);
         if (!rateStatus.allowed) {
             throw Object.assign(
@@ -157,13 +157,13 @@ export class BizzieChatUseCase {
             );
         }
 
-        // ── Step 11: Load conversation history ────────────────────────────────
+        // Step 11: Load conversation history
         const conversationHistory = await this.conversationService.loadHistory(
             uid,
             req.companyTicker,
         );
 
-        // ── Step 12: Build thread_id + invoke LangGraph ───────────────────────
+        // Step 12: Build thread_id + invoke LangGraph
         const threadId = `bizzie_chat_${req.sessionId}_${req.companyTicker}`;
         const graphInput = {
             uid, // passed to Python but never into LLM prompts
@@ -174,6 +174,7 @@ export class BizzieChatUseCase {
             investing_experience: user.investing_experience ?? 'beginner',
             conversation_history: conversationHistory,
             model_pro: chat_model,
+            model_flash: chat_model_flash,
             model_flash_lite: chat_model_lite,
         };
 
@@ -191,7 +192,7 @@ export class BizzieChatUseCase {
             });
         }
 
-        // ── Step 13: Assemble response ────────────────────────────────────────
+        // Step 13: Assemble response
         const output = graphResult.output;
 
         if (!output.message) {
@@ -212,7 +213,7 @@ export class BizzieChatUseCase {
             },
         };
 
-        // ── Fire-and-forget: rate limit increment, idempotency store, history ──
+        // Fire-and-forget: rate limit, idempotency, history
         this.rateLimitService.increment(uid).catch((err) =>
             _logger.error('Rate limit increment failed', err),
         );

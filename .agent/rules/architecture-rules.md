@@ -88,3 +88,31 @@ bizzie-backend/
 * **Strict Typing:** ALL external API responses must be cast to a Raw DTO Interface first.
 * **DTO Placement:** Private DTOs can be defined in the service file. Shared DTOs should go in `services/dtos.ts`.
 * **Encapsulation:** DTOs should NOT be exported outside the `services/` directory.
+
+## 5. LangGraph Agent Conventions
+
+When a LangGraph agent's node file exceeds **300 lines**, it MUST be split into a `nodes/` sub-package.
+
+### nodes/ Sub-Package Structure
+```text
+agent/
+├── nodes/
+│   ├── __init__.py          # Re-exports all public node functions (no logic)
+│   ├── circuit_breaker.py   # Firestore CB helpers + CB check nodes
+│   ├── guardian.py          # Classification + exit nodes
+│   ├── ambassador.py        # Investment-advice path nodes
+│   ├── fmp.py               # FMP research agent node
+│   ├── tavily.py            # Tavily fallback + error nodes
+│   └── assembler.py         # Sanitizer, follow-up, assembler nodes
+├── graph.py
+├── state.py
+├── tools.py
+└── config.py
+```
+
+### Rules
+* **300-line soft limit** per file. Split when approaching this limit.
+* **`__init__.py` re-exports all public symbols.** `graph.py` always imports from `nodes` (the package), never from a sub-module directly.
+* **No cross-module node imports** (e.g., `fmp.py` may not import node functions from `ambassador.py`). Shared helpers (e.g., `_experience_instruction`, `_format_history`) are explicitly imported by the modules that need them.
+* **Each sub-module must have a single clear responsibility** matching one logical pipeline stage.
+* **Private helpers** (`_prefixed` functions) may be imported across sub-modules when genuinely shared.
