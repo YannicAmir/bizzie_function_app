@@ -8,13 +8,13 @@ guardian_classifier: Classifies the user query into a route_path using a
 exit_agent: Static deterministic response for off-topic queries.
 """
 
-import hashlib
 import logging
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from src.features.bizzie_chat.agent.cache import cache_get, cache_set, guardian_cache_key, hash_query
 from src.features.bizzie_chat.agent.config import config
 from src.features.bizzie_chat.agent.state import BizzieState
 from src.features.bizzie_chat.agent.tools import GUARDIAN_CLASSIFIER_TOOL
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def _hash_query(query: str) -> str:
     """sha256 of query, first 16 hex chars. For logging only — never store raw query."""
-    return hashlib.sha256(query.encode()).hexdigest()[:16]
+    return hash_query(query)
 
 
 def _get_thread_id(state: BizzieState) -> str:
@@ -39,6 +39,15 @@ async def guardian_classifier(state: BizzieState) -> dict[str, Any]:
         "guardian_classifier: start",
         extra={"json_fields": {"node": "guardian_classifier", "thread_id": thread_id, "query_hash": query_hash}},
     )
+
+    cache_key = guardian_cache_key(query_hash, state["company_ticker"])
+    cached_result = await cache_get(cache_key)
+    if cached_result is not None:
+        logger.info(
+            "guardian_classifier: cache hit",
+            extra={"json_fields": {"node": "guardian_classifier", "thread_id": thread_id, "query_hash": query_hash}},
+        )
+        return cached_result
 
     try:
         llm = ChatGoogleGenerativeAI(
@@ -125,7 +134,7 @@ async def guardian_classifier(state: BizzieState) -> dict[str, Any]:
             },
         )
 
-        return {
+        result = {
             "classification": classification,
             "route_path": route_path,
             "references_different_company": references_different,
@@ -135,6 +144,8 @@ async def guardian_classifier(state: BizzieState) -> dict[str, Any]:
             "requires_deep_reasoning": deep_reasoning,
             "is_price_only_query": is_price_only,
         }
+        await cache_set(cache_key, result, 3600)
+        return result
 
     except Exception as exc:
         logger.error(

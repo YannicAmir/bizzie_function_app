@@ -45,6 +45,14 @@ class InvokeRequest(BaseModel):
     input: dict = Field(..., description="BizzieState input fields")
     thread_id: str = Field(..., description="Checkpointer thread ID (uid+ticker scoped)")
 
+    @property
+    def query(self) -> str:
+        return self.input.get("query", "")
+
+    def model_post_init(self, __context: object) -> None:
+        if len(self.query) > 1500:
+            raise ValueError("query exceeds maximum length of 1500 characters")
+
 class ChatOutput(BaseModel):
     message: str | None = None
     follow_ups: list[str] = Field(default_factory=list)

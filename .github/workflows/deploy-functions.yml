@@ -142,6 +142,7 @@ jobs:
                 --source ./src/features/$GRAPH/agent \
                 --region us-central1 \
                 --no-allow-unauthenticated \
+                --max-instances=10 \
                 --update-secrets=LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest,LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest,LANGSMITH_ENDPOINT=LANGSMITH_ENDPOINT:latest$EXTRA_SECRETS \
                 --update-env-vars=LANGSMITH_TRACING=true,LANGCHAIN_TRACING_V2=true \
                 --quiet

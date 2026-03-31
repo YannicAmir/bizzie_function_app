@@ -127,38 +127,67 @@ def get_tavily_tool() -> TavilySearch:
         ],
     )
 
+_fmp_client: MultiServerMCPClient | None = None
+_fmp_tools: list[Any] | None = None
+
+
 async def _get_fmp_client() -> MultiServerMCPClient:
-    """Build a MultiServerMCPClient asynchronously."""
-    return await asyncio.to_thread(
-        MultiServerMCPClient,
-        {
-            "fmp": {
-                "url": config.fmp_mcp_url,
-                "transport": "streamable_http",
-            }
-        }
-    )
+    """Return the module-level MCP client singleton, initialising it on first call."""
+    global _fmp_client
+    if _fmp_client is None:
+        _fmp_client = await asyncio.to_thread(
+            MultiServerMCPClient,
+            {
+                "fmp": {
+                    "url": config.fmp_mcp_url,
+                    "transport": "streamable_http",
+                }
+            },
+        )
+        logger.info("FMP MCP client initialised (singleton)")
+    return _fmp_client
+
 
 async def get_fmp_tools() -> list[Any]:
-    """Return available sanitized FMP tools."""
+    """Return the sanitized FMP tool list, fetching it once per container lifetime."""
+    global _fmp_tools
+    if _fmp_tools is not None:
+        return _fmp_tools
+
     client = await _get_fmp_client()
     tools = await client.get_tools()
-    
+
+    sanitized: list[Any] = []
     for _t in tools:
         if hasattr(_t, "args"):
             _san_args = _t.args.copy()
             strip_unsupported_keys(_san_args)
             if hasattr(_t, "model_copy"):
                 _t = _t.model_copy(update={"args": _san_args})
-    
-    logger.info("Loaded sanitized FMP tools", extra={"json_fields": {"tool_count": len(tools)}})
-    return tools
+        sanitized.append(_t)
+
+    logger.info("Loaded sanitized FMP tools", extra={"json_fields": {"tool_count": len(sanitized)}})
+    _fmp_tools = sanitized
+    return _fmp_tools
+
 
 async def call_fmp_tool(tool_name: str, args: dict[str, Any]) -> Any:
-    """Call a single FMP MCP tool directly."""
-    client = await _get_fmp_client()
-    tools = await client.get_tools()
+    """Call a single FMP MCP tool, with Redis cache-aside by tool category TTL."""
+    from src.features.bizzie_chat.agent.cache import cache_get, cache_set, fmp_cache_key, fmp_ttl
+
+    key = fmp_cache_key(tool_name, args)
+    cached = await cache_get(key)
+    if cached is not None:
+        logger.info(
+            "FMP cache hit",
+            extra={"json_fields": {"tool": tool_name, "cache_key": key}},
+        )
+        return cached
+
+    tools = await get_fmp_tools()
     tool = next((t for t in tools if t.name == tool_name), None)
     if tool is None:
         raise ValueError(f"FMP tool '{tool_name}' not found")
-    return await tool.ainvoke(args)
+    result = await tool.ainvoke(args)
+    await cache_set(key, result, fmp_ttl(tool_name))
+    return result

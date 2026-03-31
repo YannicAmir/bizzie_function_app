@@ -55,12 +55,12 @@ def _experience_instruction(investing_experience: str) -> str:
     )
 
 
-def _format_history(conversation_history: list[dict]) -> str:
-    """Format conversation history as a readable string for LLM context."""
+def _format_history(conversation_history: list[dict], max_turns: int = 6) -> str:
+    """Format the last max_turns of conversation history as a readable string for LLM context."""
     if not conversation_history:
         return ""
     lines = ["Previous conversation:"]
-    for turn in conversation_history:
+    for turn in conversation_history[-max_turns:]:
         role = turn.get("role", "user")
         content = turn.get("content", "")
         lines.append(f"{role.capitalize()}: {content}")
@@ -91,7 +91,8 @@ async def ambassador_fmp_call(state: BizzieState) -> dict[str, Any]:
 
     referenced_ticker = state.get("referenced_ticker")
     if state.get("references_different_company") and referenced_ticker:
-        if re.match(r"^[A-Z]{1,5}$", referenced_ticker):
+        referenced_ticker = referenced_ticker.replace(".", "-")
+        if re.match(r"^[A-Z]{1,5}(-[A-Z]{1,2})?$", referenced_ticker):
             tickers_to_fetch.append(referenced_ticker)
         else:
             logger.warning(

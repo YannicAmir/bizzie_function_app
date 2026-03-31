@@ -195,13 +195,14 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
         extra={"json_fields": {"node": "fmp_agent", "thread_id": thread_id, "ticker": company_ticker}},
     )
 
-    # Validate referenced_ticker before any FMP call
-    if referenced_ticker and not re.match(r"^[A-Z]{1,5}$", referenced_ticker):
-        logger.warning(
-            "fmp_agent: referenced_ticker failed format validation",
-            extra={"json_fields": {"node": "fmp_agent", "thread_id": thread_id}},
-        )
-        referenced_ticker = None
+    if referenced_ticker:
+        referenced_ticker = referenced_ticker.replace(".", "-")
+        if not re.match(r"^[A-Z]{1,5}(-[A-Z]{1,2})?$", referenced_ticker):
+            logger.warning(
+                "fmp_agent: referenced_ticker failed format validation",
+                extra={"json_fields": {"node": "fmp_agent", "thread_id": thread_id}},
+            )
+            referenced_ticker = None
 
     try:
         fmp_tools = await get_fmp_tools()

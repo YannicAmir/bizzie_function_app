@@ -20,6 +20,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from src.features.bizzie_chat.agent.cache import cache_get, cache_set, hash_query
 from src.features.bizzie_chat.agent.config import config
 from src.features.bizzie_chat.agent.state import BizzieState
 from src.features.bizzie_chat.agent.nodes.circuit_breaker import _get_thread_id
@@ -70,11 +71,22 @@ async def follow_up_generator(state: BizzieState) -> dict[str, Any]:
     company_name = state["company_name"]
     references_different = state.get("references_different_company", False)
     referenced_ticker = state.get("referenced_ticker")
+    route_path = state.get("route_path", "unknown")
+    query_hash = hash_query(state["query"])
+    followup_cache_key = f"followups:{company_ticker}:{route_path}:{query_hash}"
 
     logger.info(
         "follow_up_generator: start",
         extra={"json_fields": {"node": "follow_up_generator", "thread_id": thread_id}},
     )
+
+    cached_followups = await cache_get(followup_cache_key)
+    if cached_followups is not None:
+        logger.info(
+            "follow_up_generator: cache hit",
+            extra={"json_fields": {"node": "follow_up_generator", "thread_id": thread_id}},
+        )
+        return {"follow_ups": cached_followups}
 
     try:
         llm = ChatGoogleGenerativeAI(
@@ -151,6 +163,7 @@ async def follow_up_generator(state: BizzieState) -> dict[str, Any]:
             "follow_up_generator: complete",
             extra={"json_fields": {"node": "follow_up_generator", "thread_id": thread_id, "count": len(follow_ups)}},
         )
+        await cache_set(followup_cache_key, follow_ups, 1800)
         return {"follow_ups": follow_ups}
 
     except (json.JSONDecodeError, Exception) as exc:
