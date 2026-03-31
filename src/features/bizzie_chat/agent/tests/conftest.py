@@ -34,21 +34,24 @@ def pytest_configure(config: pytest.Config) -> None:
     Called automatically by pytest — no need to add to any fixture.
 
     Load order (later files override earlier ones):
-      1. .env             (base values shared across all envs)
-      2. .env.{APP_ENV}   (env-specific values — sets CONFIDENT_API_KEY)
-      3. .env.local       (personal overrides, never committed)
-    Process environment variables always win over any dotenv file.
-
-    To switch environments:
-      APP_ENV=qa deepeval test run tests/
-      APP_ENV=prod deepeval test run tests/
+      1. .env              (base configuration)
+      2. .env.{APP_ENV}    (environment-specific project names)
+      3. .secret.local     (at root — mirrors GCP secrets, contains API keys)
+      4. .env.local        (personal/local overrides)
     """
     agent_dir = Path(__file__).parent.parent
+    root_dir = _REPO_ROOT
     env_name = os.getenv("APP_ENV", "dev")
 
-    load_dotenv(agent_dir / ".env", override=False)
-    load_dotenv(agent_dir / f".env.{env_name}", override=False)
-    load_dotenv(agent_dir / ".env.local", override=False)
+    # 1. Base
+    load_dotenv(agent_dir / ".env")
+    # 2. Env-specific (dev/prod)
+    load_dotenv(agent_dir / f".env.{env_name}", override=True)
+    # 3. Secret mirror (mirrors GCP Secrets)
+    load_dotenv(root_dir / ".secret.local", override=True)
+    # 4. Overrides
+    load_dotenv(root_dir / ".env.local", override=True)
+    load_dotenv(agent_dir / ".env.local", override=True)
 
 
 # ---------------------------------------------------------------------------
@@ -73,25 +76,15 @@ def graph():
 
 @pytest.fixture
 def base_state() -> dict:
-    """
-    Minimal valid BizzieState for tests.
-
-    Override specific fields in each test:
-        def test_something(base_state):
-            state = {**base_state, "query": "What is Apple's P/E ratio?"}
-    """
+    """Matches the confirmed BizzieState input schema."""
     return {
-        "uid": "test-user-001",
-        "session_id": "test-session-001",
-        "query": "",                      # override per test
-        "company_ticker": "AAPL",
-        "company_name": "Apple Inc.",
-        "investing_experience": "intermediate",
+        "uid": "user_123",
+        "session_id": "session_456",
+        "query": "",  # overridden in tests
+        "company_ticker": "INTU",
+        "company_name": "Intuit Inc.",
+        "investing_experience": "expert",
         "conversation_history": [],
-        "model_pro": None,                # None = use config default
-        "model_flash": None,
-        "model_flash_lite": None,
-        "fmp_available": True,
         "metadata": {},
     }
 
@@ -105,21 +98,17 @@ def judge_model():
     """
     The LLM DeepEval uses to judge your agent's outputs.
 
-    Uses Gemini Vertex AI — the same model provider as the agent itself.
-    No extra API keys required beyond what you already have for running the agent.
-
-    Requirements:
-      - GCLOUD_PROJECT must be set (already in your .env.local)
-      - GCP auth must be active: run `gcloud auth application-default login`
-        OR set GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-
-    Gemini 2.0 Flash is a good balance of speed and quality for evaluation.
-    You can change the model_name to any Gemini model your project has access to.
+    Uses the latest Gemini models via Vertex AI (Global Endpoint).
+    Note: Gemini 3.1 preview models currently require the 'global' location on Vertex AI.
     """
-    from deepeval.models import GeminiVertexAI
+    from deepeval.models import GeminiModel
 
-    return GeminiVertexAI(
-        model_name="gemini-2.0-flash",
-        project_id=os.getenv("GCLOUD_PROJECT", ""),
-        location=os.getenv("GCP_LOCATION", "us-central1"),
+    model_id = os.getenv("DEEPEVAL_JUDGE_MODEL", "gemini-3.1-flash-lite-preview")
+    project = os.getenv("GCLOUD_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    
+    return GeminiModel(
+        model=model_id,
+        project=project,
+        location="global",
+        use_vertexai=True,
     )

@@ -9,20 +9,26 @@ Follow these phases to design and implement evaluation tests for a specific feat
 
 ---
 
-## Phase 1: Feature Analysis
+## Phase 1: Logic Extraction (NEW)
+
+1.  **Call `deepeval-logic-extractor`**: Analyze the LangGraph implementation to define "Intended Behavior".
+2.  **Generate `synthesizer_info.md`**: Store the analysis and metric requirements in `src/features/[feature]/agent/tests/synthesizer_info.md`.
+3.  **Define Pass/Fail Logic**: Explicitly document that refusals for off-topic queries are a PASS and should use G-Eval.
+
+## Phase 2: Scenario Mapping
 
 1.  **Analyze Feature**: Identify the target feature and its LLM nodes (guardian, tool-caller, summarizer, etc.).
 2.  **Define Coverage**: Decide whether to test individual nodes (unit) or the entire graph (end-to-end).
-3.  **Map Metrics**: Select the appropriate DeepEval metrics for each test case (Relevancy, Faithfulness, GEval, etc.).
+3.  **Map Metrics**: Select metrics based on the **`synthesizer_info.md`** (e.g., G-Eval for refusals, Relevancy for answers).
 
----
+## Phase 3: Gold Dataset Seeding
 
-## Phase 2: Design & Planning
-
-1.  **Draft Implementation Plan**:
-    - List the test scenarios (queries, expected outputs, context).
-    - Map each scenario back to a specific DeepEval metric and threshold.
-2.  **Confirm with User**: Seek explicit approval before writing code.
+1.  **Draft Initial "Gold" Cases**:
+    - Build 10-15 manual cases (Happy Path, Edge Cases, Negative/Exit cases).
+    - Align `expected_output` with the **`synthesizer_info.md`** logic.
+2.  **Synthetic Expansion**: Configure the `Synthesizer` using the **`synthesizer_info.md`** context to scale to 50+ realistic cases.
+3.  **Mapping Metrics**: Assign specific DeepEval metrics and thresholds to each case group.
+4.  **Confirm with User**: Review the scenario list before implementation.
 
 ---
 

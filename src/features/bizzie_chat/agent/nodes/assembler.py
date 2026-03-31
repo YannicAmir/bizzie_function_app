@@ -23,6 +23,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from src.features.bizzie_chat.agent.config import config
 from src.features.bizzie_chat.agent.state import BizzieState
 from src.features.bizzie_chat.agent.nodes.circuit_breaker import _get_thread_id
+from src.features.bizzie_chat.agent.nodes.ambassador import PRICE_DISCLAIMER
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,9 @@ _SANITIZE_PATTERNS = [
     re.compile(r"\bLooking\s+(up|at|through)\s+.{0,40}?\.\.\.", re.IGNORECASE),
     re.compile(r"\bQuerying\s+.{0,40}?\.\.\.", re.IGNORECASE),
     re.compile(r"\bFetching\s+.{0,40}?\.\.\.", re.IGNORECASE),
+    # Strip any LLM-generated price disclaimer — the assembler appends it
+    # deterministically via show_price_disclaimer, so we never want duplicates.
+    re.compile(r"Note:\s*Prices?\s+shown\s+are\s+delayed\s+by\s+15\s+minutes\.?", re.IGNORECASE),
 ]
 
 
@@ -170,6 +174,9 @@ async def response_assembler(state: BizzieState) -> dict[str, Any]:
         or state.get("raw_response")
         or "I'm sorry, I couldn't fetch the financial data for that query right now. Please try again or ask something else."
     )
+
+    if state.get("show_price_disclaimer"):
+        message = f"{message}\n\n_{PRICE_DISCLAIMER}_"
 
     follow_ups = state.get("follow_ups") or []
     route_path = state.get("route_path") or "error"

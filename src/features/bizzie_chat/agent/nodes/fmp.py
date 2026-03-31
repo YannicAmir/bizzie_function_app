@@ -13,8 +13,53 @@ import logging
 import re
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+_ET = ZoneInfo("America/New_York")
+_MARKET_CLOSE_MINUTES = 16 * 60 + 15  # 4:15 PM ET
+
+_EOD_PRICE_TOOLS = {
+    "historical-price-eod-light",
+}
+
+
+def _should_show_price_disclaimer(
+    tool_results: list[tuple[str, Any]],
+    fmp_name_map: dict[str, str],
+) -> bool:
+    """
+    Deterministic check — no LLM involved.
+
+    Returns True only when all three conditions hold:
+      1. At least one EOD price tool was executed.
+      2. The most recent record in that result carries today's date (ET).
+      3. Current ET clock time is before 4:15 PM (market data may be 15 min delayed).
+
+    Uses America/New_York so DST is handled correctly year-round.
+    """
+    now_et = datetime.now(tz=_ET)
+    if now_et.hour * 60 + now_et.minute >= _MARKET_CLOSE_MINUTES:
+        return False  # After 4:15 PM ET — price is settled, no disclaimer needed
+
+    today_str = now_et.strftime("%Y-%m-%d")
+    for raw_name, data in tool_results:
+        orig_name = fmp_name_map.get(raw_name, raw_name)
+        if orig_name not in _EOD_PRICE_TOOLS:
+            continue
+        # FMP EOD endpoints return a list of daily records, newest first.
+        # Some endpoints nest them under a "historical" key.
+        records = (
+            data
+            if isinstance(data, list)
+            else (data.get("historical") if isinstance(data, dict) else None)
+        )
+        if records and isinstance(records[0], dict) and records[0].get("date") == today_str:
+            return True
+    return False
+
+
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.features.bizzie_chat.agent.config import config
@@ -347,17 +392,7 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
             for name, data in tool_results
         )
 
-        EOD_PRICE_TOOLS = {
-            "historical-price-eod-full",
-            "historical-price-eod-light",
-            "historical-price-eod-dividend-adjusted",
-        }
-        executed_tool_names = {_fmp_name_map.get(name, name) for name, _ in tool_results}
-        used_price_data = bool(executed_tool_names & EOD_PRICE_TOOLS)
-        price_disclaimer_instruction = (
-            f"PRICE DATA DISCLAIMER: Append exactly: '{PRICE_DISCLAIMER}'\n"
-            if used_price_data else ""
-        )
+        show_price_disclaimer = _should_show_price_disclaimer(tool_results, _fmp_name_map)
 
         if references_different and referenced_ticker:
             synth_system = (
@@ -368,7 +403,6 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
                 f"(2) pivot to {company_ticker} in depth. "
                 f"If you used knowledge for {referenced_ticker}, append: "
                 f"'Note: information about {referenced_ticker} is based on general knowledge and may not reflect the most current data.'\n"
-                f"{price_disclaimer_instruction}"
                 f"{_experience_instruction(experience)}"
             )
         else:
@@ -376,9 +410,7 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
                 CONCISE_DIRECTIVE +
                 f"You are a world-class financial analyst. You are answering a question about {company_name} ({company_ticker}). "
                 f"Today: {today_str}.\n"
-                f"Synthesize the research data into a direct, narrative answer. "
-                f"Explain the 'why', not just the 'what'.\n"
-                f"{price_disclaimer_instruction}"
+                f"Synthesize the research data into a direct, narrative answer. Explain the 'why', not just the 'what'.\n"
                 f"{_experience_instruction(experience)}"
             )
 
@@ -399,16 +431,17 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
                 extra={"json_fields": {"node": "fmp_agent", "thread_id": thread_id}},
             )
 
-            tool_data_blocks = []
-            for m in messages:
-                if isinstance(m, ToolMessage):
-                    tool_data_blocks.append(f"--- TOOL RESULT ---\n{m.content}\n")
+            # In the 2-shot architecture, tool results live in tool_results — no messages list.
+            tool_data_blocks = [
+                f"--- TOOL RESULT ({name}) ---\n{json.dumps(data) if not isinstance(data, str) else data}\n"
+                for name, data in tool_results
+            ]
 
             if tool_data_blocks:
                 mega_research_text = "\n".join(tool_data_blocks)
                 manual_summary_prompt = [
-                    SystemMessage(content=f"You are a financial analyst. Synthesize the following research data for {company_name} ({company_ticker}) into a deep, investigative final answer. "
-                                          f"Always include the 15-minute price delay disclaimer.\n\nToday's Date: {datetime.now().strftime('%B %-d, %Y')}."),
+                    SystemMessage(content=f"You are a financial analyst. Synthesize the following research data for {company_name} ({company_ticker}) into a direct answer. "
+                                          f"Today's Date: {datetime.now().strftime('%B %-d, %Y')}."),
                     HumanMessage(content=f"RESEARCH DATA:\n{mega_research_text}\n\nUSER QUESTION: {state['query']}\n\nProvide the final answer now:")
                 ]
 
@@ -453,6 +486,7 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
             "fmp_error": None,
             "route_path": "fmp",
             "source": "fmp",
+            "show_price_disclaimer": show_price_disclaimer,
             "metadata": metadata,
         }
 

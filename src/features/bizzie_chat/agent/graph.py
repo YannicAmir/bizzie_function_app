@@ -18,6 +18,7 @@ from src.features.bizzie_chat.agent.nodes import (
     fmp_agent,
     follow_up_generator,
     guardian_classifier,
+    price_redirect_agent,
     response_assembler,
     response_sanitizer,
     stock_query_circuit_breaker_check,
@@ -30,11 +31,13 @@ logger = logging.getLogger(__name__)
 
 def route_after_guardian(
     state: BizzieState,
-) -> Literal["exit_agent", "doc_summary_node", "ambassador_circuit_breaker_check", "stock_query_circuit_breaker_check", "error_response_node"]:
+) -> Literal["exit_agent", "price_redirect_agent", "doc_summary_node", "ambassador_circuit_breaker_check", "stock_query_circuit_breaker_check", "error_response_node"]:
     """Route after guardian_classifier based on classification."""
     route = state.get("route_path")
     if route == "exit":
         return "exit_agent"
+    if route == "price_redirect":
+        return "price_redirect_agent"
     if route == "doc_summary":
         return "doc_summary_node"
     if route == "ambassador":
@@ -95,6 +98,7 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
 
     builder.add_node("guardian_classifier", guardian_classifier)
     builder.add_node("exit_agent", exit_agent)
+    builder.add_node("price_redirect_agent", price_redirect_agent)
     builder.add_node("doc_summary_node", doc_summary_node)
     builder.add_node("ambassador_circuit_breaker_check", ambassador_circuit_breaker_check)
     builder.add_node("ambassador_fmp_call", ambassador_fmp_call)
@@ -114,6 +118,7 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
         route_after_guardian,
         {
             "exit_agent": "exit_agent",
+            "price_redirect_agent": "price_redirect_agent",
             "doc_summary_node": "doc_summary_node",
             "ambassador_circuit_breaker_check": "ambassador_circuit_breaker_check",
             "stock_query_circuit_breaker_check": "stock_query_circuit_breaker_check",
@@ -122,6 +127,7 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
     )
 
     builder.add_edge("exit_agent", END)
+    builder.add_edge("price_redirect_agent", END)
     builder.add_edge("error_response_node", END)
 
     builder.add_conditional_edges(

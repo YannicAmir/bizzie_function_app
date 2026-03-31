@@ -96,6 +96,10 @@ GUARDIAN_CLASSIFIER_TOOL: dict[str, Any] = {
                 "type": "boolean",
                 "description": "Complex multi-step analysis or qualitative synthesis vs straightforward lookup.",
             },
+            "is_price_only_query": {
+                "type": "boolean",
+                "description": "True ONLY if the user is asking solely for the current stock price (e.g. 'what is the price?', 'how much is it trading at?', 'what is the stock price?'). False for anything involving analysis, trends, history, comparisons, or other data.",
+            },
         },
         "required": [
             "non_stock_related",
@@ -104,6 +108,7 @@ GUARDIAN_CLASSIFIER_TOOL: dict[str, Any] = {
             "references_different_company",
             "required_data_categories",
             "requires_deep_reasoning",
+            "is_price_only_query",
         ],
     },
 }

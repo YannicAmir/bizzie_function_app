@@ -1,6 +1,12 @@
 # Dependencies
 node_modules/
 
+# DeepEval
+.deepeval/
+
+# LangGraph / LangSmith
+.langgraph_api/
+
 # Python
 .venv/
 __pycache__/
@@ -25,6 +31,8 @@ firebase-debug.*.log
 .env
 .env.local
 .env.*.local
+.env.dev
+.env.prod
 .secret.local
 
 # Operating System

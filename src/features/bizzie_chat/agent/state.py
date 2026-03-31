@@ -24,12 +24,16 @@ class BizzieState(TypedDict):
     # Routing
     route_path: str | None
 
+    # Guardian classification extras
+    is_price_only_query: bool
+
     # FMP / ambassador path
     fmp_company_profile: dict[str, Any] | None
     fmp_result: str | None
     fmp_error: str | None
     fmp_available: bool
     ambassador_used_fmp_data: bool
+    show_price_disclaimer: bool
 
     # Tavily fallback path
     tavily_result: str | None

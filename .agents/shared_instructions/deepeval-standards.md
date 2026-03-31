@@ -63,7 +63,33 @@ All evaluations must use the `LLMTestCase` class. Required fields depend on the 
 
 ---
 
-## 7. Async Support (LangGraph)
+## 7. Evaluation Strategy: The "Smoke" vs. "Full" Set
 
-- **Native Async**: Use `async def test_...` with the `pytest-asyncio` plugin (configured with `asyncio_mode = "auto"`) to test LangGraph nodes.
-- **Fixtures**: Use `scope="session"` for graph compilation and judge model initialization to keep tests fast.
+To balance speed and cost in CI/CD, use two tiers of datasets:
+- **Smoke Set (10-15 cases)**: Runs on every PR commit. Catches catastrophic failures and major hallucinations.
+- **Full Set (50-200 cases)**: Runs on Merges to `main` or Nightly. Provides the definitive quality benchmark.
+
+---
+
+## 8. CI/CD Governance
+
+- **PR Benchmarking**: Running evaluations as a PR check is the **Industry Standard**. It prevents quality degradation from reaching production.
+- **Metric Thresholding**: Start with "Soft Fail" (warnings) and move to "Hard Fail" once the system is calibrated.
+- **Results Review**: Engineers must review the "Judge Reasoning" in Confident AI for any failed test case before requesting a re-run.
+
+---
+
+## 9. State-Aware Evaluation (LangGraph)
+
+When testing LangGraph agents, do not just score the final string. Use the `retrieval_context` field to score the intermediate outputs of specific nodes (e.g., the context retrieved by the RAG tool) to ensure the internal logic is sound.
+
+---
+
+## 10. Logic-Aware Expectations (Intended Behavior)
+
+Professional evaluation must distinguish between "Failures" and "Intended Refusals" (Negative Test Cases).
+
+- **The "Refusal is a Pass" Rule**: If an agent is asked something off-topic and correctly refuses, this is a **PASS**.
+- **Metric Mismatch Warning**: Do NOT use `AnswerRelevancyMetric` for negative test cases. It will fail the refusal because it doesn't "answer" the query.
+- **GEval for Refusals**: Use `GEval` with criteria like "Adherence to Guardrails" or "Politeness" for negative paths.
+- **Requirement Traceability**: Before generating tests, use the **`deepeval-logic-extractor`** skill to document the graph's intended behavior in a `synthesizer_info.md` file.

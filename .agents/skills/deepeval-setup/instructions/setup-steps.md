@@ -16,7 +16,15 @@ Follow these phases to initialize the evaluation environment.
 
 ---
 
-## Phase 2: Configuration
+## Phase 2: Gold Dataset Design
+
+1.  **Seed the Gold Set**: Manually create 10-15 "Foundational" test cases covering Happy Paths, Edge Cases, and Out-of-Bounds queries.
+2.  **Synthetic Expansion**: Use the DeepEval `Synthesizer` to generate 30-50 additional cases based on the feature's system prompt and source documents.
+3.  **Confirm Scenarios**: Review the generated scenarios with the user to ensure they align with business requirements.
+
+---
+
+## Phase 3: Configuration
 
 1.  **Pytest Config**: Update `pyproject.toml` to include:
     - `testpaths = ["tests"]`
@@ -26,7 +34,15 @@ Follow these phases to initialize the evaluation environment.
 
 ---
 
-## Phase 3: Infrastructure Scaffold
+## Phase 4: CI/CD Integration
+
+1.  **Secret Configuration**: Ensure `CONFIDENT_API_KEY` is added to GitHub Secrets for each environment.
+2.  **YAML Setup**: Reference `[.agent/shared_instructions/deepeval-cicd.md](.agent/shared_instructions/deepeval-cicd.md)` to add the `deepeval test run` step to the deployment pipeline.
+3.  **Soft Fail Period**: Configure the CI step to "Warning Only" for the first 2 weeks to calibrate thresholds.
+
+---
+
+## Phase 5: Infrastructure Scaffold
 
 1.  **Scaffold conftest.py**: Create a session-scoped fixture in `tests/conftest.py` for:
     - Path resolution so feature imports work.

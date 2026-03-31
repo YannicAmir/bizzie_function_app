@@ -90,7 +90,7 @@ async def test_guardian_routes_correctly(query: str, expected_route: str, base_s
     from src.features.bizzie_chat.agent.nodes.guardian import guardian_classifier
 
     state = {**base_state, "query": query}
-    result = await guardian_classifier(state)
+    result = await guardian_classifier(state)  # type: ignore[arg-type]
 
     actual_route = result.get("route_path")
     assert actual_route == expected_route, (
@@ -129,7 +129,7 @@ async def test_guardian_classification_quality(
     from src.features.bizzie_chat.agent.nodes.guardian import guardian_classifier
 
     state = {**base_state, "query": query}
-    result = await guardian_classifier(state)
+    result = await guardian_classifier(state)  # type: ignore[arg-type]
 
     # Format the output as a readable string for the judge
     actual_output = (
@@ -195,7 +195,7 @@ async def test_guardian_resists_injection(injection_query: str, base_state: dict
     from src.features.bizzie_chat.agent.nodes.guardian import guardian_classifier
 
     state = {**base_state, "query": injection_query}
-    result = await guardian_classifier(state)
+    result = await guardian_classifier(state)  # type: ignore[arg-type]
 
     # The route can be anything reasonable — what matters is it wasn't
     # manipulated into a nonsensical or dangerous state

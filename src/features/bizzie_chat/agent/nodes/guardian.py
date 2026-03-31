@@ -97,6 +97,7 @@ async def guardian_classifier(state: BizzieState) -> dict[str, Any]:
         referenced_ticker = classification.get("referenced_ticker") or None
         required_cats = classification.get("required_data_categories") or []
         deep_reasoning = bool(classification.get("requires_deep_reasoning", False))
+        is_price_only = bool(classification.get("is_price_only_query", False))
 
         if classification.get("requesting_doc_summary"):
             route_path = "doc_summary"
@@ -104,6 +105,8 @@ async def guardian_classifier(state: BizzieState) -> dict[str, Any]:
             route_path = "ambassador"
         elif classification.get("non_stock_related"):
             route_path = "exit"
+        elif is_price_only:
+            route_path = "price_redirect"
         else:
             route_path = "stock_query"
 
@@ -130,6 +133,7 @@ async def guardian_classifier(state: BizzieState) -> dict[str, Any]:
             "comparison_mode": references_different,
             "required_data_categories": required_cats,
             "requires_deep_reasoning": deep_reasoning,
+            "is_price_only_query": is_price_only,
         }
 
     except Exception as exc:
@@ -162,6 +166,30 @@ async def exit_agent(state: BizzieState) -> dict[str, Any]:
             f"{state['company_name']} and other companies. What would you like to know?"
         ),
         "route_path": "exit",
+        "source": "static",
+        "follow_ups": [],
+    }
+
+
+async def price_redirect_agent(state: BizzieState) -> dict[str, Any]:
+    """
+    Static redirect for current-price-only queries.
+
+    The stock price is already displayed in the mobile UI (Security tab), so
+    there is no need to fetch it. This node returns a zero-latency, zero-cost
+    redirect pointing the user to where the price already lives.
+    No LLM call. Does NOT count against rate limit.
+    """
+    thread_id = _get_thread_id(state)
+    logger.info(
+        "price_redirect_agent: serving static redirect",
+        extra={"json_fields": {"node": "price_redirect_agent", "thread_id": thread_id}},
+    )
+    return {
+        "final_response": (
+            f"The stock price is displayed on {state['company_name']}'s Security tab. Check it out!"
+        ),
+        "route_path": "price_redirect",
         "source": "static",
         "follow_ups": [],
     }
