@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from typing import cast
 
+import deepeval
 import pytest
 from deepeval import assert_test
 from deepeval.dataset import EvaluationDataset, Golden
@@ -21,8 +22,10 @@ from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from dotenv import load_dotenv
 
 # ---------------------------------------------------------------------------
-# Load env before pulling dataset (dataset pull happens at collection time,
-# before conftest.py's pytest_configure runs, so we load here too)
+# Load env + authenticate before pulling dataset.
+# `deepeval test run` imports test modules before pytest_configure fires,
+# so both env loading and deepeval.login() must happen here — not just in
+# conftest.py — to ensure the dataset pull is fully authenticated.
 # ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).parents[5]
 _AGENT_DIR = Path(__file__).parent.parent
@@ -33,6 +36,10 @@ load_dotenv(_AGENT_DIR / f".env.{_ENV_NAME}", override=True)
 load_dotenv(_REPO_ROOT / ".secret.local", override=True)
 load_dotenv(_REPO_ROOT / ".env.local", override=True)
 load_dotenv(_AGENT_DIR / ".env.local", override=True)
+
+_confident_api_key = os.getenv("CONFIDENT_API_KEY")
+if _confident_api_key:
+    deepeval.login(_confident_api_key)
 
 # ---------------------------------------------------------------------------
 # Pull dataset — happens once at collection time
