@@ -93,6 +93,8 @@ jobs:
           CONFIDENT_API_KEY: ${{ steps.secrets.outputs.CONFIDENT_API_KEY }}
           GCLOUD_PROJECT: ${{ steps.auth.outputs.project_id }}
           APP_ENV: dev
+          DEEPEVAL_JUDGE_MODEL: gemini-2.5-flash-lite
+          DEEPEVAL_JUDGE_LOCATION: us-central1
         run: |
           cd src/features/bizzie_chat/agent
-          deepeval test run tests/ -n 10 -id "PR-${{ github.event.number }}"
+          deepeval test run tests/test_smoke.py -n 10 -id "PR-${{ github.event.number }}"

@@ -104,17 +104,20 @@ def judge_model():
     """
     The LLM DeepEval uses to judge your agent's outputs.
 
-    Uses the latest Gemini models via Vertex AI (Global Endpoint).
-    Note: Gemini 3.1 preview models currently require the 'global' location on Vertex AI.
+    Defaults to gemini-3.1-flash-lite-preview on the global Vertex AI endpoint for local runs.
+    In CI, DEEPEVAL_JUDGE_MODEL and DEEPEVAL_JUDGE_LOCATION are set explicitly via env vars
+    to use a stable GA model (gemini-2.5-flash-lite at us-central1).
     """
     from deepeval.models import GeminiModel
 
     model_id = os.getenv("DEEPEVAL_JUDGE_MODEL", "gemini-3.1-flash-lite-preview")
     project = os.getenv("GCLOUD_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
 
+    location = os.getenv("DEEPEVAL_JUDGE_LOCATION", "global")
+
     return GeminiModel(
         model=model_id,
         project=project,
-        location="global",
+        location=location,
         use_vertexai=True,
     )
