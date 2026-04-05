@@ -97,7 +97,7 @@ jobs:
           TAVILY_API_KEY: ${{ steps.secrets.outputs.TAVILY_API_KEY }}
           GCLOUD_PROJECT: ${{ steps.auth.outputs.project_id }}
           APP_ENV: dev
-          DEEPEVAL_JUDGE_MODEL: gemini-3.1-flash-lite-preview
+          DEEPEVAL_JUDGE_MODEL: gemini-3-flash-preview
           DEEPEVAL_JUDGE_LOCATION: global
         run: |
           cd src/features/bizzie_chat/agent

@@ -110,7 +110,7 @@ def judge_model():
     """
     from deepeval.models import GeminiModel
 
-    model_id = os.getenv("DEEPEVAL_JUDGE_MODEL", "gemini-3.1-flash-lite-preview")
+    model_id = os.getenv("DEEPEVAL_JUDGE_MODEL", "gemini-3-flash-preview")
     project = os.getenv("GCLOUD_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
 
     location = os.getenv("DEEPEVAL_JUDGE_LOCATION", "global")
