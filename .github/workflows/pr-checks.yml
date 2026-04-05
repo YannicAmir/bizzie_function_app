@@ -78,8 +78,11 @@ jobs:
           secrets: |
             CONFIDENT_API_KEY:${{ steps.auth.outputs.project_id }}/CONFIDENT_API_KEY
 
+      - name: Login to Confident AI
+        run: deepeval login --confident-api-key "${{ steps.secrets.outputs.CONFIDENT_API_KEY }}"
+
       - name: Run DeepEval Tests
-        continue-on-error: true  
+        continue-on-error: true
         env:
           CONFIDENT_API_KEY: ${{ steps.secrets.outputs.CONFIDENT_API_KEY }}
           GCLOUD_PROJECT: ${{ steps.auth.outputs.project_id }}
