@@ -11,9 +11,9 @@ Metrics used:
   - GEval (NoAdvice): Does the stock_query path avoid giving investment advice?
 
 How to run (from the agent/ directory):
-  APP_ENV=dev deepeval test run tests/test_response_quality.py -n 2 -v -id "response-quality-v1"
+  APP_ENV=dev deepeval test run tests/test_response_quality.py -n 10 -v -id "response-quality-v1"
 
-The -n 2 flag runs 2 test cases in parallel to speed things up.
+The -n 10 flag runs 10 test cases in parallel to speed things up.
 The -v flag prints the judge's reasoning for each metric score.
 
 Note: These tests make real API calls (Gemini + FMP/Tavily). Each test case

@@ -383,7 +383,7 @@ After writing all test files, tell the user the exact commands to run:
 cd src/features/{feature_name}/agent
 
 # Run all tests for dev (verbose, named run, 2 parallel)
-APP_ENV=dev deepeval test run tests/ -v -n 2 -id "dev-{feature}-$(date +%Y%m%d)"
+APP_ENV=dev deepeval test run tests/ -v -n 10 -id "dev-{feature}-$(date +%Y%m%d)"
 
 # Run a specific test file
 APP_ENV=dev deepeval test run tests/test_guardian_routing.py -v

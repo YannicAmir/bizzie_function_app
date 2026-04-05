@@ -6,7 +6,7 @@ To add, edit, or remove test cases — update create_dataset.py and re-run it.
 No changes to this file are needed.
 
 Run:
-    APP_ENV=dev deepeval test run src/features/bizzie_chat/agent/tests/test_smoke.py -n 2
+    APP_ENV=dev deepeval test run src/features/bizzie_chat/agent/tests/test_smoke.py -n 10
 """
 
 import os

@@ -49,3 +49,41 @@ jobs:
 
       - name: Run Tests
         run: npm test
+
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: pip install -r src/features/bizzie_chat/agent/requirements-dev.txt
+
+      - name: Authenticate with Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}
+
+      - name: Fetch Secrets from Secret Manager
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |
+            CONFIDENT_API_KEY:${{ steps.auth.outputs.project_id }}/CONFIDENT_API_KEY
+
+      - name: Run DeepEval Tests
+        continue-on-error: true  
+        env:
+          CONFIDENT_API_KEY: ${{ steps.secrets.outputs.CONFIDENT_API_KEY }}
+          GCLOUD_PROJECT: ${{ steps.auth.outputs.project_id }}
+          APP_ENV: dev
+        run: |
+          cd src/features/bizzie_chat/agent
+          deepeval test run tests/ -n 10 -id "PR-${{ github.event.number }}"

@@ -9,7 +9,7 @@ What this file does:
 - Provides the DeepEval judge model (uses Gemini Vertex AI — same as the agent itself)
 
 Usage:
-    APP_ENV=dev deepeval test run tests/ -n 2 -id "dev-sprint-01"
+    APP_ENV=dev deepeval test run tests/ -n 10 -id "dev-sprint-01"
 """
 
 import os
