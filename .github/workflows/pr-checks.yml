@@ -78,8 +78,17 @@ jobs:
           secrets: |
             CONFIDENT_API_KEY:${{ steps.auth.outputs.project_id }}/CONFIDENT_API_KEY
 
+      - name: Verify CONFIDENT_API_KEY is set
+        env:
+          CONFIDENT_API_KEY: ${{ steps.secrets.outputs.CONFIDENT_API_KEY }}
+        run: |
+          if [ -z "$CONFIDENT_API_KEY" ]; then
+            echo "ERROR: CONFIDENT_API_KEY is empty — Secret Manager fetch may have failed"
+            exit 1
+          fi
+          echo "CONFIDENT_API_KEY is set (length: ${#CONFIDENT_API_KEY})"
+
       - name: Run DeepEval Tests
-        continue-on-error: true
         env:
           CONFIDENT_API_KEY: ${{ steps.secrets.outputs.CONFIDENT_API_KEY }}
           GCLOUD_PROJECT: ${{ steps.auth.outputs.project_id }}
