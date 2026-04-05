@@ -20,13 +20,11 @@ How to run (from the agent/ directory):
   APP_ENV=dev deepeval test run tests/test_guardian_routing.py -v -id "guardian-v1"
 """
 
-import asyncio
 
 import pytest
 from deepeval import assert_test
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
-
 
 # ---------------------------------------------------------------------------
 # Test data — (query, expected_route, description_of_why)

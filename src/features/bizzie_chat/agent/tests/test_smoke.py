@@ -11,8 +11,7 @@ Run:
 
 import os
 from pathlib import Path
-
-from typing import List, cast
+from typing import cast
 
 import pytest
 from deepeval import assert_test
@@ -47,7 +46,7 @@ _PARAM_MAP = {
 
 _dataset = EvaluationDataset()
 _dataset.pull(alias="bizzie-chat-tests")
-_goldens: List[Golden] = cast(List[Golden], _dataset.goldens)
+_goldens: list[Golden] = cast(list[Golden], _dataset.goldens)
 
 
 # ---------------------------------------------------------------------------

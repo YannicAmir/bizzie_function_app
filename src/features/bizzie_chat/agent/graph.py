@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 
 def route_after_guardian(
     state: BizzieState,
-) -> Literal["exit_agent", "price_redirect_agent", "doc_summary_node", "ambassador_circuit_breaker_check", "stock_query_circuit_breaker_check", "error_response_node"]:
+) -> Literal[
+    "exit_agent", "price_redirect_agent", "doc_summary_node",
+    "ambassador_circuit_breaker_check", "stock_query_circuit_breaker_check", "error_response_node"
+]:
     """Route after guardian_classifier based on classification."""
     route = state.get("route_path")
     if route == "exit":

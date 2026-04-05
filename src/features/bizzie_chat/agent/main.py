@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 load_dotenv()
 load_dotenv(".env.local", override=True)
 
-from src.features.bizzie_chat.agent.config import config
-from src.features.bizzie_chat.agent.graph import build_graph, make_checkpointer
+from src.features.bizzie_chat.agent.config import config  # noqa: E402
+from src.features.bizzie_chat.agent.graph import build_graph, make_checkpointer  # noqa: E402
 
 if config.env != "local":
     google.cloud.logging.Client(project=config.gcp_project).setup_logging()

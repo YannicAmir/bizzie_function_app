@@ -59,27 +59,26 @@ def _should_show_price_disclaimer(
 
 
 
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
+from langchain_google_genai import ChatGoogleGenerativeAI  # noqa: E402
 
-from src.features.bizzie_chat.agent.config import config
-from src.features.bizzie_chat.agent.state import BizzieState
-from src.features.bizzie_chat.agent.tools import (
-    FMP_TOOL_CATEGORIES,
-    call_fmp_tool,
-    get_fmp_tools,
+from src.features.bizzie_chat.agent.config import config  # noqa: E402
+from src.features.bizzie_chat.agent.nodes.ambassador import (  # noqa: E402
+    CONCISE_DIRECTIVE,
+    _experience_instruction,
+    _format_history,
 )
-from src.features.bizzie_chat.agent.nodes.circuit_breaker import (
+from src.features.bizzie_chat.agent.nodes.circuit_breaker import (  # noqa: E402
     _get_thread_id,
     _read_circuit_breaker,
     _record_fmp_failure,
     _record_fmp_success,
 )
-from src.features.bizzie_chat.agent.nodes.ambassador import (
-    _experience_instruction,
-    _format_history,
-    CONCISE_DIRECTIVE,
-    PRICE_DISCLAIMER,
+from src.features.bizzie_chat.agent.state import BizzieState  # noqa: E402
+from src.features.bizzie_chat.agent.tools import (  # noqa: E402
+    FMP_TOOL_CATEGORIES,
+    call_fmp_tool,
+    get_fmp_tools,
 )
 
 logger = logging.getLogger(__name__)
@@ -386,7 +385,10 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
                 else:
                     await _record_fmp_failure(cb_data)
         else:
-            logger.warning("fmp_agent: empty tool plan — no tools executed", extra={"json_fields": {"node": "fmp_agent", "thread_id": thread_id}})
+            logger.warning(
+                "fmp_agent: empty tool plan — no tools executed",
+                extra={"json_fields": {"node": "fmp_agent", "thread_id": thread_id}},
+            )
 
         research_blocks = "\n\n".join(
             f"=== {name} ===\n{json.dumps(data) if not isinstance(data, str) else data}"
@@ -403,15 +405,17 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
                 f"Structure the response: (1) briefly cover {referenced_ticker} (2-3 sentences), "
                 f"(2) pivot to {company_ticker} in depth. "
                 f"If you used knowledge for {referenced_ticker}, append: "
-                f"'Note: information about {referenced_ticker} is based on general knowledge and may not reflect the most current data.'\n"
+                f"'Note: information about {referenced_ticker} is based on general knowledge "
+                f"and may not reflect the most current data.'\n"
                 f"{_experience_instruction(experience)}"
             )
         else:
             synth_system = (
                 CONCISE_DIRECTIVE +
-                f"You are a world-class financial analyst. You are answering a question about {company_name} ({company_ticker}). "
-                f"Today: {today_str}.\n"
-                f"Synthesize the research data into a direct, narrative answer. Explain the 'why', not just the 'what'.\n"
+                f"You are a world-class financial analyst. You are answering a question about "
+                f"{company_name} ({company_ticker}). Today: {today_str}.\n"
+                f"Synthesize the research data into a direct, narrative answer. "
+                f"Explain the 'why', not just the 'what'.\n"
                 f"{_experience_instruction(experience)}"
             )
 
@@ -441,9 +445,15 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
             if tool_data_blocks:
                 mega_research_text = "\n".join(tool_data_blocks)
                 manual_summary_prompt = [
-                    SystemMessage(content=f"You are a financial analyst. Synthesize the following research data for {company_name} ({company_ticker}) into a direct answer. "
-                                          f"Today's Date: {datetime.now().strftime('%B %-d, %Y')}."),
-                    HumanMessage(content=f"RESEARCH DATA:\n{mega_research_text}\n\nUSER QUESTION: {state['query']}\n\nProvide the final answer now:")
+                    SystemMessage(content=(
+                        f"You are a financial analyst. Synthesize the following research data for "
+                        f"{company_name} ({company_ticker}) into a direct answer. "
+                        f"Today's Date: {datetime.now().strftime('%B %-d, %Y')}."
+                    )),
+                    HumanMessage(content=(
+                        f"RESEARCH DATA:\n{mega_research_text}\n\n"
+                        f"USER QUESTION: {state['query']}\n\nProvide the final answer now:"
+                    ))
                 ]
 
                 response = await llm.ainvoke(manual_summary_prompt)
@@ -451,7 +461,11 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
         if not (response.content if hasattr(response, "content") else str(response)):
             logger.error("fmp_agent: Absolute empty response generated. Tool saturation or safety block likely.",
                          extra={"json_fields": {"node": "fmp_agent", "thread_id": thread_id}})
-            raw_response = "I encountered an internal error processing the financial data (empty response generated). The query may be too broad or trigger internal safety filters. Try asking a more specific question."
+            raw_response = (
+                "I encountered an internal error processing the financial data (empty response generated). "
+                "The query may be too broad or trigger internal safety filters. "
+                "Try asking a more specific question."
+            )
         elif isinstance(response.content, str):
             raw_response = response.content
         elif isinstance(response.content, list):

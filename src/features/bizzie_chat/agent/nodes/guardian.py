@@ -14,7 +14,12 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from src.features.bizzie_chat.agent.cache import cache_get, cache_set, guardian_cache_key, hash_query
+from src.features.bizzie_chat.agent.cache import (
+    cache_get,
+    cache_set,
+    guardian_cache_key,
+    hash_query,
+)
 from src.features.bizzie_chat.agent.config import config
 from src.features.bizzie_chat.agent.state import BizzieState
 from src.features.bizzie_chat.agent.tools import GUARDIAN_CLASSIFIER_TOOL
@@ -129,7 +134,11 @@ async def guardian_classifier(state: BizzieState) -> dict[str, Any]:
                     "references_different_company": references_different,
                     "required_data_categories": required_cats,
                     "requires_deep_reasoning": deep_reasoning,
-                    "finish_reason": response.response_metadata.get("finish_reason") if hasattr(response, "response_metadata") else "unknown",
+                    "finish_reason": (
+                        response.response_metadata.get("finish_reason")
+                        if hasattr(response, "response_metadata")
+                        else "unknown"
+                    ),
                 }
             },
         )

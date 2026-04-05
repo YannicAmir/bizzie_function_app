@@ -14,15 +14,15 @@ from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.features.bizzie_chat.agent.config import config
-from src.features.bizzie_chat.agent.state import BizzieState
-from src.features.bizzie_chat.agent.tools import get_tavily_tool, strip_unsupported_keys
-from src.features.bizzie_chat.agent.nodes.circuit_breaker import _get_thread_id
 from src.features.bizzie_chat.agent.nodes.ambassador import (
+    CONCISE_DIRECTIVE,
     _experience_instruction,
     _format_history,
-    CONCISE_DIRECTIVE,
 )
+from src.features.bizzie_chat.agent.nodes.circuit_breaker import _get_thread_id
 from src.features.bizzie_chat.agent.nodes.guardian import _hash_query
+from src.features.bizzie_chat.agent.state import BizzieState
+from src.features.bizzie_chat.agent.tools import get_tavily_tool, strip_unsupported_keys
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,11 @@ async def tavily_fallback_agent(state: BizzieState) -> dict[str, Any]:
                     "json_fields": {
                         "node": "tavily_fallback_agent",
                         "thread_id": thread_id,
-                        "finish_reason": (response.response_metadata.get("finish_reason") if hasattr(response, "response_metadata") else "unknown"),
+                        "finish_reason": (
+                            response.response_metadata.get("finish_reason")
+                            if hasattr(response, "response_metadata")
+                            else "unknown"
+                        ),
                     }
                 },
             )

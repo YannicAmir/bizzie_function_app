@@ -2,8 +2,8 @@ import asyncio
 import logging
 from typing import Any
 
-from langchain_tavily import TavilySearch
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_tavily import TavilySearch
 
 from src.features.bizzie_chat.agent.config import config
 
@@ -26,30 +26,30 @@ def strip_unsupported_keys(d: Any) -> None:
 
 FMP_TOOL_CATEGORIES = {
     "FINANCIAL_STATEMENTS": [
-        "8k-latest", "as-reported-balance-statements", "as-reported-cashflow-statements", 
-        "as-reported-financial-statements", "as-reported-income-statements", "balance-sheet-statement", 
-        "balance-sheet-statement-growth", "balance-sheet-statements-ttm", "cashflow-statement", 
-        "cashflow-statement-growth", "cashflow-statements-ttm", "financial-reports-form-10-k-json", 
-        "financial-reports-form-10-k-xlsx", "financial-statement-growth", "financials-latest", 
-        "income-statement", "income-statement-growth", "income-statements-ttm", 
-        "revenue-geographic-segments", "revenue-product-segmentation", "financial-reports-dates", 
+        "8k-latest", "as-reported-balance-statements", "as-reported-cashflow-statements",
+        "as-reported-financial-statements", "as-reported-income-statements", "balance-sheet-statement",
+        "balance-sheet-statement-growth", "balance-sheet-statements-ttm", "cashflow-statement",
+        "cashflow-statement-growth", "cashflow-statements-ttm", "financial-reports-form-10-k-json",
+        "financial-reports-form-10-k-xlsx", "financial-statement-growth", "financials-latest",
+        "income-statement", "income-statement-growth", "income-statements-ttm",
+        "revenue-geographic-segments", "revenue-product-segmentation", "financial-reports-dates",
         "latest-filings", "latest-financial-statements"
     ],
     "NEWS": ["general-news", "stock-news", "fmp-articles"],
     "CALENDAR": ["dividends-calendar", "earnings-calendar", "ipos-calendar"],
     "PROFILE": [
-        "company-executives", "dividends-company", "earnings-company", "information", "profile-symbol", 
-        "employee-count", "executive-compensation", "company-notes", "historical-employee-count", 
+        "company-executives", "dividends-company", "earnings-company", "information", "profile-symbol",
+        "employee-count", "executive-compensation", "company-notes", "historical-employee-count",
         "latest-mergers-acquisitions"
     ],
     "METRICS_VALUATION": [
-        "key-metrics", "key-metrics-ttm", "market-cap", "metrics-ratios", "metrics-ratios-ttm", 
-        "historical-industry-pe", "historical-market-cap", "historical-sector-pe", "industry-PE-snapshot", 
+        "key-metrics", "key-metrics-ttm", "market-cap", "metrics-ratios", "metrics-ratios-ttm",
+        "historical-industry-pe", "historical-market-cap", "historical-sector-pe", "industry-PE-snapshot",
         "sector-PE-snapshot"
     ],
     "PRICE_PERFORMANCE": [
-        "historical-industry-performance", "historical-price-eod-dividend-adjusted", 
-        "historical-price-eod-full", "historical-price-eod-light", "historical-sector-performance", 
+        "historical-industry-performance", "historical-price-eod-dividend-adjusted",
+        "historical-price-eod-full", "historical-price-eod-light", "historical-sector-performance",
         "industry-performance-snapshot", "sector-performance-snapshot"
     ],
     "IPOS": ["ipos-disclosure", "ipos-prospectus"]
@@ -86,7 +86,7 @@ GUARDIAN_CLASSIFIER_TOOL: dict[str, Any] = {
                 "items": {
                     "type": "string",
                     "enum": [
-                        "FINANCIAL_STATEMENTS", "NEWS", "CALENDAR", 
+                        "FINANCIAL_STATEMENTS", "NEWS", "CALENDAR",
                         "PROFILE", "METRICS_VALUATION", "PRICE_PERFORMANCE", "IPOS"
                     ]
                 },
@@ -98,7 +98,11 @@ GUARDIAN_CLASSIFIER_TOOL: dict[str, Any] = {
             },
             "is_price_only_query": {
                 "type": "boolean",
-                "description": "True ONLY if the user is asking solely for the current stock price (e.g. 'what is the price?', 'how much is it trading at?', 'what is the stock price?'). False for anything involving analysis, trends, history, comparisons, or other data.",
+                "description": (
+                    "True ONLY if the user is asking solely for the current stock price "
+                    "(e.g. 'what is the price?', 'how much is it trading at?', 'what is the stock price?'). "
+                    "False for anything involving analysis, trends, history, comparisons, or other data."
+                ),
             },
         },
         "required": [

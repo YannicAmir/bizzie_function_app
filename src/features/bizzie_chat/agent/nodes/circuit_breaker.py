@@ -124,7 +124,11 @@ async def ambassador_circuit_breaker_check(state: BizzieState) -> dict[str, Any]
     except Exception as exc:
         logger.error(
             "ambassador_circuit_breaker_check: error reading circuit breaker",
-            extra={"json_fields": {"node": "ambassador_circuit_breaker_check", "thread_id": thread_id, "error": str(exc)}},
+            extra={"json_fields": {
+                "node": "ambassador_circuit_breaker_check",
+                "thread_id": thread_id,
+                "error": str(exc),
+            }},
         )
         return {"fmp_available": True}
 
@@ -150,6 +154,10 @@ async def stock_query_circuit_breaker_check(state: BizzieState) -> dict[str, Any
     except Exception as exc:
         logger.error(
             "stock_query_circuit_breaker_check: error",
-            extra={"json_fields": {"node": "stock_query_circuit_breaker_check", "thread_id": thread_id, "error": str(exc)}},
+            extra={"json_fields": {
+                "node": "stock_query_circuit_breaker_check",
+                "thread_id": thread_id,
+                "error": str(exc),
+            }},
         )
         return {"fmp_available": True}

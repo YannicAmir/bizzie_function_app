@@ -16,6 +16,7 @@ import os
 import sys
 from pathlib import Path
 
+import deepeval
 import pytest
 from dotenv import load_dotenv
 
@@ -52,6 +53,11 @@ def pytest_configure(config: pytest.Config) -> None:
     # 4. Overrides
     load_dotenv(root_dir / ".env.local", override=True)
     load_dotenv(agent_dir / ".env.local", override=True)
+
+    # Authenticate with Confident AI if key is available (handles CI where deepeval login is not run)
+    confident_api_key = os.getenv("CONFIDENT_API_KEY")
+    if confident_api_key:
+        deepeval.login(confident_api_key)
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +111,7 @@ def judge_model():
 
     model_id = os.getenv("DEEPEVAL_JUDGE_MODEL", "gemini-3.1-flash-lite-preview")
     project = os.getenv("GCLOUD_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
-    
+
     return GeminiModel(
         model=model_id,
         project=project,

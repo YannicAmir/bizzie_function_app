@@ -16,14 +16,14 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.features.bizzie_chat.agent.config import config
-from src.features.bizzie_chat.agent.state import BizzieState
-from src.features.bizzie_chat.agent.tools import call_fmp_tool
 from src.features.bizzie_chat.agent.nodes.circuit_breaker import (
     _get_thread_id,
     _read_circuit_breaker,
     _record_fmp_failure,
     _record_fmp_success,
 )
+from src.features.bizzie_chat.agent.state import BizzieState
+from src.features.bizzie_chat.agent.tools import call_fmp_tool
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +192,8 @@ async def ambassador_llm_node(state: BizzieState) -> dict[str, Any]:
             f"2. Provide a factual company overview grounded in this FMP data:\n{fmp_summary}\n"
             "3. Suggest 3-4 specific financial questions the user could research to evaluate the company "
             "(e.g., revenue growth, free cash flow, debt levels, margins, P/E ratio).\n"
-            f"4. If you reference the current or most recent stock price in your response, append exactly: '{PRICE_DISCLAIMER}'\n\n"
+            f"4. If you reference the current or most recent stock price in your response, "
+            f"append exactly: '{PRICE_DISCLAIMER}'\n\n"
             f"{_experience_instruction(experience)}\n\n"
             f"User query: {state['query']}"
         )
@@ -205,7 +206,8 @@ async def ambassador_llm_node(state: BizzieState) -> dict[str, Any]:
             f"2. Provide a factual company overview of {company_name} based on your training knowledge.\n"
             "3. Suggest 3-4 specific financial questions the user could research.\n"
             "End with exactly this disclaimer: "
-            '"Note: the company overview above is based on general background knowledge and may not reflect the most current information."\n\n'
+            '"Note: the company overview above is based on general background knowledge '
+            'and may not reflect the most current information."\n\n'
             f"{_experience_instruction(experience)}\n\n"
             f"User query: {state['query']}"
         )
@@ -222,7 +224,8 @@ async def ambassador_llm_node(state: BizzieState) -> dict[str, Any]:
             f"2. Pivot: 'Since you're viewing {company_name}, here's how they compare...' "
             f"grounded in this data:\n{fmp_current}\n"
             "3. Suggest financial questions covering both companies where relevant.\n"
-            f"4. If you reference the current or most recent stock price in your response, append exactly: '{PRICE_DISCLAIMER}'\n\n"
+            f"4. If you reference the current or most recent stock price in your response, "
+            f"append exactly: '{PRICE_DISCLAIMER}'\n\n"
             f"{_experience_instruction(experience)}\n\n"
             f"User query: {state['query']}"
         )
@@ -238,7 +241,8 @@ async def ambassador_llm_node(state: BizzieState) -> dict[str, Any]:
             "using your training knowledge.\n"
             "3. Suggest financial questions covering both companies where relevant.\n"
             "End with exactly this disclaimer: "
-            '"Note: company information above is based on general background knowledge and may not reflect the most current information."\n\n'
+            '"Note: company information above is based on general background knowledge '
+            'and may not reflect the most current information."\n\n'
             f"{_experience_instruction(experience)}\n\n"
             f"User query: {state['query']}"
         )

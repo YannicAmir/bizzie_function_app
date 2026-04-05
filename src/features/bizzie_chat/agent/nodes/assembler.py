@@ -22,9 +22,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.features.bizzie_chat.agent.cache import cache_get, cache_set, hash_query
 from src.features.bizzie_chat.agent.config import config
-from src.features.bizzie_chat.agent.state import BizzieState
-from src.features.bizzie_chat.agent.nodes.circuit_breaker import _get_thread_id
 from src.features.bizzie_chat.agent.nodes.ambassador import PRICE_DISCLAIMER
+from src.features.bizzie_chat.agent.nodes.circuit_breaker import _get_thread_id
+from src.features.bizzie_chat.agent.state import BizzieState
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,8 @@ async def follow_up_generator(state: BizzieState) -> dict[str, Any]:
 
         if references_different and referenced_ticker:
             prompt = (
-                f"The user asked about {company_name} ({company_ticker}) in context of comparing with {referenced_ticker}. "
+                f"The user asked about {company_name} ({company_ticker}) in context of comparing with "
+                f"{referenced_ticker}. "
                 "Generate exactly 3 short, 1-sentence follow-up questions for a curious investor. "
                 "Return as a JSON array of strings: [\"question 1\", \"question 2\", \"question 3\"]"
             )
@@ -185,7 +186,8 @@ async def response_assembler(state: BizzieState) -> dict[str, Any]:
     message = (
         state.get("sanitized_response")
         or state.get("raw_response")
-        or "I'm sorry, I couldn't fetch the financial data for that query right now. Please try again or ask something else."
+        or "I'm sorry, I couldn't fetch the financial data for that query right now. "
+           "Please try again or ask something else."
     )
 
     if state.get("show_price_disclaimer"):
