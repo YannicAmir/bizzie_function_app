@@ -21,6 +21,7 @@ export const bizzieChat = onRequest(
         secrets: [langGraphUrl],
         memory: '512MiB',
         timeoutSeconds: 120,
+        concurrency: 20,
         cors: true,
     },
     async (request, response) => {
@@ -52,6 +53,8 @@ export const bizzieChat = onRequest(
             return;
         }
 
+        const stream = (body?.stream as boolean) === true;
+
         const req: BizzieChatRequest = {
             authToken,
             idempotencyKey,
@@ -70,6 +73,19 @@ export const bizzieChat = onRequest(
                 new ConversationService(),
                 new LangGraphService(langGraphUrl.value()),
             );
+
+            if (stream) {
+                response.setHeader('Content-Type', 'text/event-stream');
+                response.setHeader('Cache-Control', 'no-cache');
+                response.setHeader('Connection', 'keep-alive');
+                response.flushHeaders();
+
+                for await (const event of useCase.executeStream(req)) {
+                    response.write(`data: ${JSON.stringify(event)}\n\n`);
+                }
+                response.end();
+                return;
+            }
 
             const result = await useCase.execute(req);
             response.status(200).json(result);

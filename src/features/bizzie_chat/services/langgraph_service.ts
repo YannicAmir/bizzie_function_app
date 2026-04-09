@@ -1,6 +1,7 @@
 import { retry } from '../../../core/retry';
 
-const INVOKE_TIMEOUT_MS = 90_000; // 90s — within GCF's 120s budget
+const INVOKE_TIMEOUT_MS = 90_000;
+const STREAM_TIMEOUT_MS = 90_000;
 
 export interface LangGraphInvokeRequest {
     input: Record<string, unknown>;
@@ -20,6 +21,11 @@ export interface LangGraphChatResponse {
     output: LangGraphChatOutput;
     run_id: string;
 }
+
+export type StreamEvent =
+    | { type: 'token'; token: string }
+    | { type: 'done'; follow_ups: string[]; source: string | null; route_path: string | null; metadata: Record<string, unknown> }
+    | { type: 'error'; message: string };
 
 export class LangGraphService {
     constructor(private readonly serviceUrl: string) {}
@@ -71,6 +77,67 @@ export class LangGraphService {
                 },
             },
         );
+    }
+
+    /**
+     * Stream the final_response tokens from the bizzie_chat LangGraph graph via SSE.
+     * Calls /stream and yields parsed StreamEvent objects.
+     * On network / 5xx errors, yields a single error event.
+     */
+    async *stream(request: LangGraphInvokeRequest): AsyncGenerator<StreamEvent> {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
+
+        let idToken = '';
+        try {
+            idToken = await this._getIdToken(this.serviceUrl);
+        } catch {
+            // Non-GCP environment — proceed without auth
+        }
+
+        try {
+            const res = await fetch(`${this.serviceUrl}/stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+                },
+                body: JSON.stringify(request),
+                signal: controller.signal,
+            });
+
+            if (!res.ok || !res.body) {
+                const text = await res.text().catch(() => '');
+                yield { type: 'error', message: `LangGraph HTTP ${res.status}: ${text}` };
+                return;
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() ?? '';
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const raw = line.slice(6).trim();
+                    if (!raw) continue;
+                    try {
+                        yield JSON.parse(raw) as StreamEvent;
+                    } catch {
+                        // malformed SSE line — skip
+                    }
+                }
+            }
+        } catch (err) {
+            yield { type: 'error', message: err instanceof Error ? err.message : 'Stream error' };
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     /**

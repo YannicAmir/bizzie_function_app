@@ -15,7 +15,7 @@ const logger = new Logger('Realtime8kNotifier');
 export const realtime8kNotifier = onSchedule({
     schedule: '*/15 6-22 * * 1-5',
     timeZone: 'America/New_York',
-    memory: '1GiB',
+    memory: '512MiB',
     timeoutSeconds: 540,
     secrets: ["FMP_API_KEY"]
 }, async () => {

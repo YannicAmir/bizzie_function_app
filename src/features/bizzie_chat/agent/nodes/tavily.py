@@ -67,7 +67,7 @@ async def tavily_fallback_agent(state: BizzieState) -> dict[str, Any]:
                 "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
             },
         )
-        llm_with_tavily = llm.bind_tools([tavily_tool])
+        llm_with_tavily = llm.bind_tools([tavily_tool]).with_config(tags=["final_response"])
 
         if references_different and referenced_ticker:
             system_content = (

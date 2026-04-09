@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -5,7 +6,7 @@ from contextlib import asynccontextmanager
 import google.cloud.logging
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -108,6 +109,56 @@ async def invoke(request: Request, req: InvokeRequest) -> InvokeResponse:
     )
 
     return InvokeResponse(output=output, run_id=req.thread_id)
+
+@app.post("/stream")
+async def stream(request: Request, req: InvokeRequest) -> StreamingResponse:
+    """Stream the final_response tokens via SSE, then emit a done event with follow_ups/source/metadata."""
+    run_config = {
+        "configurable": {"thread_id": req.thread_id},
+        "recursion_limit": 25,
+    }
+
+    async def event_generator():
+        result: dict = {}
+        try:
+            async for event in request.app.state.graph.astream_events(
+                req.input,
+                config=run_config,
+                version="v2",
+            ):
+                kind = event.get("event", "")
+                tags = event.get("tags", [])
+                if kind == "on_chat_model_stream" and "final_response" in tags:
+                    chunk = event.get("data", {}).get("chunk")
+                    if chunk is None:
+                        continue
+                    content = chunk.content if hasattr(chunk, "content") else ""
+                    if isinstance(content, list):
+                        content = "".join(
+                            b.get("text", "") if isinstance(b, dict) else str(b)
+                            for b in content
+                            if not isinstance(b, dict) or b.get("type") == "text"
+                        )
+                    if content:
+                        yield f"data: {json.dumps({'type': 'token', 'token': content})}\n\n"
+                elif kind == "on_chain_end" and event.get("name") == "LangGraph":
+                    result = event.get("data", {}).get("output", {})
+        except Exception as exc:
+            logger.error("Streaming error", extra={"json_fields": {"error": str(exc)}})
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Stream interrupted'})}\n\n"
+            return
+
+        done_payload = {
+            "type": "done",
+            "follow_ups": result.get("follow_ups", []),
+            "source": result.get("source"),
+            "route_path": result.get("route_path"),
+            "metadata": result.get("metadata", {}),
+        }
+        yield f"data: {json.dumps(done_payload)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 @app.get("/health")
 async def health() -> JSONResponse:

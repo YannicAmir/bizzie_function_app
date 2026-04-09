@@ -268,7 +268,7 @@ async def ambassador_llm_node(state: BizzieState) -> dict[str, Any]:
             messages.append(SystemMessage(content=history_text))
         messages.append(HumanMessage(content=content))
 
-        response = await llm.ainvoke(messages)
+        response = await llm.with_config(tags=["final_response"]).ainvoke(messages)
         if hasattr(response, "response_metadata"):
             logger.info(f"ambassador_llm_node: finish_reason: {response.response_metadata.get('finish_reason')}")
 

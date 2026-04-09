@@ -428,7 +428,7 @@ async def fmp_agent(state: BizzieState) -> dict[str, Any]:
             )),
         ]
 
-        response = await llm.ainvoke(synth_messages)
+        response = await llm.with_config(tags=["final_response"]).ainvoke(synth_messages)
 
         if not (response.content if hasattr(response, "content") else str(response)) and fmp_called:
             logger.warning(
