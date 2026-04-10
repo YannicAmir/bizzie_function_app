@@ -26,7 +26,7 @@ export class UserService {
                 uid,
                 isSubscribed: data.isSubscribed === true,
                 subscriptionExpiryDate: data.subscriptionExpiryDate,
-                investing_experience: data.investing_experience ?? 'beginner',
+                investing_experience: data.investingExperience ?? 'beginner',
             };
         } catch (error) {
             _logger.error('Failed to fetch user', error);

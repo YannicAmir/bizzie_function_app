@@ -53,6 +53,20 @@ export const bizzieChat = onRequest(
             return;
         }
 
+        // sessionId becomes a Firestore document ID — enforce UUID format to prevent
+        // unexpected doc IDs and ensure frontend generates them correctly.
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
+            response.status(400).json({ error: 'Invalid sessionId: must be a UUID' });
+            return;
+        }
+
+        // idempotencyKey also becomes a Firestore document ID — cap length to prevent
+        // oversized keys that would fail silently at the Firestore layer.
+        if (idempotencyKey.length > 128) {
+            response.status(400).json({ error: 'Invalid idempotencyKey: exceeds maximum length' });
+            return;
+        }
+
         const stream = (body?.stream as boolean) === true;
 
         const req: BizzieChatRequest = {
@@ -75,12 +89,18 @@ export const bizzieChat = onRequest(
             );
 
             if (stream) {
+                // Run preflight before committing SSE headers — any auth, subscription,
+                // or rate limit error thrown here is caught by the outer catch block,
+                // which can still send a proper HTTP status code (401/403/429/400).
+                // Once flushHeaders() is called the status code is locked to 200.
+                const preflightResult = await useCase.preflight(req);
+
                 response.setHeader('Content-Type', 'text/event-stream');
                 response.setHeader('Cache-Control', 'no-cache');
                 response.setHeader('Connection', 'keep-alive');
                 response.flushHeaders();
 
-                for await (const event of useCase.executeStream(req)) {
+                for await (const event of useCase.executeStream(req, preflightResult)) {
                     response.write(`data: ${JSON.stringify(event)}\n\n`);
                 }
                 response.end();
@@ -93,6 +113,9 @@ export const bizzieChat = onRequest(
             const err = error as { code?: string; status?: number; message?: string; retryAfterSeconds?: number };
 
             switch (err.code) {
+                case 'UNAUTHORIZED':
+                    response.status(401).json({ error: 'Invalid or expired auth token' });
+                    break;
                 case 'USER_NOT_FOUND':
                     response.status(404).json({ error: 'User not found' });
                     break;
@@ -103,6 +126,7 @@ export const bizzieChat = onRequest(
                 case 'INVALID_QUERY':
                 case 'INJECTION_DETECTED':
                 case 'INVALID_TICKER':
+                case 'INVALID_COMPANY_NAME':
                     response.status(400).json({ error: err.message ?? 'Invalid request' });
                     break;
                 case 'RATE_LIMIT_EXCEEDED':

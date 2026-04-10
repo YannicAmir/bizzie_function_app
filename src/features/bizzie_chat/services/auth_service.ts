@@ -14,7 +14,7 @@ export class AuthService {
             return { uid: decoded.uid };
         } catch (error) {
             _logger.warn('ID token verification failed', { error: error instanceof Error ? error.message : String(error) });
-            throw error;
+            throw Object.assign(new Error('Invalid or expired auth token'), { code: 'UNAUTHORIZED', status: 401 });
         }
     }
 }

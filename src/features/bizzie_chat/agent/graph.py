@@ -211,4 +211,3 @@ def make_checkpointer():
         return MemorySaver()
 
 
-graph = build_graph(None)

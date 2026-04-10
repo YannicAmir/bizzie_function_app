@@ -1,7 +1,13 @@
+import { Logger } from '../../../core/logger';
 import { retry } from '../../../core/retry';
+
+const _logger = new Logger('BizzieChat LangGraphService');
 
 const INVOKE_TIMEOUT_MS = 90_000;
 const STREAM_TIMEOUT_MS = 90_000;
+// GCP OIDC tokens are valid for 1 hour. Cache with a 55-minute TTL so we
+// never serve a near-expired token, and at most one metadata fetch per instance.
+const TOKEN_CACHE_TTL_MS = 55 * 60 * 1_000;
 
 export interface LangGraphInvokeRequest {
     input: Record<string, unknown>;
@@ -27,7 +33,17 @@ export type StreamEvent =
     | { type: 'done'; follow_ups: string[]; source: string | null; route_path: string | null; metadata: Record<string, unknown> }
     | { type: 'error'; message: string };
 
+interface TokenCacheEntry {
+    token: string;
+    expiresAt: number;
+    inFlight: Promise<string> | null;
+}
+
 export class LangGraphService {
+    // Keyed by audience (serviceUrl) so multiple instances with different URLs
+    // never serve a token issued for the wrong audience.
+    private static _tokenCache: Map<string, TokenCacheEntry> = new Map();
+
     constructor(private readonly serviceUrl: string) {}
 
     /**
@@ -56,8 +72,9 @@ export class LangGraphService {
                     });
 
                     if (!res.ok) {
-                        const text = await res.text().catch(() => '');
-                        throw new Error(`LangGraph HTTP ${res.status}: ${text}`);
+                        const status = res.status;
+                        await res.body?.cancel();
+                        throw Object.assign(new Error(`LangGraph upstream error`), { httpStatus: status });
                     }
 
                     return (await res.json()) as LangGraphChatResponse;
@@ -69,10 +86,9 @@ export class LangGraphService {
                 maxAttempts: 2,
                 initialDelayMs: 2_000,
                 shouldRetry: (err) => {
-                    // Retry on network errors and 5xx only — never retry 4xx
-                    if (err instanceof Error && err.message.includes('HTTP 4')) {
-                        return false;
-                    }
+                    const status = (err as { httpStatus?: number }).httpStatus;
+                    // Never retry 4xx — only transient network errors and 5xx
+                    if (status !== undefined && status >= 400 && status < 500) return false;
                     return true;
                 },
             },
@@ -82,7 +98,7 @@ export class LangGraphService {
     /**
      * Stream the final_response tokens from the bizzie_chat LangGraph graph via SSE.
      * Calls /stream and yields parsed StreamEvent objects.
-     * On network / 5xx errors, yields a single error event.
+     * Always releases the ReadableStream reader lock in the finally block.
      */
     async *stream(request: LangGraphInvokeRequest): AsyncGenerator<StreamEvent> {
         const controller = new AbortController();
@@ -94,6 +110,8 @@ export class LangGraphService {
         } catch {
             // Non-GCP environment — proceed without auth
         }
+
+        let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
         try {
             const res = await fetch(`${this.serviceUrl}/stream`, {
@@ -107,12 +125,13 @@ export class LangGraphService {
             });
 
             if (!res.ok || !res.body) {
-                const text = await res.text().catch(() => '');
-                yield { type: 'error', message: `LangGraph HTTP ${res.status}: ${text}` };
+                await res.body?.cancel();
+                _logger.error('LangGraph stream request failed', { status: res.status });
+                yield { type: 'error', message: 'AI service unavailable' };
                 return;
             }
 
-            const reader = res.body.getReader();
+            reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
 
@@ -134,19 +153,53 @@ export class LangGraphService {
                 }
             }
         } catch (err) {
-            yield { type: 'error', message: err instanceof Error ? err.message : 'Stream error' };
+            _logger.error('LangGraph stream error', err);
+            yield { type: 'error', message: 'AI service unavailable' };
         } finally {
+            // Always release the lock — prevents resource leak under high concurrency
+            try { reader?.releaseLock(); } catch { /* already released */ }
             clearTimeout(timer);
         }
     }
 
     /**
      * Fetch a GCP OIDC ID token from the metadata server for service-to-service auth.
-     * Returns empty string in local/non-GCP environments where the metadata server
-     * is unavailable — the Cloud Run service must be configured to allow unauthenticated
-     * requests in that case.
+     *
+     * Token is cached per-audience for 55 minutes (tokens valid 1 hour). All concurrent
+     * requests share a single in-flight fetch promise per audience — prevents thundering
+     * herd on expiry. Keyed by audience so multiple serviceUrl values never cross-pollinate.
+     *
+     * Returns empty string in local/non-GCP environments.
      */
     private async _getIdToken(audience: string): Promise<string> {
+        const now = Date.now();
+        const entry = LangGraphService._tokenCache.get(audience);
+
+        // Serve from cache if still valid
+        if (entry && entry.token && now < entry.expiresAt) {
+            return entry.token;
+        }
+
+        // Deduplicate concurrent fetches — all callers for this audience await the same promise
+        if (entry?.inFlight) {
+            return entry.inFlight;
+        }
+
+        const inFlight = this._fetchIdToken(audience).finally(() => {
+            const current = LangGraphService._tokenCache.get(audience);
+            if (current) current.inFlight = null;
+        });
+
+        LangGraphService._tokenCache.set(audience, {
+            token: entry?.token ?? '',
+            expiresAt: entry?.expiresAt ?? 0,
+            inFlight,
+        });
+
+        return inFlight;
+    }
+
+    private async _fetchIdToken(audience: string): Promise<string> {
         try {
             const metadataUrl =
                 `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity` +
@@ -161,7 +214,13 @@ export class LangGraphService {
                     signal: controller.signal,
                 });
                 if (res.ok) {
-                    return await res.text();
+                    const token = await res.text();
+                    LangGraphService._tokenCache.set(audience, {
+                        token,
+                        expiresAt: Date.now() + TOKEN_CACHE_TTL_MS,
+                        inFlight: null,
+                    });
+                    return token;
                 }
                 return '';
             } finally {

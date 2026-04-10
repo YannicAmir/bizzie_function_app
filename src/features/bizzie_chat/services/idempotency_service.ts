@@ -22,7 +22,7 @@ export class IdempotencyService {
                 .firestore()
                 .collection('users')
                 .doc(uid)
-                .collection('idempotency')
+                .collection('responseCache')
                 .doc(key);
 
             const doc = await ref.get();
@@ -57,7 +57,7 @@ export class IdempotencyService {
                 .firestore()
                 .collection('users')
                 .doc(uid)
-                .collection('idempotency')
+                .collection('responseCache')
                 .doc(key)
                 .set({
                     response,
