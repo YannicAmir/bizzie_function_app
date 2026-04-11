@@ -27,6 +27,10 @@ if config.langsmith_api_key:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if config.redis_ca_cert:
+        with open("/tmp/redis-ca.pem", "w") as f:
+            f.write(config.redis_ca_cert)
+        logger.info("Redis CA cert written to /tmp/redis-ca.pem")
     checkpointer = make_checkpointer()
     if hasattr(checkpointer, "asetup"):
         await checkpointer.asetup()  # type: ignore[union-attr]

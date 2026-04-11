@@ -202,7 +202,10 @@ def make_checkpointer():
         return MemorySaver()
     try:
         from langgraph.checkpoint.redis.aio import AsyncRedisSaver
-        return AsyncRedisSaver(redis_url=config.redis_url)
+        redis_url = config.redis_url
+        if config.redis_ca_cert:
+            redis_url = f"{redis_url}?ssl_ca_certs=/tmp/redis-ca.pem"
+        return AsyncRedisSaver(redis_url=redis_url)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Redis checkpointer init failed — falling back to MemorySaver",

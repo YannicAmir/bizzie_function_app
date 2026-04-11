@@ -132,7 +132,11 @@ jobs:
               SERVICE_NAME="langgraph-$(echo "$GRAPH" | tr '_' '-')"
               echo "Deploying $SERVICE_NAME..."
               if [ "$GRAPH" = "bizzie_chat" ]; then
-                EXTRA_SECRETS=",TAVILY_API_KEY=TAVILY_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FMP_API_KEY=FMP_API_KEY:latest"
+                CERT_SECRET=""
+                if gcloud secrets describe REDIS_CA_CERT &>/dev/null 2>&1; then
+                  CERT_SECRET=",REDIS_CA_CERT=REDIS_CA_CERT:latest"
+                fi
+                EXTRA_SECRETS=",TAVILY_API_KEY=TAVILY_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FMP_API_KEY=FMP_API_KEY:latest$CERT_SECRET"
               else
                 EXTRA_SECRETS=""
               fi

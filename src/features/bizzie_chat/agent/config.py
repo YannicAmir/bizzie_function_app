@@ -27,6 +27,7 @@ class BizzieChatConfig:
     fmp_mcp_base: str = "https://financialmodelingprep.com/mcp"
     tavily_api_key: str = os.environ.get("TAVILY_API_KEY", "")
     redis_url: str = os.environ.get("REDIS_URL", "")
+    redis_ca_cert: str = os.environ.get("REDIS_CA_CERT", "")
 
     circuit_breaker_collection: str = "circuitBreaker"
     circuit_breaker_doc: str = "fmp"
