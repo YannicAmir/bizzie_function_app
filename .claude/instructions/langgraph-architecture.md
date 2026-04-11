@@ -86,7 +86,15 @@ flowchart LR
 
     subgraph python["Python · LangGraph Service"]
         G[graph.py]
-        N[nodes.py]
+        subgraph nodes_pkg["nodes/"]
+            N[node functions]
+        end
+        subgraph prompts_pkg["prompts/"]
+            PR[prompt builders\nshared.py · *_prompts.py]
+        end
+        subgraph constants_pkg["constants/"]
+            K[domain constants\nfmp_constants.py]
+        end
         S[state.py]
         C[config.py]
     end
@@ -95,9 +103,11 @@ flowchart LR
     UC2 --> LS
     UC2 --> FS
     LS -->|HTTP POST| G
-    G --> N
+    G --> nodes_pkg
     G --> S
-    N --> C
+    nodes_pkg --> prompts_pkg
+    nodes_pkg --> constants_pkg
+    nodes_pkg --> C
 ```
 
 **Layer rules:**
@@ -105,6 +115,9 @@ flowchart LR
 - `usecase.ts` — calls `LangGraphService`, then passes result to downstream services (Firestore, etc.)
 - `langgraph_service.ts` — thin HTTP client with retry (wraps `src/core/retry.ts`); URL from env/config; never hardcoded
 - `langgraph/` directory — all graph logic lives here in Python; no graph code in TypeScript
+- `nodes/` — async node functions only; no inline prompt strings, no domain constant sets
+- `prompts/` — all LLM prompt strings and builders; `shared.py` holds cross-node utilities (`CONCISE_DIRECTIVE`, `PRICE_DISCLAIMER`, `_experience_instruction`, `_format_history`); one `*_prompts.py` per node that owns prompts
+- `constants/` — domain configuration data (tool allowlists, denylists, thresholds); one `*_constants.py` per concern
 - Every LangGraph implementation must satisfy `.claude/instructions/langgraph-enterprise-standards.md`
 
 ---

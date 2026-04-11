@@ -24,6 +24,7 @@ def strip_unsupported_keys(d: Any) -> None:
                 if isinstance(item, dict):
                     strip_unsupported_keys(item)
 
+
 FMP_TOOL_CATEGORIES = {
     "FINANCIAL_STATEMENTS": [
         "8k-latest", "as-reported-balance-statements", "as-reported-cashflow-statements",
@@ -130,6 +131,7 @@ def get_tavily_tool() -> TavilySearch:
             "finance.yahoo.com", "marketwatch.com", "investors.com",
         ],
     )
+
 
 _fmp_client: MultiServerMCPClient | None = None
 _fmp_tools: list[Any] | None = None

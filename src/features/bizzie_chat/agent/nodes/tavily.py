@@ -1,10 +1,3 @@
-"""
-Tavily fallback and error nodes.
-
-tavily_fallback_agent: LLM + Tavily web search, used when FMP is unavailable.
-error_response_node: Static response when both FMP and Tavily have failed.
-"""
-
 import json
 import logging
 import time
@@ -13,22 +6,75 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from src.features.bizzie_chat.agent.cache import hash_query
 from src.features.bizzie_chat.agent.config import config
-from src.features.bizzie_chat.agent.nodes.ambassador import (
-    CONCISE_DIRECTIVE,
-    _experience_instruction,
-    _format_history,
-)
 from src.features.bizzie_chat.agent.nodes.circuit_breaker import _get_thread_id
-from src.features.bizzie_chat.agent.nodes.guardian import _hash_query
+from src.features.bizzie_chat.agent.prompts.shared import _format_history, extract_text_content
+from src.features.bizzie_chat.agent.prompts.tavily_prompts import build_tavily_system
 from src.features.bizzie_chat.agent.state import BizzieState
 from src.features.bizzie_chat.agent.tools import get_tavily_tool, strip_unsupported_keys
 
 logger = logging.getLogger(__name__)
 
 
+def _build_search_query(
+    query: str,
+    company_name: str,
+    company_ticker: str,
+    references_different: bool,
+    referenced_ticker: str | None,
+) -> str:
+    current_date = time.strftime("%B %d, %Y")
+    context = referenced_ticker if (references_different and referenced_ticker) else company_ticker
+    return f"{query} {company_name} {context} today {current_date}"
+
+
+def _sanitize_tavily_tool(tool: Any) -> Any:
+    if hasattr(tool, "args"):
+        args = tool.args.copy()
+        strip_unsupported_keys(args)
+        return tool.model_copy(update={"args": args})
+    return tool
+
+
+async def _run_tool_call_loop(
+    llm_with_tavily: Any,
+    tavily_tool: Any,
+    messages: list[Any],
+    thread_id: str,
+) -> Any:
+    response: Any = None
+    for cycle in range(2):
+        response = await llm_with_tavily.ainvoke(messages)
+        logger.info(
+            f"tavily_fallback_agent: AI response (cycle {cycle + 1})",
+            extra={"json_fields": {
+                "node": "tavily_fallback_agent",
+                "thread_id": thread_id,
+                "finish_reason": (
+                    response.response_metadata.get("finish_reason")
+                    if hasattr(response, "response_metadata")
+                    else "unknown"
+                ),
+            }},
+        )
+        messages.append(response)
+
+        if not response.tool_calls:
+            break
+
+        for tool_call in response.tool_calls:
+            tool_call_id = tool_call.get("id", f"tavily_{cycle}")
+            try:
+                result = await tavily_tool.ainvoke(tool_call.get("args", {}))
+                messages.append(ToolMessage(content=json.dumps(result), tool_call_id=tool_call_id))
+            except Exception as t_exc:
+                messages.append(ToolMessage(content=f"Search error: {str(t_exc)}", tool_call_id=tool_call_id))
+
+    return response
+
+
 async def tavily_fallback_agent(state: BizzieState) -> dict[str, Any]:
-    """LLM + Tavily web search fallback for when FMP fails or circuit breaker is open."""
     thread_id = _get_thread_id(state)
     company_ticker = state["company_ticker"]
     company_name = state["company_name"]
@@ -41,19 +87,12 @@ async def tavily_fallback_agent(state: BizzieState) -> dict[str, Any]:
         extra={"json_fields": {"node": "tavily_fallback_agent", "thread_id": thread_id, "ticker": company_ticker}},
     )
 
-    current_date = time.strftime("%B %d, %Y")
-    if references_different and referenced_ticker:
-        search_query = f"{state['query']} {company_name} {referenced_ticker} today {current_date}"
-    else:
-        search_query = f"{state['query']} {company_name} {company_ticker} today {current_date}"
+    search_query = _build_search_query(
+        state["query"], company_name, company_ticker, references_different, referenced_ticker
+    )
 
     try:
-        tavily_tool = get_tavily_tool()
-
-        if hasattr(tavily_tool, "args"):
-            _t_args = tavily_tool.args.copy()
-            strip_unsupported_keys(_t_args)
-            tavily_tool = tavily_tool.model_copy(update={"args": _t_args})
+        tavily_tool = _sanitize_tavily_tool(get_tavily_tool())
 
         llm = ChatGoogleGenerativeAI(
             model=state.get("model_flash") or config.model_flash,
@@ -69,67 +108,17 @@ async def tavily_fallback_agent(state: BizzieState) -> dict[str, Any]:
         )
         llm_with_tavily = llm.bind_tools([tavily_tool]).with_config(tags=["final_response"])
 
-        if references_different and referenced_ticker:
-            system_content = (
-                CONCISE_DIRECTIVE +
-                f"You are a financial assistant. The user is viewing {company_name} ({company_ticker}). "
-                f"They are asking about {referenced_ticker}. Treat this as a comparison. "
-                "Use Tavily to search for relevant information. "
-                "Structure: (1) briefly answer about the referenced company, (2) pivot to the current company. "
-                "Always end with: 'Note: this data is sourced from web search and may not reflect real-time figures.' "
-                f"\n\n{_experience_instruction(experience)}"
-            )
-        else:
-            system_content = (
-                CONCISE_DIRECTIVE +
-                f"You are a financial assistant. The user is asking about {company_name} ({company_ticker}). "
-                "Use Tavily to search for the most current relevant information. "
-                "Always end with: 'Note: this data is sourced from web search and may not reflect real-time figures.' "
-                f"\n\n{_experience_instruction(experience)}"
-            )
-
+        system_content = build_tavily_system(
+            company_name, company_ticker, experience, references_different, referenced_ticker
+        )
         history_text = _format_history(state.get("conversation_history", []))
         messages: list[Any] = [SystemMessage(content=system_content)]
         if history_text:
             messages.append(SystemMessage(content=history_text))
         messages.append(HumanMessage(content=search_query))
 
-        for cycle in range(2):
-            response = await llm_with_tavily.ainvoke(messages)
-            logger.info(
-                f"tavily_fallback_agent: AI response (cycle {cycle+1})",
-                extra={
-                    "json_fields": {
-                        "node": "tavily_fallback_agent",
-                        "thread_id": thread_id,
-                        "finish_reason": (
-                            response.response_metadata.get("finish_reason")
-                            if hasattr(response, "response_metadata")
-                            else "unknown"
-                        ),
-                    }
-                },
-            )
-            messages.append(response)
-
-            if not response.tool_calls:
-                break
-
-            for tool_call in response.tool_calls:
-                tool_call_id = tool_call.get("id", f"tavily_{cycle}")
-                try:
-                    result = await tavily_tool.ainvoke(tool_call.get("args", {}))
-                    messages.append(ToolMessage(content=json.dumps(result), tool_call_id=tool_call_id))
-                except Exception as t_exc:
-                    messages.append(ToolMessage(content=f"Search error: {str(t_exc)}", tool_call_id=tool_call_id))
-
-        if isinstance(response.content, str):
-            raw_response = response.content
-        elif isinstance(response.content, list):
-            raw_response = "".join([p.get("text", "") if isinstance(p, dict) else str(p) for p in response.content])
-        else:
-            raw_response = str(response.content)
-
+        response = await _run_tool_call_loop(llm_with_tavily, tavily_tool, messages, thread_id)
+        raw_response = extract_text_content(response)
         metadata = dict(state.get("metadata") or {})
         metadata["fallback_source"] = "tavily"
 
@@ -163,27 +152,20 @@ async def tavily_fallback_agent(state: BizzieState) -> dict[str, Any]:
 
 
 async def error_response_node(state: BizzieState) -> dict[str, Any]:
-    """
-    Static error response when both FMP and Tavily have failed.
-    Logs structured error to Cloud Logging. Does NOT count against rate limit.
-    Does NOT trigger Firestore conversation write.
-    """
     thread_id = _get_thread_id(state)
-    query_hash = _hash_query(state.get("query", ""))
+    query_hash = hash_query(state.get("query", ""))
 
     logger.error(
         "error_response_node: both data sources failed",
-        extra={
-            "json_fields": {
-                "node": "error_response_node",
-                "thread_id": thread_id,
-                "session_id": state.get("session_id"),
-                "company_ticker": state.get("company_ticker"),
-                "query_hash": query_hash,
-                "fmp_error": state.get("fmp_error"),
-                "tavily_error": state.get("tavily_error"),
-            }
-        },
+        extra={"json_fields": {
+            "node": "error_response_node",
+            "thread_id": thread_id,
+            "session_id": state.get("session_id"),
+            "company_ticker": state.get("company_ticker"),
+            "query_hash": query_hash,
+            "fmp_error": state.get("fmp_error"),
+            "tavily_error": state.get("tavily_error"),
+        }},
     )
 
     return {

@@ -1,5 +1,6 @@
 import { getFirebaseAdmin } from '../../../core/firebase';
 import { Logger } from '../../../core/logger';
+import { AppError } from '../../../core/errors';
 
 const _logger = new Logger('BizzieChat AuthService');
 
@@ -14,7 +15,7 @@ export class AuthService {
             return { uid: decoded.uid };
         } catch (error) {
             _logger.warn('ID token verification failed', { error: error instanceof Error ? error.message : String(error) });
-            throw Object.assign(new Error('Invalid or expired auth token'), { code: 'UNAUTHORIZED', status: 401 });
+            throw new AppError('Invalid or expired auth token', 'UNAUTHORIZED', 401);
         }
     }
 }

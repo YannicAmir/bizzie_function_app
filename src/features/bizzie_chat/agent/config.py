@@ -47,7 +47,12 @@ class BizzieChatConfig:
 
     @property
     def fmp_mcp_url(self) -> str:
-        """Construct FMP MCP server URL. Never log this value — it contains the API key."""
+        """FMP MCP server URL with API key appended.
+
+        Intentionally a @property rather than a field so it is excluded from
+        dataclass serialization (e.g. asdict(), logging) and the API key is
+        never captured in logs or traces.
+        """
         return f"{self.fmp_mcp_base}?apikey={self.fmp_api_key}"
 
 

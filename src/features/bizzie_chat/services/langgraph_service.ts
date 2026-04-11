@@ -3,11 +3,17 @@ import { retry } from '../../../core/retry';
 
 const _logger = new Logger('BizzieChat LangGraphService');
 
-const INVOKE_TIMEOUT_MS = 90_000;
-const STREAM_TIMEOUT_MS = 90_000;
-// GCP OIDC tokens are valid for 1 hour. Cache with a 55-minute TTL so we
-// never serve a near-expired token, and at most one metadata fetch per instance.
+const REQUEST_TIMEOUT_MS = 90_000;
+const METADATA_FETCH_TIMEOUT_MS = 2_000;
+// 55-minute TTL on 1-hour GCP OIDC tokens — never serve a near-expired token
 const TOKEN_CACHE_TTL_MS = 55 * 60 * 1_000;
+
+class HttpError extends Error {
+    constructor(message: string, readonly httpStatus: number) {
+        super(message);
+        this.name = 'HttpError';
+    }
+}
 
 export interface LangGraphInvokeRequest {
     input: Record<string, unknown>;
@@ -39,87 +45,38 @@ interface TokenCacheEntry {
     inFlight: Promise<string> | null;
 }
 
-export class LangGraphService {
-    // Keyed by audience (serviceUrl) so multiple instances with different URLs
-    // never serve a token issued for the wrong audience.
-    private static _tokenCache: Map<string, TokenCacheEntry> = new Map();
+const _tokenCache = new Map<string, TokenCacheEntry>();
 
+export class LangGraphService {
     constructor(private readonly serviceUrl: string) {}
 
-    /**
-     * Invoke the bizzie_chat LangGraph graph.
-     *
-     * Uses a 90s AbortController timeout and retries once on network / 5xx errors.
-     * Authenticated via GCP metadata server OIDC token (service-to-service IAM).
-     */
     async invoke(request: LangGraphInvokeRequest): Promise<LangGraphChatResponse> {
-        return retry(
-            async () => {
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), INVOKE_TIMEOUT_MS);
-
-                try {
-                    const idToken = await this._getIdToken(this.serviceUrl);
-
-                    const res = await fetch(`${this.serviceUrl}/invoke`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-                        },
-                        body: JSON.stringify(request),
-                        signal: controller.signal,
-                    });
-
-                    if (!res.ok) {
-                        const status = res.status;
-                        await res.body?.cancel();
-                        throw Object.assign(new Error(`LangGraph upstream error`), { httpStatus: status });
-                    }
-
-                    return (await res.json()) as LangGraphChatResponse;
-                } finally {
-                    clearTimeout(timer);
-                }
+        return retry(() => this._invokeOnce(request), {
+            maxAttempts: 2,
+            initialDelayMs: 2_000,
+            shouldRetry: (err) => {
+                if (err instanceof HttpError && err.httpStatus >= 400 && err.httpStatus < 500) return false;
+                return true;
             },
-            {
-                maxAttempts: 2,
-                initialDelayMs: 2_000,
-                shouldRetry: (err) => {
-                    const status = (err as { httpStatus?: number }).httpStatus;
-                    // Never retry 4xx — only transient network errors and 5xx
-                    if (status !== undefined && status >= 400 && status < 500) return false;
-                    return true;
-                },
-            },
-        );
+        });
     }
 
-    /**
-     * Stream the final_response tokens from the bizzie_chat LangGraph graph via SSE.
-     * Calls /stream and yields parsed StreamEvent objects.
-     * Always releases the ReadableStream reader lock in the finally block.
-     */
     async *stream(request: LangGraphInvokeRequest): AsyncGenerator<StreamEvent> {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
+        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
         let idToken = '';
         try {
             idToken = await this._getIdToken(this.serviceUrl);
         } catch {
-            // Non-GCP environment — proceed without auth
+            // ignore — non-GCP environment
         }
-
-        let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
         try {
             const res = await fetch(`${this.serviceUrl}/stream`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-                },
+                headers: { 'Content-Type': 'application/json', ...this._authHeaders(idToken) },
                 body: JSON.stringify(request),
                 signal: controller.signal,
             });
@@ -139,96 +96,112 @@ export class LangGraphService {
                 const { done, value } = await reader.read();
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() ?? '';
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    const raw = line.slice(6).trim();
-                    if (!raw) continue;
-                    try {
-                        yield JSON.parse(raw) as StreamEvent;
-                    } catch {
-                        // malformed SSE line — skip
-                    }
+                const { events, remainder } = this._parseSseLines(buffer);
+                buffer = remainder;
+                for (const event of events) {
+                    yield event;
                 }
             }
         } catch (err) {
             _logger.error('LangGraph stream error', err);
             yield { type: 'error', message: 'AI service unavailable' };
         } finally {
-            // Always release the lock — prevents resource leak under high concurrency
-            try { reader?.releaseLock(); } catch { /* already released */ }
+            try { reader?.releaseLock(); } catch { /* ignore */ }
             clearTimeout(timer);
         }
     }
 
-    /**
-     * Fetch a GCP OIDC ID token from the metadata server for service-to-service auth.
-     *
-     * Token is cached per-audience for 55 minutes (tokens valid 1 hour). All concurrent
-     * requests share a single in-flight fetch promise per audience — prevents thundering
-     * herd on expiry. Keyed by audience so multiple serviceUrl values never cross-pollinate.
-     *
-     * Returns empty string in local/non-GCP environments.
-     */
+    private async _invokeOnce(request: LangGraphInvokeRequest): Promise<LangGraphChatResponse> {
+        const idToken = await this._getIdToken(this.serviceUrl);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        try {
+            const res = await fetch(`${this.serviceUrl}/invoke`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...this._authHeaders(idToken) },
+                body: JSON.stringify(request),
+                signal: controller.signal,
+            });
+            if (!res.ok) {
+                const status = res.status;
+                await res.body?.cancel();
+                throw new HttpError('LangGraph upstream error', status);
+            }
+            return (await res.json()) as LangGraphChatResponse;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    private _authHeaders(idToken: string): Record<string, string> {
+        return idToken ? { Authorization: `Bearer ${idToken}` } : {};
+    }
+
+    private _parseSseLines(buffer: string): { events: StreamEvent[]; remainder: string } {
+        const lines = buffer.split('\n');
+        const remainder = lines.pop() ?? '';
+        const events: StreamEvent[] = [];
+        for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (!raw) continue;
+            try {
+                events.push(JSON.parse(raw) as StreamEvent);
+            } catch {
+                // skip malformed SSE line
+            }
+        }
+        return { events, remainder };
+    }
+
     private async _getIdToken(audience: string): Promise<string> {
         const now = Date.now();
-        const entry = LangGraphService._tokenCache.get(audience);
+        const entry = _tokenCache.get(audience);
 
-        // Serve from cache if still valid
-        if (entry && entry.token && now < entry.expiresAt) {
+        if (entry?.token && now < entry.expiresAt) {
             return entry.token;
         }
 
-        // Deduplicate concurrent fetches — all callers for this audience await the same promise
         if (entry?.inFlight) {
             return entry.inFlight;
         }
 
-        const inFlight = this._fetchIdToken(audience).finally(() => {
-            const current = LangGraphService._tokenCache.get(audience);
-            if (current) current.inFlight = null;
-        });
+        const inFlight: Promise<string> = this._fetchIdToken(audience)
+            .then((token) => {
+                if (token) {
+                    _tokenCache.set(audience, { token, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS, inFlight: null });
+                } else {
+                    const stale = _tokenCache.get(audience);
+                    if (stale) _tokenCache.set(audience, { ...stale, inFlight: null });
+                }
+                return token;
+            })
+            .catch(() => {
+                const stale = _tokenCache.get(audience);
+                if (stale) _tokenCache.set(audience, { ...stale, inFlight: null });
+                return '';
+            });
 
-        LangGraphService._tokenCache.set(audience, {
-            token: entry?.token ?? '',
-            expiresAt: entry?.expiresAt ?? 0,
-            inFlight,
-        });
-
+        _tokenCache.set(audience, { token: entry?.token ?? '', expiresAt: entry?.expiresAt ?? 0, inFlight });
         return inFlight;
     }
 
     private async _fetchIdToken(audience: string): Promise<string> {
+        const metadataUrl =
+            `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity` +
+            `?audience=${encodeURIComponent(audience)}`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), METADATA_FETCH_TIMEOUT_MS);
         try {
-            const metadataUrl =
-                `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity` +
-                `?audience=${encodeURIComponent(audience)}`;
-
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 2_000);
-
-            try {
-                const res = await fetch(metadataUrl, {
-                    headers: { 'Metadata-Flavor': 'Google' },
-                    signal: controller.signal,
-                });
-                if (res.ok) {
-                    const token = await res.text();
-                    LangGraphService._tokenCache.set(audience, {
-                        token,
-                        expiresAt: Date.now() + TOKEN_CACHE_TTL_MS,
-                        inFlight: null,
-                    });
-                    return token;
-                }
-                return '';
-            } finally {
-                clearTimeout(timer);
-            }
+            const res = await fetch(metadataUrl, {
+                headers: { 'Metadata-Flavor': 'Google' },
+                signal: controller.signal,
+            });
+            return res.ok ? await res.text() : '';
         } catch {
-            // Not running on GCP — skip auth header
             return '';
+        } finally {
+            clearTimeout(timer);
         }
     }
 }

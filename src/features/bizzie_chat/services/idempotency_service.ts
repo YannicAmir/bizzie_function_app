@@ -3,8 +3,7 @@ import { Logger } from '../../../core/logger';
 
 const _logger = new Logger('BizzieChat IdempotencyService');
 
-// Keys expire after 24 hours (seconds)
-const TTL_SECONDS = 86400;
+const TTL_SECONDS = 24 * 60 * 60;
 
 export interface IdempotencyRecord {
     exists: boolean;
@@ -12,10 +11,6 @@ export interface IdempotencyRecord {
 }
 
 export class IdempotencyService {
-    /**
-     * Check whether an idempotency key has already been used.
-     * Returns the cached response if the key exists and has not expired.
-     */
     async get(uid: string, key: string): Promise<IdempotencyRecord> {
         try {
             const ref = getFirebaseAdmin()
@@ -35,7 +30,6 @@ export class IdempotencyService {
             const now = Math.floor(Date.now() / 1000);
 
             if (now - createdAt > TTL_SECONDS) {
-                // Expired — treat as not existing (stale cleanup is fire-and-forget)
                 ref.delete().catch(() => undefined);
                 return { exists: false };
             }
@@ -47,10 +41,7 @@ export class IdempotencyService {
         }
     }
 
-    /**
-     * Store the response for an idempotency key.
-     * Fire-and-forget — caller must not await for the response path.
-     */
+    /** Fire-and-forget — do not await. */
     async store(uid: string, key: string, response: object): Promise<void> {
         try {
             await getFirebaseAdmin()

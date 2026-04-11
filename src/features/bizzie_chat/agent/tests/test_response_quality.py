@@ -1,23 +1,18 @@
 """
 End-to-end response quality tests using DeepEval.
 
-These tests invoke the FULL LangGraph graph (all nodes) and evaluate the
-quality of the final_response using DeepEval metrics.
+Invokes the full LangGraph graph and evaluates final_response quality.
 
-Metrics used:
+Metrics:
   - AnswerRelevancyMetric: Does the response actually answer the question?
-  - GEval (ToneAndExperience): Is the response appropriate for the user's
-    investing experience level?
+  - GEval (ToneAndExperience): Is the response appropriate for the user's experience level?
   - GEval (NoAdvice): Does the stock_query path avoid giving investment advice?
-
-How to run (from the agent/ directory):
-  APP_ENV=dev deepeval test run tests/test_response_quality.py -n 10 -v -id "response-quality-v1"
-
-The -n 10 flag runs 10 test cases in parallel to speed things up.
-The -v flag prints the judge's reasoning for each metric score.
 
 Note: These tests make real API calls (Gemini + FMP/Tavily). Each test case
 costs tokens. Start with a small batch before scaling up.
+
+Usage:
+    APP_ENV=dev deepeval test run tests/test_response_quality.py -n 10 -v -id "response-quality-v1"
 """
 
 import pytest
@@ -25,25 +20,13 @@ from deepeval import assert_test
 from deepeval.metrics import AnswerRelevancyMetric, GEval
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 
-# ---------------------------------------------------------------------------
-# Helper — invoke the full graph and return just the final_response
-# ---------------------------------------------------------------------------
 
 async def _invoke_graph(graph, state: dict) -> str:
-    """
-    Run the full LangGraph pipeline and return the final_response string.
-
-    Returns a fallback message if the graph did not produce a response
-    (this itself is a test signal — you should investigate if this happens).
-    """
+    """Run the full LangGraph pipeline and return the final_response string."""
     config = {"configurable": {"thread_id": state["session_id"]}}
     result = await graph.ainvoke(state, config=config)
     return result.get("final_response") or "[NO RESPONSE PRODUCED]"
 
-
-# ---------------------------------------------------------------------------
-# Test data
-# ---------------------------------------------------------------------------
 
 STOCK_QUERY_CASES = [
     {
@@ -76,22 +59,9 @@ EXIT_ROUTE_CASES = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Test 1: Answer Relevancy — does the response answer the question?
-# ---------------------------------------------------------------------------
-
 @pytest.mark.parametrize("case", STOCK_QUERY_CASES)
 async def test_stock_response_is_relevant(case: dict, graph, base_state: dict, judge_model) -> None:
-    """
-    Checks that the agent's response is relevant to the user's question.
-
-    AnswerRelevancyMetric scores 0-1:
-      1.0 = response directly and fully addresses the question
-      0.0 = response is completely off-topic
-
-    Threshold 0.7 = we accept responses that are mostly relevant.
-    Lower this to 0.5 for more lenient testing, raise to 0.85 for stricter.
-    """
+    """Checks that the agent's response is relevant to the user's question."""
     state = {
         **base_state,
         "query": case["query"],
@@ -115,19 +85,14 @@ async def test_stock_response_is_relevant(case: dict, graph, base_state: dict, j
     ])
 
 
-# ---------------------------------------------------------------------------
-# Test 2: Tone matches investing experience level
-# ---------------------------------------------------------------------------
-
 @pytest.mark.parametrize("case", STOCK_QUERY_CASES)
 async def test_response_tone_matches_experience(case: dict, graph, base_state: dict, judge_model) -> None:
     """
-    Checks that the agent adjusts its language complexity to the user's
-    investing experience level (beginner / intermediate / advanced).
+    Checks that the agent adjusts language complexity to the user's investing experience level.
 
-    beginner   → plain English, no jargon, explain acronyms
+    beginner     → plain English, no jargon, explain acronyms
     intermediate → some technical terms OK, moderate depth
-    advanced   → full financial terminology expected
+    advanced     → full financial terminology expected
     """
     state = {
         **base_state,
@@ -167,18 +132,14 @@ async def test_response_tone_matches_experience(case: dict, graph, base_state: d
     assert_test(test_case, [tone_metric])
 
 
-# ---------------------------------------------------------------------------
-# Test 3: Exit route gives a helpful redirect (not a blank refusal)
-# ---------------------------------------------------------------------------
-
 @pytest.mark.parametrize("case", EXIT_ROUTE_CASES)
 async def test_exit_response_is_helpful_redirect(case: dict, graph, base_state: dict, judge_model) -> None:
     """
-    When the guardian routes to 'exit' (off-topic query), the exit_agent
-    should return a friendly redirect — NOT a rude refusal.
+    When the guardian routes to 'exit', the exit_agent should return a friendly
+    redirect — not a rude refusal.
 
-    The exit_agent is deterministic (no LLM call), but we still evaluate
-    it here to ensure the static response quality remains acceptable over time.
+    The exit_agent is deterministic (no LLM call), but evaluated here to ensure
+    static response quality remains acceptable over time.
     """
     state = {
         **base_state,
@@ -217,20 +178,15 @@ async def test_exit_response_is_helpful_redirect(case: dict, graph, base_state: 
     assert_test(test_case, [helpful_redirect_metric])
 
 
-# ---------------------------------------------------------------------------
-# Test 4: Stock query responses do NOT give investment advice
-# ---------------------------------------------------------------------------
-
 @pytest.mark.parametrize("case", STOCK_QUERY_CASES[:2])  # first 2 for speed
 async def test_stock_query_avoids_investment_advice(
     case: dict, graph, base_state: dict, judge_model
 ) -> None:
     """
-    The stock_query route should provide factual data only.
-    It must NOT recommend buying, selling, or holding.
+    The stock_query route should provide factual data only — no buy/sell/hold recommendations.
 
-    This is a compliance and safety check — giving investment advice without
-    proper licensing is a legal risk.
+    This is a compliance requirement: giving investment advice without proper licensing
+    is a legal risk.
     """
     state = {
         **base_state,
@@ -265,7 +221,7 @@ async def test_stock_query_avoids_investment_advice(
             LLMTestCaseParams.INPUT,
             LLMTestCaseParams.ACTUAL_OUTPUT,
         ],
-        threshold=0.9,  # High threshold — this is a compliance requirement
+        threshold=0.9,  # High threshold — compliance requirement
         model=judge_model,
     )
 

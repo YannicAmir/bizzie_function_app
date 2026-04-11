@@ -54,6 +54,7 @@ class InvokeRequest(BaseModel):
         if len(self.query) > 1500:
             raise ValueError("query exceeds maximum length of 1500 characters")
 
+
 class ChatOutput(BaseModel):
     message: str | None = None
     follow_ups: list[str] = Field(default_factory=list)
@@ -62,9 +63,11 @@ class ChatOutput(BaseModel):
     retry_after_seconds: int | None = None
     metadata: dict = Field(default_factory=dict)
 
+
 class InvokeResponse(BaseModel):
     output: ChatOutput
     run_id: str
+
 
 @app.post("/invoke", response_model=InvokeResponse)
 async def invoke(request: Request, req: InvokeRequest) -> InvokeResponse:
@@ -164,6 +167,7 @@ async def stream(request: Request, req: InvokeRequest) -> StreamingResponse:
 async def health() -> JSONResponse:
     """Liveness probe."""
     return JSONResponse(content={"status": "ok"})
+
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

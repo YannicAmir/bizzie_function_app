@@ -1,4 +1,4 @@
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { CollectionReference, DocumentReference, FieldValue, Timestamp, WriteBatch } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from '../../../core/firebase';
 import { Logger } from '../../../core/logger';
 
@@ -6,8 +6,8 @@ const _logger = new Logger('BizzieChat ConversationService');
 
 const CONVERSATIONS_COLLECTION = 'conversations';
 const MESSAGES_SUBCOLLECTION = 'messages';
-const MAX_HISTORY_MESSAGES = 6; // 3 user + 3 assistant turns
-const CONTENT_TRUNCATION_CHARS = 300; // max chars per message injected into LLM context
+const MAX_HISTORY_MESSAGES = 6;
+const CONTENT_TRUNCATION_CHARS = 300;
 
 export interface ConversationTurn {
     role: 'user' | 'assistant';
@@ -33,17 +33,25 @@ interface ConversationMetaDoc {
     ticker: string;
     companyName: string;
     createdAt: Timestamp;
-    updatedAt: FirebaseFirestore.Timestamp;
+    updatedAt: Timestamp;
     messageCount: number;
 }
 
+export interface AppendTurnParams {
+    uid: string;
+    sessionId: string;
+    ticker: string;
+    companyName: string;
+    userMessage: string;
+    assistantMessage: string;
+    followUps?: string[];
+    source?: string | null;
+    routePath?: string | null;
+    isFirstTurn: boolean;
+    title?: string;
+}
+
 export class ConversationService {
-    /**
-     * Load the last MAX_HISTORY_MESSAGES from the session's messages subcollection.
-     * Content is truncated to CONTENT_TRUNCATION_CHARS to limit LLM token usage.
-     * Returns hadError=true on any Firestore failure so the caller can distinguish
-     * a genuine empty session from a read fault — preventing false isFirstTurn detection.
-     */
     async loadHistory(uid: string, sessionId: string): Promise<HistoryResult> {
         try {
             const db = getFirebaseAdmin().firestore();
@@ -78,104 +86,73 @@ export class ConversationService {
         }
     }
 
-    /**
-     * Persist a completed turn to Firestore.
-     * On the first turn (isFirstTurn=true), creates the parent conversation metadata doc.
-     * On subsequent turns, increments messageCount and updates updatedAt.
-     *
-     * Uses batch.set with merge (not update) — safe even if the parent doc was never
-     * created due to a prior write failure, preventing silent data loss.
-     *
-     * User and assistant messages are offset by 1ms to guarantee stable createdAt ordering.
-     *
-     * Fire-and-forget — never awaited by the caller.
-     */
-    async appendTurn(params: {
-        uid: string;
-        sessionId: string;
-        ticker: string;
-        companyName: string;
-        userMessage: string;
-        assistantMessage: string;
-        followUps?: string[];
-        source?: string | null;
-        routePath?: string | null;
-        isFirstTurn: boolean;
-        title?: string;
-    }): Promise<void> {
-        const {
-            uid,
-            sessionId,
-            ticker,
-            companyName,
-            userMessage,
-            assistantMessage,
-            followUps,
-            source,
-            routePath,
-            isFirstTurn,
-            title,
-        } = params;
-
+    /** Fire-and-forget — do not await. */
+    async appendTurn(params: AppendTurnParams): Promise<void> {
         try {
             const db = getFirebaseAdmin().firestore();
             const userTimestamp = Timestamp.now();
-            // Offset by 1ms to guarantee stable ordering — Firestore does not
-            // guarantee order for documents with identical timestamps.
             const assistantTimestamp = Timestamp.fromMillis(userTimestamp.toMillis() + 1);
 
             const convRef = db
                 .collection('users')
-                .doc(uid)
+                .doc(params.uid)
                 .collection(CONVERSATIONS_COLLECTION)
-                .doc(sessionId);
+                .doc(params.sessionId);
 
-            const messagesRef = convRef.collection(MESSAGES_SUBCOLLECTION);
             const batch = db.batch();
-
-            // Use set+merge for both first and subsequent turns.
-            // merge:true means Firestore creates the doc if missing and patches if present —
-            // safe even when a prior batch failed silently (prevents orphaned message docs).
-            if (isFirstTurn) {
-                const meta: ConversationMetaDoc = {
-                    title: (title ?? userMessage).slice(0, 60),
-                    ticker,
-                    companyName,
-                    createdAt: userTimestamp,
-                    updatedAt: userTimestamp,
-                    messageCount: 2,
-                };
-                batch.set(convRef, meta);
-            } else {
-                batch.set(
-                    convRef,
-                    { updatedAt: userTimestamp, messageCount: FieldValue.increment(2) },
-                    { merge: true },
-                );
-            }
-
-            // User message doc
-            const userDoc: MessageDoc = {
-                role: 'user',
-                content: userMessage,
-                createdAt: userTimestamp,
-            };
-            batch.set(messagesRef.doc(), userDoc);
-
-            // Assistant message doc — 1ms after user to guarantee ordering
-            const assistantDoc: MessageDoc = {
-                role: 'assistant',
-                content: assistantMessage,
-                createdAt: assistantTimestamp,
-                ...(followUps?.length ? { followUps } : {}),
-                ...(source != null ? { source } : {}),
-                ...(routePath != null ? { routePath } : {}),
-            };
-            batch.set(messagesRef.doc(), assistantDoc);
-
+            this.batchConvMeta(batch, convRef, params, userTimestamp);
+            this.batchMessages(batch, convRef.collection(MESSAGES_SUBCOLLECTION), params, userTimestamp, assistantTimestamp);
             await batch.commit();
         } catch (error) {
             _logger.error('Failed to append conversation turn', error);
         }
+    }
+
+    private batchConvMeta(
+        batch: WriteBatch,
+        convRef: DocumentReference,
+        params: AppendTurnParams,
+        userTimestamp: Timestamp,
+    ): void {
+        if (params.isFirstTurn) {
+            const meta: ConversationMetaDoc = {
+                title: (params.title ?? params.userMessage).slice(0, 60),
+                ticker: params.ticker,
+                companyName: params.companyName,
+                createdAt: userTimestamp,
+                updatedAt: userTimestamp,
+                messageCount: 2,
+            };
+            batch.set(convRef, meta);
+        } else {
+            batch.set(
+                convRef,
+                { updatedAt: userTimestamp, messageCount: FieldValue.increment(2) },
+                { merge: true },
+            );
+        }
+    }
+
+    private batchMessages(
+        batch: WriteBatch,
+        messagesRef: CollectionReference,
+        params: AppendTurnParams,
+        userTimestamp: Timestamp,
+        assistantTimestamp: Timestamp,
+    ): void {
+        batch.set(messagesRef.doc(), {
+            role: 'user',
+            content: params.userMessage,
+            createdAt: userTimestamp,
+        } as MessageDoc);
+
+        batch.set(messagesRef.doc(), {
+            role: 'assistant',
+            content: params.assistantMessage,
+            createdAt: assistantTimestamp,
+            ...(params.followUps?.length ? { followUps: params.followUps } : {}),
+            ...(params.source != null ? { source: params.source } : {}),
+            ...(params.routePath != null ? { routePath: params.routePath } : {}),
+        } as MessageDoc);
     }
 }

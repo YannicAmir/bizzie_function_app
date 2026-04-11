@@ -11,10 +11,6 @@ export interface BizzieUser {
 }
 
 export class UserService {
-    /**
-     * Load a user document from /users/{uid}.
-     * Returns null if the document does not exist.
-     */
     async getUser(uid: string): Promise<BizzieUser | null> {
         try {
             const doc = await getFirebaseAdmin().firestore().collection('users').doc(uid).get();

@@ -21,12 +21,10 @@ from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from dotenv import load_dotenv
 
-# ---------------------------------------------------------------------------
 # Load env + authenticate before pulling dataset.
 # `deepeval test run` imports test modules before pytest_configure fires,
 # so both env loading and deepeval.login() must happen here — not just in
 # conftest.py — to ensure the dataset pull is fully authenticated.
-# ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).parents[5]
 _AGENT_DIR = Path(__file__).parent.parent
 _ENV_NAME = os.getenv("APP_ENV", "dev")
@@ -41,9 +39,7 @@ _confident_api_key = os.getenv("CONFIDENT_API_KEY")
 if _confident_api_key:
     deepeval.login(_confident_api_key)
 
-# ---------------------------------------------------------------------------
 # Pull dataset — happens once at collection time
-# ---------------------------------------------------------------------------
 _PARAM_MAP = {
     "INPUT": LLMTestCaseParams.INPUT,
     "ACTUAL_OUTPUT": LLMTestCaseParams.ACTUAL_OUTPUT,
@@ -56,10 +52,6 @@ _dataset.pull(alias="bizzie-chat-tests")
 _goldens: list[Golden] = cast(list[Golden], _dataset.goldens)
 
 
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
-
 async def run_graph(graph, state):
     """Invoke the graph and extract the final response and route."""
     res = await graph.ainvoke(state)
@@ -69,10 +61,6 @@ async def run_graph(graph, state):
         "classification": res.get("classification"),
     }
 
-
-# ---------------------------------------------------------------------------
-# Parametrized smoke test — one named test per golden
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "golden",
@@ -96,7 +84,7 @@ async def test_bizzie_chat(golden, graph, base_state, judge_model):
 
     result = await run_graph(graph, state)
 
-    # --- Structural assertion: route must be (one of) the expected value(s) ---
+    # Structural assertion: route must be (one of) the expected value(s)
     assert_route = meta.get("assert_route")
     if assert_route is not None:
         if isinstance(assert_route, list):
@@ -110,7 +98,7 @@ async def test_bizzie_chat(golden, graph, base_state, judge_model):
                 f"Input: {golden.input}"
             )
 
-    # --- Structural assertion: route must NOT be a specific value ---
+    # Structural assertion: route must NOT be a specific value
     assert_route_not = meta.get("assert_route_not")
     if assert_route_not:
         assert result["route"] != assert_route_not, (
@@ -118,7 +106,7 @@ async def test_bizzie_chat(golden, graph, base_state, judge_model):
             f"Input: {golden.input}"
         )
 
-    # --- Structural assertion: guardian classification fields ---
+    # Structural assertion: guardian classification fields
     assert_classification = meta.get("assert_classification")
     if assert_classification:
         classification = result.get("classification") or {}
@@ -129,7 +117,6 @@ async def test_bizzie_chat(golden, graph, base_state, judge_model):
                 f"Input: {golden.input}"
             )
 
-    # --- DeepEval quality assertion ---
     retrieval_context = meta.get("retrieval_context")
     test_case = LLMTestCase(
         input=golden.input,

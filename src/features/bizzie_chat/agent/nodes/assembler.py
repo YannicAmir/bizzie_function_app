@@ -1,15 +1,3 @@
-"""
-Response post-processing nodes.
-
-response_sanitizer: Strips FMP branding and internal tool phrasing.
-follow_up_generator: Generates 3 contextual follow-up questions via Gemini Flash Lite.
-response_assembler: Final deterministic assembly — combines sanitized text,
-  follow-ups, and computes latency metadata.
-
-response_sanitizer and follow_up_generator run in PARALLEL.
-response_assembler fans in after both complete.
-"""
-
 import ast
 import json
 import logging
@@ -22,8 +10,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.features.bizzie_chat.agent.cache import cache_get, cache_set, hash_query
 from src.features.bizzie_chat.agent.config import config
-from src.features.bizzie_chat.agent.nodes.ambassador import PRICE_DISCLAIMER
 from src.features.bizzie_chat.agent.nodes.circuit_breaker import _get_thread_id
+from src.features.bizzie_chat.agent.prompts.assembler_prompts import (
+    FOLLOW_UP_SYSTEM,
+    build_follow_up_prompt,
+)
+from src.features.bizzie_chat.agent.prompts.shared import PRICE_DISCLAIMER
 from src.features.bizzie_chat.agent.state import BizzieState
 
 logger = logging.getLogger(__name__)
@@ -41,31 +33,60 @@ _SANITIZE_PATTERNS = [
 ]
 
 
+def _extract_response_content(response: Any) -> str:
+    content = getattr(response, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+            if not isinstance(block, dict) or block.get("type") == "text"
+        )
+    return ""
+
+
+def _parse_follow_ups(raw: str) -> list[str]:
+    raw = re.sub(r"```(?:json)?\s*", "", raw).strip().rstrip("`").strip()
+    start_idx = raw.find("[")
+    end_idx = raw.rfind("]")
+    if start_idx != -1 and end_idx != -1:
+        raw = raw[start_idx:end_idx + 1]
+
+    follow_ups: list[str] = []
+    try:
+        follow_ups = json.loads(raw)
+    except json.JSONDecodeError:
+        try:
+            follow_ups = ast.literal_eval(raw)
+        except Exception:
+            follow_ups = re.findall(r'"([^"]*)"', raw) or re.findall(r"'([^']*)'", raw)
+
+    if not isinstance(follow_ups, list):
+        return []
+    if len(follow_ups) == 1 and "\n" in follow_ups[0]:
+        follow_ups = [q.strip() for q in follow_ups[0].split("\n") if q.strip()]
+
+    return [str(q) for q in follow_ups[:3]]
+
+
 async def response_sanitizer(state: BizzieState) -> dict[str, Any]:
-    """Strip FMP branding and internal tool phrasing from the raw LLM response."""
     thread_id = _get_thread_id(state)
     raw = state.get("raw_response") or ""
 
     sanitized = raw
     for pattern in _SANITIZE_PATTERNS:
         sanitized = pattern.sub("", sanitized)
-
     sanitized = re.sub(r"  +", " ", sanitized).strip()
 
     logger.info(
         "response_sanitizer: complete",
         extra={"json_fields": {"node": "response_sanitizer", "thread_id": thread_id}},
     )
-
     return {"sanitized_response": sanitized}
 
 
 async def follow_up_generator(state: BizzieState) -> dict[str, Any]:
-    """
-    Generate 3 contextual follow-up questions using Gemini Flash Lite.
-    Runs in PARALLEL with response_sanitizer.
-    Forces JSON array output. On parse failure: returns empty array (never throws).
-    """
     thread_id = _get_thread_id(state)
     company_ticker = state["company_ticker"]
     company_name = state["company_name"]
@@ -104,61 +125,14 @@ async def follow_up_generator(state: BizzieState) -> dict[str, Any]:
             },
         )
 
-        if references_different and referenced_ticker:
-            prompt = (
-                f"The user asked about {company_name} ({company_ticker}) in context of comparing with "
-                f"{referenced_ticker}. "
-                "Generate exactly 3 short, 1-sentence follow-up questions for a curious investor. "
-                "Return as a JSON array of strings: [\"question 1\", \"question 2\", \"question 3\"]"
-            )
-        else:
-            prompt = (
-                f"Based on a question about {company_name} ({company_ticker}), "
-                "generate exactly 3 short, 1-sentence follow-up questions for a curious investor. "
-                "Return as a JSON array of strings: [\"question 1\", \"question 2\", \"question 3\"]"
-            )
-
+        prompt = build_follow_up_prompt(company_name, company_ticker, references_different, referenced_ticker)
         messages = [
-            SystemMessage(content="You are a helpful investment assistant that only speaks in JSON arrays."),
-            HumanMessage(content=f"{prompt}\n\nUser query: {state['query']}")
+            SystemMessage(content=FOLLOW_UP_SYSTEM),
+            HumanMessage(content=f"{prompt}\n\nUser query: {state['query']}"),
         ]
 
         response = await llm.ainvoke(messages)
-        content = getattr(response, "content", None)
-        if isinstance(content, str):
-            raw = content
-        elif isinstance(content, list):
-            raw = "".join(
-                block.get("text", "") if isinstance(block, dict) else str(block)
-                for block in content
-                if not isinstance(block, dict) or block.get("type") == "text"
-            )
-        else:
-            raw = ""
-
-        raw = re.sub(r"```(?:json)?\s*", "", raw).strip().rstrip("`").strip()
-        start_idx = raw.find("[")
-        end_idx = raw.rfind("]")
-        if start_idx != -1 and end_idx != -1:
-            raw = raw[start_idx : end_idx + 1]
-
-        try:
-            follow_ups: list[str] = json.loads(raw)
-        except json.JSONDecodeError:
-            try:
-                follow_ups = ast.literal_eval(raw)
-            except Exception:
-                follow_ups = re.findall(r'"([^"]*)"', raw)
-                if not follow_ups:
-                    follow_ups = re.findall(r"'([^']*)'", raw)
-
-        if not isinstance(follow_ups, list):
-            follow_ups = []
-
-        if len(follow_ups) == 1 and "\n" in follow_ups[0]:
-            follow_ups = [q.strip() for q in follow_ups[0].split("\n") if q.strip()]
-
-        follow_ups = [str(q) for q in follow_ups[:3]]
+        follow_ups = _parse_follow_ups(_extract_response_content(response))
 
         logger.info(
             "follow_up_generator: complete",
@@ -167,7 +141,7 @@ async def follow_up_generator(state: BizzieState) -> dict[str, Any]:
         await cache_set(followup_cache_key, follow_ups, 1800)
         return {"follow_ups": follow_ups}
 
-    except (json.JSONDecodeError, Exception) as exc:
+    except Exception as exc:
         logger.warning(
             "follow_up_generator: failed, returning empty",
             extra={"json_fields": {"node": "follow_up_generator", "thread_id": thread_id, "error": str(exc)}},
@@ -176,7 +150,6 @@ async def follow_up_generator(state: BizzieState) -> dict[str, Any]:
 
 
 async def response_assembler(state: BizzieState) -> dict[str, Any]:
-    """Assemble the final response from sanitized text, follow-ups, and metadata."""
     thread_id = _get_thread_id(state)
     logger.info(
         "response_assembler: start",
@@ -204,15 +177,13 @@ async def response_assembler(state: BizzieState) -> dict[str, Any]:
 
     logger.info(
         "response_assembler: complete",
-        extra={
-            "json_fields": {
-                "node": "response_assembler",
-                "thread_id": thread_id,
-                "route_path": route_path,
-                "source": source,
-                "latency_ms": metadata.get("latency_ms"),
-            }
-        },
+        extra={"json_fields": {
+            "node": "response_assembler",
+            "thread_id": thread_id,
+            "route_path": route_path,
+            "source": source,
+            "latency_ms": metadata.get("latency_ms"),
+        }},
     )
 
     return {

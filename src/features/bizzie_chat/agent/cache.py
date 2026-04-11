@@ -104,8 +104,7 @@ def _get_redis() -> aioredis.Redis | None:
 
 
 def hash_query(query: str) -> str:
-    """sha256 of query, first 16 hex chars. Safe for cache keys and logging — never stores raw text.
-    """
+    """sha256 of query, first 16 hex chars. Safe for cache keys and logging — never stores raw text."""
     return hashlib.sha256(query.encode()).hexdigest()[:16]
 
 

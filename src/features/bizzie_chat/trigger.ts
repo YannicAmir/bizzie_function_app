@@ -2,6 +2,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { getFirebaseAdmin } from '../../core/firebase';
 import { Logger } from '../../core/logger';
+import { AppError } from '../../core/errors';
 import { BizzieChatUseCase, BizzieChatRequest } from './usecase';
 import { AuthService } from './services/auth_service';
 import { UserService } from './services/user_service';
@@ -13,8 +14,59 @@ import { LangGraphService } from './services/langgraph_service';
 getFirebaseAdmin();
 
 const _logger = new Logger('BizzieChat Trigger');
-
 const langGraphUrl = defineSecret('BIZZIE_CHAT_LANGGRAPH_URL');
+
+const _authService = new AuthService();
+const _userService = new UserService();
+const _rateLimitService = new RateLimitService();
+const _idempotencyService = new IdempotencyService();
+const _conversationService = new ConversationService();
+
+interface ParsedBody {
+    idempotencyKey: string;
+    query: string;
+    companyTicker: string;
+    companyName: string;
+    sessionId: string;
+    stream: boolean;
+}
+
+type BodyParseResult =
+    | { ok: true; data: ParsedBody }
+    | { ok: false; status: number; error: string };
+
+function parseBody(raw: Record<string, unknown>): BodyParseResult {
+    const idempotencyKey = (raw?.idempotencyKey as string) || '';
+    const query = (raw?.query as string) || '';
+    const companyTicker = (raw?.companyTicker as string) || '';
+    const companyName = (raw?.companyName as string) || '';
+    const sessionId = (raw?.sessionId as string) || '';
+
+    if (!idempotencyKey || !query || !companyTicker || !companyName || !sessionId) {
+        return { ok: false, status: 400, error: 'Missing required fields: idempotencyKey, query, companyTicker, companyName, sessionId' };
+    }
+
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
+        return { ok: false, status: 400, error: 'Invalid sessionId: must be a UUID' };
+    }
+
+    if (idempotencyKey.length > 128) {
+        return { ok: false, status: 400, error: 'Invalid idempotencyKey: exceeds maximum length' };
+    }
+
+    return {
+        ok: true,
+        data: {
+            idempotencyKey,
+            query,
+            companyTicker,
+            companyName,
+            sessionId,
+            stream: (raw?.stream as boolean) === true,
+        },
+    };
+}
+
 
 export const bizzieChat = onRequest(
     {
@@ -30,7 +82,6 @@ export const bizzieChat = onRequest(
             return;
         }
 
-        // Parse Authorization header
         const authHeader = request.headers['authorization'] ?? '';
         if (!authHeader.startsWith('Bearer ')) {
             response.status(401).json({ error: 'Missing or invalid Authorization header' });
@@ -38,61 +89,26 @@ export const bizzieChat = onRequest(
         }
         const authToken = authHeader.slice('Bearer '.length).trim();
 
-        // Parse body
-        const body = request.body as Record<string, unknown>;
-        const idempotencyKey = (body?.idempotencyKey as string) || '';
-        const query = (body?.query as string) || '';
-        const companyTicker = (body?.companyTicker as string) || '';
-        const companyName = (body?.companyName as string) || '';
-        const sessionId = (body?.sessionId as string) || '';
-
-        if (!idempotencyKey || !query || !companyTicker || !companyName || !sessionId) {
-            response.status(400).json({
-                error: 'Missing required fields: idempotencyKey, query, companyTicker, companyName, sessionId',
-            });
+        const parsed = parseBody(request.body as Record<string, unknown>);
+        if (!parsed.ok) {
+            response.status(parsed.status).json({ error: parsed.error });
             return;
         }
 
-        // sessionId becomes a Firestore document ID — enforce UUID format to prevent
-        // unexpected doc IDs and ensure frontend generates them correctly.
-        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
-            response.status(400).json({ error: 'Invalid sessionId: must be a UUID' });
-            return;
-        }
+        const { idempotencyKey, query, companyTicker, companyName, sessionId, stream } = parsed.data;
+        const req: BizzieChatRequest = { authToken, idempotencyKey, query, companyTicker, companyName, sessionId };
 
-        // idempotencyKey also becomes a Firestore document ID — cap length to prevent
-        // oversized keys that would fail silently at the Firestore layer.
-        if (idempotencyKey.length > 128) {
-            response.status(400).json({ error: 'Invalid idempotencyKey: exceeds maximum length' });
-            return;
-        }
-
-        const stream = (body?.stream as boolean) === true;
-
-        const req: BizzieChatRequest = {
-            authToken,
-            idempotencyKey,
-            query,
-            companyTicker,
-            companyName,
-            sessionId,
-        };
+        const useCase = new BizzieChatUseCase(
+            _authService,
+            _userService,
+            _rateLimitService,
+            _idempotencyService,
+            _conversationService,
+            new LangGraphService(langGraphUrl.value()),
+        );
 
         try {
-            const useCase = new BizzieChatUseCase(
-                new AuthService(),
-                new UserService(),
-                new RateLimitService(),
-                new IdempotencyService(),
-                new ConversationService(),
-                new LangGraphService(langGraphUrl.value()),
-            );
-
             if (stream) {
-                // Run preflight before committing SSE headers — any auth, subscription,
-                // or rate limit error thrown here is caught by the outer catch block,
-                // which can still send a proper HTTP status code (401/403/429/400).
-                // Once flushHeaders() is called the status code is locked to 200.
                 const preflightResult = await useCase.preflight(req);
 
                 response.setHeader('Content-Type', 'text/event-stream');
@@ -110,9 +126,13 @@ export const bizzieChat = onRequest(
             const result = await useCase.execute(req);
             response.status(200).json(result);
         } catch (error: unknown) {
-            const err = error as { code?: string; status?: number; message?: string; retryAfterSeconds?: number };
+            if (!(error instanceof AppError)) {
+                _logger.error('Unhandled error in bizzieChat', error);
+                response.status(500).json({ error: 'Internal server error' });
+                return;
+            }
 
-            switch (err.code) {
+            switch (error.code) {
                 case 'UNAUTHORIZED':
                     response.status(401).json({ error: 'Invalid or expired auth token' });
                     break;
@@ -127,12 +147,12 @@ export const bizzieChat = onRequest(
                 case 'INJECTION_DETECTED':
                 case 'INVALID_TICKER':
                 case 'INVALID_COMPANY_NAME':
-                    response.status(400).json({ error: err.message ?? 'Invalid request' });
+                    response.status(400).json({ error: error.message ?? 'Invalid request' });
                     break;
                 case 'RATE_LIMIT_EXCEEDED':
                     response.status(429).json({
                         error: 'Daily chat limit reached',
-                        retryAfterSeconds: err.retryAfterSeconds,
+                        retryAfterSeconds: error.retryAfterSeconds,
                     });
                     break;
                 case 'GRAPH_ERROR':
