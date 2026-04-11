@@ -46,7 +46,7 @@ def _should_show_price_disclaimer(
 ) -> bool:
     now_et = datetime.now(tz=ET_TIMEZONE)
     if now_et.hour * 60 + now_et.minute >= MARKET_CLOSE_MINUTES:
-        return False 
+        return False
     today_str = now_et.strftime("%Y-%m-%d")
     for raw_name, data in tool_results:
         orig_name = fmp_name_map.get(raw_name, raw_name)
@@ -146,7 +146,12 @@ async def _execute_planned_tool(
     orig_name = fmp_name_map.get(t_name, t_name)
     logger.info(
         "fmp_agent: executing tool",
-        extra={"json_fields": {"node": "fmp_agent", "thread_id": thread_id, "tool": t_name, "cycle": "parallel-execute"}},
+        extra={"json_fields": {
+            "node": "fmp_agent",
+            "thread_id": thread_id,
+            "tool": t_name,
+            "cycle": "parallel-execute",
+        }},
     )
     try:
         res = await call_fmp_tool(orig_name, t_args)

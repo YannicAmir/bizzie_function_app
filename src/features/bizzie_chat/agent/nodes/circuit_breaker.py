@@ -95,7 +95,12 @@ async def ambassador_circuit_breaker_check(state: BizzieState) -> dict[str, Any]
         fmp_available = not _is_circuit_open(cb_data)
         logger.info(
             f"{node_name}: complete",
-            extra={"json_fields": {"node": node_name, "thread_id": thread_id, "fmp_available": fmp_available, "cb_state": cb_data.get("state")}},
+            extra={"json_fields": {
+                "node": node_name,
+                "thread_id": thread_id,
+                "fmp_available": fmp_available,
+                "cb_state": cb_data.get("state"),
+            }},
         )
         return {"fmp_available": fmp_available}
     except Exception as exc:
@@ -114,7 +119,12 @@ async def stock_query_circuit_breaker_check(state: BizzieState) -> dict[str, Any
         fmp_available = not _is_circuit_open(cb_data)
         logger.info(
             f"{node_name}: complete",
-            extra={"json_fields": {"node": node_name, "thread_id": thread_id, "fmp_available": fmp_available, "cb_state": cb_data.get("state")}},
+            extra={"json_fields": {
+                "node": node_name,
+                "thread_id": thread_id,
+                "fmp_available": fmp_available,
+                "cb_state": cb_data.get("state"),
+            }},
         )
         return {"fmp_available": fmp_available}
     except Exception as exc:
