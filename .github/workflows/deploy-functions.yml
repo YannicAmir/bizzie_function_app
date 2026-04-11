@@ -123,9 +123,6 @@ jobs:
             fi
           done
 
-      - name: Deploy to Firebase
-        run: firebase deploy --only functions --project ${{ env.FIREBASE_ALIAS }} --force
-
       - name: Deploy LangGraph Services to Cloud Run
         run: |
           GRAPH_COUNT=$(python3 -c "import json; d=json.load(open('langgraph.json')); print(len(d.get('graphs', {})))")
@@ -146,7 +143,22 @@ jobs:
                 --update-secrets=LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest,LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest,LANGSMITH_ENDPOINT=LANGSMITH_ENDPOINT:latest$EXTRA_SECRETS \
                 --update-env-vars=LANGSMITH_TRACING=true,LANGCHAIN_TRACING_V2=true \
                 --quiet
+
+              # Capture URL and store in Secret Manager so Firebase Functions can reference it
+              SERVICE_URL=$(gcloud run services describe langgraph-$GRAPH --region us-central1 --format="value(status.url)")
+              SECRET_NAME="$(echo "${GRAPH}" | tr '[:lower:]' '[:upper:]')_LANGGRAPH_URL"
+              if gcloud secrets describe "$SECRET_NAME" &>/dev/null 2>&1; then
+                echo "Updating secret $SECRET_NAME..."
+                echo -n "$SERVICE_URL" | gcloud secrets versions add "$SECRET_NAME" --data-file=-
+              else
+                echo "Creating secret $SECRET_NAME..."
+                echo -n "$SERVICE_URL" | gcloud secrets create "$SECRET_NAME" --data-file=- --replication-policy=automatic
+              fi
+              echo "Set $SECRET_NAME=$SERVICE_URL"
             done
           else
             echo "No LangGraph services registered yet — skipping Cloud Run deploy"
           fi
+
+      - name: Deploy to Firebase
+        run: firebase deploy --only functions --project ${{ env.FIREBASE_ALIAS }} --force
