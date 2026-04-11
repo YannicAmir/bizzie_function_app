@@ -23,11 +23,83 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install Dependencies
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Node Dependencies
         run: npm ci
 
-      - name: Lint Code
+      - name: Install Python Dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint TypeScript
         run: npm run lint
+
+      - name: Lint Python (if graphs exist)
+        run: |
+          GRAPH_COUNT=$(python3 -c "import json; d=json.load(open('langgraph.json')); print(len(d.get('graphs', {})))")
+          if [ "$GRAPH_COUNT" -gt "0" ]; then
+            ruff check src/
+          else
+            echo "No LangGraph graphs yet — skipping Python lint"
+          fi
 
       - name: Run Tests
         run: npm test
+
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: pip install -r src/features/bizzie_chat/agent/requirements-dev.txt
+
+      - name: Authenticate with Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}
+
+      - name: Fetch Secrets from Secret Manager
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |
+            CONFIDENT_API_KEY:${{ steps.auth.outputs.project_id }}/CONFIDENT_API_KEY
+            FMP_API_KEY:${{ steps.auth.outputs.project_id }}/FMP_API_KEY
+            TAVILY_API_KEY:${{ steps.auth.outputs.project_id }}/TAVILY_API_KEY
+
+      - name: Verify CONFIDENT_API_KEY is set
+        env:
+          CONFIDENT_API_KEY: ${{ steps.secrets.outputs.CONFIDENT_API_KEY }}
+        run: |
+          if [ -z "$CONFIDENT_API_KEY" ]; then
+            echo "ERROR: CONFIDENT_API_KEY is empty — Secret Manager fetch may have failed"
+            exit 1
+          fi
+          echo "CONFIDENT_API_KEY is set (length: ${#CONFIDENT_API_KEY})"
+
+      - name: Run DeepEval Tests
+        env:
+          CONFIDENT_API_KEY: ${{ steps.secrets.outputs.CONFIDENT_API_KEY }}
+          FMP_API_KEY: ${{ steps.secrets.outputs.FMP_API_KEY }}
+          TAVILY_API_KEY: ${{ steps.secrets.outputs.TAVILY_API_KEY }}
+          GCLOUD_PROJECT: ${{ steps.auth.outputs.project_id }}
+          APP_ENV: dev
+          DEEPEVAL_JUDGE_MODEL: gemini-3-flash-preview
+          DEEPEVAL_JUDGE_LOCATION: global
+          DEEPEVAL_PER_ATTEMPT_TIMEOUT_SECONDS_OVERRIDE: 300
+        run: |
+          cd src/features/bizzie_chat/agent
+          deepeval test run tests/test_smoke.py -n 10 -id "PR-${{ github.event.number }}"

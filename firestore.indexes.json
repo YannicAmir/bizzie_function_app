@@ -1,0 +1,30 @@
+{
+    "indexes": [
+        {
+            "collectionGroup": "messages",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "createdAt", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "users",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "isSubscribed", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "DESCENDING" },
+                { "fieldPath": "__name__", "order": "DESCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "users",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "isSubscribed", "order": "ASCENDING" },
+                { "fieldPath": "subscriptionExpiryDate", "order": "ASCENDING" },
+                { "fieldPath": "__name__", "order": "ASCENDING" }
+            ]
+        }
+    ],
+    "fieldOverrides": []
+}

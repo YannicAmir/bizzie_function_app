@@ -17,7 +17,10 @@ export class Logger {
     }
 
     error(message: string, error?: unknown): void {
-        const payload = error ? { error, context: this.context } : { context: this.context };
+        const serialized = error instanceof Error
+            ? { message: error.message, stack: error.stack }
+            : error;
+        const payload = serialized ? { error: serialized, context: this.context } : { context: this.context };
         firebaseLogger.error(`[${this.context}] ${message}`, payload);
     }
 

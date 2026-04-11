@@ -1,0 +1,9 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.12",
+  "include": [
+    "src/features/bizzie_chat/agent"
+  ],
+  "typeCheckingMode": "basic"
+}

@@ -14,7 +14,7 @@ export const dailyBrandsTrigger = onSchedule(
     {
         schedule: "every day 00:00",
         timeZone: "America/Los_Angeles",
-        memory: "1GiB",
+        memory: "512MiB",
         timeoutSeconds: 540
     },
     async () => {

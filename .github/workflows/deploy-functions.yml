@@ -30,8 +30,17 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install Dependencies
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Node Dependencies
         run: npm ci
+
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
 
       - name: Run Tests
         run: npm test
@@ -102,7 +111,42 @@ jobs:
               echo "Updating REVENUECAT_SECRET_TOKEN to latest for $SVC..."
               gcloud run services update $SVC --region=us-central1 --update-secrets=REVENUECAT_SECRET_TOKEN=REVENUECAT_SECRET_TOKEN:latest --quiet || true
             fi
+
+            if echo "$ENV_VARS" | grep -q "TAVILY_API_KEY"; then
+              echo "Updating TAVILY_API_KEY to latest for $SVC..."
+              gcloud run services update $SVC --region=us-central1 --update-secrets=TAVILY_API_KEY=TAVILY_API_KEY:latest --quiet || true
+            fi
+
+            if echo "$ENV_VARS" | grep -q "REDIS_URL"; then
+              echo "Updating REDIS_URL to latest for $SVC..."
+              gcloud run services update $SVC --region=us-central1 --update-secrets=REDIS_URL=REDIS_URL:latest --quiet || true
+            fi
           done
 
       - name: Deploy to Firebase
         run: firebase deploy --only functions --project ${{ env.FIREBASE_ALIAS }} --force
+
+      - name: Deploy LangGraph Services to Cloud Run
+        run: |
+          GRAPH_COUNT=$(python3 -c "import json; d=json.load(open('langgraph.json')); print(len(d.get('graphs', {})))")
+          if [ "$GRAPH_COUNT" -gt "0" ]; then
+            echo "Deploying $GRAPH_COUNT LangGraph service(s) to Cloud Run..."
+            python3 -c "import json; d=json.load(open('langgraph.json')); [print(k) for k in d.get('graphs', {}).keys()]" | while read GRAPH; do
+              echo "Deploying langgraph-$GRAPH..."
+              if [ "$GRAPH" = "bizzie_chat" ]; then
+                EXTRA_SECRETS=",TAVILY_API_KEY=TAVILY_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FMP_API_KEY=FMP_API_KEY:latest"
+              else
+                EXTRA_SECRETS=""
+              fi
+              gcloud run deploy langgraph-$GRAPH \
+                --source ./src/features/$GRAPH/agent \
+                --region us-central1 \
+                --no-allow-unauthenticated \
+                --max-instances=10 \
+                --update-secrets=LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest,LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest,LANGSMITH_ENDPOINT=LANGSMITH_ENDPOINT:latest$EXTRA_SECRETS \
+                --update-env-vars=LANGSMITH_TRACING=true,LANGCHAIN_TRACING_V2=true \
+                --quiet
+            done
+          else
+            echo "No LangGraph services registered yet — skipping Cloud Run deploy"
+          fi

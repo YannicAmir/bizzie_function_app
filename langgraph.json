@@ -1,0 +1,10 @@
+{
+  "python_version": "3.11",
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "bizzie_chat": "src/features/bizzie_chat/agent/graph.py:graph"
+  },
+  "env": ".env"
+}
