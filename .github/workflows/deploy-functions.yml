@@ -140,13 +140,14 @@ jobs:
               else
                 EXTRA_SECRETS=""
               fi
+              PROJECT_ID=$(gcloud config get-value project)
               gcloud run deploy "$SERVICE_NAME" \
                 --source ./src/features/$GRAPH/agent \
                 --region us-central1 \
                 --no-allow-unauthenticated \
                 --max-instances=10 \
                 --update-secrets=LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest,LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest,LANGSMITH_ENDPOINT=LANGSMITH_ENDPOINT:latest$EXTRA_SECRETS \
-                --update-env-vars=LANGSMITH_TRACING=true,LANGCHAIN_TRACING_V2=true \
+                --update-env-vars=LANGSMITH_TRACING=true,LANGCHAIN_TRACING_V2=true,GCLOUD_PROJECT=${PROJECT_ID},GCP_LOCATION=us-central1 \
                 --quiet
 
               # Capture URL and store in Secret Manager so Firebase Functions can reference it

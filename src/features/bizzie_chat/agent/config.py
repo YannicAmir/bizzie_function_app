@@ -10,7 +10,7 @@ load_dotenv(".env.local", override=True)
 
 @dataclass(frozen=True)
 class BizzieChatConfig:
-    gcp_project: str = os.environ.get("GCLOUD_PROJECT", "")
+    gcp_project: str = os.environ.get("GCLOUD_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT", "")
     gcp_location: str = os.environ.get("GCP_LOCATION", "us-central1")
 
     model_pro: str = os.environ.get("LLM_MODEL_PRO", "gemini-3.1-pro-preview")
