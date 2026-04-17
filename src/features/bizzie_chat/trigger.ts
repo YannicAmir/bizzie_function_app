@@ -1,5 +1,5 @@
 import { onRequest } from 'firebase-functions/v2/https';
-import { defineSecret } from 'firebase-functions/params';
+import { defineSecret, defineString } from 'firebase-functions/params';
 import { getFirebaseAdmin } from '../../core/firebase';
 import { Logger } from '../../core/logger';
 import { AppError } from '../../core/errors';
@@ -15,6 +15,7 @@ getFirebaseAdmin();
 
 const _logger = new Logger('BizzieChat Trigger');
 const langGraphUrl = defineSecret('BIZZIE_CHAT_LANGGRAPH_URL');
+const bizzieChatSA = defineString('BIZZIE_CHAT_SERVICE_ACCOUNT');
 
 const _authService = new AuthService();
 const _userService = new UserService();
@@ -71,6 +72,7 @@ function parseBody(raw: Record<string, unknown>): BodyParseResult {
 export const bizzieChat = onRequest(
     {
         secrets: [langGraphUrl],
+        serviceAccount: bizzieChatSA,
         memory: '512MiB',
         timeoutSeconds: 120,
         concurrency: 20,

@@ -140,13 +140,14 @@ jobs:
               else
                 EXTRA_SECRETS=""
               fi
+              PROJECT_ID=$(gcloud config get-value project)
               gcloud run deploy "$SERVICE_NAME" \
                 --source ./src/features/$GRAPH/agent \
                 --region us-central1 \
                 --no-allow-unauthenticated \
                 --max-instances=10 \
                 --update-secrets=LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest,LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest,LANGSMITH_ENDPOINT=LANGSMITH_ENDPOINT:latest$EXTRA_SECRETS \
-                --update-env-vars=LANGSMITH_TRACING=true,LANGCHAIN_TRACING_V2=true \
+                --update-env-vars=LANGSMITH_TRACING=true,LANGCHAIN_TRACING_V2=true,GCLOUD_PROJECT=${PROJECT_ID},GCP_LOCATION=us-central1 \
                 --quiet
 
               # Capture URL and store in Secret Manager so Firebase Functions can reference it
@@ -165,5 +166,51 @@ jobs:
             echo "No LangGraph services registered yet — skipping Cloud Run deploy"
           fi
 
+      - name: Setup Cloud Functions Service Account
+        run: |
+          PROJECT_ID=$(gcloud config get-value project)
+          SA_NAME="fn-bizzie-chat"
+          SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+          # Create dedicated SA if it doesn't exist (idempotent)
+          if ! gcloud iam service-accounts describe "$SA_EMAIL" --quiet &>/dev/null 2>&1; then
+            echo "Creating service account $SA_EMAIL..."
+            gcloud iam service-accounts create "$SA_NAME" \
+              --display-name="Bizzie Chat Cloud Function" \
+              --quiet
+          else
+            echo "Service account $SA_EMAIL already exists"
+          fi
+
+          # Grant minimum required project-level roles
+          # - firebase.admin: Firestore read/write, Remote Config, Firebase Auth (no standalone viewer role for Remote Config exists)
+          # - secretmanager.secretAccessor: Secret Manager is GCP-level, not covered by firebase.admin
+          for ROLE in roles/firebase.admin roles/secretmanager.secretAccessor; do
+            echo "Binding $ROLE to $SA_EMAIL..."
+            gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+              --member="serviceAccount:${SA_EMAIL}" \
+              --role="$ROLE" \
+              --condition=None \
+              --quiet
+          done
+
+          # Grant run.invoker on each LangGraph Cloud Run service specifically (not project-wide)
+          GRAPH_COUNT=$(python3 -c "import json; d=json.load(open('langgraph.json')); print(len(d.get('graphs', {})))")
+          if [ "$GRAPH_COUNT" -gt "0" ]; then
+            python3 -c "import json; d=json.load(open('langgraph.json')); [print(k) for k in d.get('graphs', {}).keys()]" | while read GRAPH; do
+              SERVICE_NAME="langgraph-$(echo "$GRAPH" | tr '_' '-')"
+              echo "Granting run.invoker on $SERVICE_NAME to $SA_EMAIL..."
+              gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+                --region us-central1 \
+                --member="serviceAccount:${SA_EMAIL}" \
+                --role="roles/run.invoker" \
+                --quiet
+            done
+          fi
+
+          # Write the Firebase param env file so defineString('BIZZIE_CHAT_SERVICE_ACCOUNT')
+          # resolves to the correct SA email at deploy time — never hardcoded in source.
+          echo "BIZZIE_CHAT_SERVICE_ACCOUNT=${SA_EMAIL}" > .env.${{ env.FIREBASE_ALIAS }}
+
       - name: Deploy to Firebase
-        run: firebase deploy --only functions --project ${{ env.FIREBASE_ALIAS }} --force
+        run: firebase deploy --only functions,firestore:indexes --project ${{ env.FIREBASE_ALIAS }} --force
