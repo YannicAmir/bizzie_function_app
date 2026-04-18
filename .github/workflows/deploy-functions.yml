@@ -182,16 +182,47 @@ jobs:
             echo "Service account $SA_EMAIL already exists"
           fi
 
+          # Poll until SA is reachable (handles GCP propagation delay)
+          echo "Verifying service account is reachable..."
+          for i in 1 2 3 4 5; do
+            if gcloud iam service-accounts describe "$SA_EMAIL" --quiet &>/dev/null 2>&1; then
+              echo "Service account confirmed reachable."
+              break
+            fi
+            WAIT=$((i * 10))
+            echo "Attempt $i: not yet reachable, retrying in ${WAIT}s..."
+            sleep "$WAIT"
+            if [ "$i" -eq 5 ]; then
+              echo "ERROR: Service account never became reachable after 5 attempts."
+              exit 1
+            fi
+          done
+
           # Grant minimum required project-level roles
           # - firebase.admin: Firestore read/write, Remote Config, Firebase Auth (no standalone viewer role for Remote Config exists)
           # - secretmanager.secretAccessor: Secret Manager is GCP-level, not covered by firebase.admin
           for ROLE in roles/firebase.admin roles/secretmanager.secretAccessor; do
             echo "Binding $ROLE to $SA_EMAIL..."
-            gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-              --member="serviceAccount:${SA_EMAIL}" \
-              --role="$ROLE" \
-              --condition=None \
-              --quiet
+            for i in 1 2 3; do
+              BIND_OUTPUT=$(gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+                --member="serviceAccount:${SA_EMAIL}" \
+                --role="$ROLE" \
+                --condition=None \
+                --quiet 2>&1) && break
+              # Only retry on transient propagation errors, not auth/permission failures
+              if echo "$BIND_OUTPUT" | grep -qE "does not exist|INVALID_ARGUMENT"; then
+                WAIT=$((i * 10))
+                echo "Transient propagation error on attempt $i, retrying in ${WAIT}s..."
+                sleep "$WAIT"
+              else
+                echo "ERROR: Non-transient failure binding $ROLE: $BIND_OUTPUT"
+                exit 1
+              fi
+              if [ "$i" -eq 3 ]; then
+                echo "ERROR: Failed to bind $ROLE after 3 attempts: $BIND_OUTPUT"
+                exit 1
+              fi
+            done
           done
 
           # Grant run.invoker on each LangGraph Cloud Run service specifically (not project-wide)
