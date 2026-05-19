@@ -18,6 +18,9 @@ export interface AppConfig {
     chat_model_lite: string;
     llm_responses_per_day: number;
   };
+  weekly_recap: {
+    model: string;
+  };
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -55,6 +58,9 @@ const DEFAULT_CONFIG: AppConfig = {
     chat_model_lite: "gemini-3.1-flash-lite-preview",
     llm_responses_per_day: 20,
   },
+  weekly_recap: {
+    model: "gemini-3-flash-preview",
+  },
 };
 
 let configCache: AppConfig | null = null;
@@ -81,6 +87,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const rawChatModelFlash = (template.parameters['chat_model_flash']?.defaultValue as { value?: string } | undefined)?.value;
     const rawChatModelLite = (template.parameters['chat_model_lite']?.defaultValue as { value?: string } | undefined)?.value;
     const rawLlmResponsesPerDay = (template.parameters['llm_responses_per_day']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawWeeklyRecapModel = (template.parameters['weekly_recap_model']?.defaultValue as { value?: string } | undefined)?.value;
 
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;
     const gemini_model_name = (rawModelName as string) || DEFAULT_CONFIG.gemini_model_name;
@@ -99,6 +106,9 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
         llm_responses_per_day: rawLlmResponsesPerDay
           ? parseInt(rawLlmResponsesPerDay, 10)
           : DEFAULT_CONFIG.bizzie_chat.llm_responses_per_day,
+      },
+      weekly_recap: {
+        model: rawWeeklyRecapModel || DEFAULT_CONFIG.weekly_recap.model,
       },
     };
 

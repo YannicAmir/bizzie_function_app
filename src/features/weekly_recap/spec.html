@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weekly Recap — Storage Pipeline Spec</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #1a202c;
+    background: #f7f8fa;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 252px;
+    background: #0f1117;
+    overflow-y: auto;
+    padding: 0 0 32px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  nav .brand {
+    padding: 24px 20px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: #5b8df5;
+    border-bottom: 1px solid #1e2130;
+  }
+  nav .brand span { display: block; color: #8b92a5; font-weight: 400; margin-top: 2px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+  nav ul { list-style: none; padding: 12px 0; }
+  nav li a {
+    display: block;
+    padding: 6px 20px;
+    color: #8b92a5;
+    text-decoration: none;
+    font-size: 13px;
+    transition: color .15s;
+  }
+  nav li a:hover, nav li a.active { color: #fff; }
+  nav .nav-section {
+    padding: 14px 20px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #3d4251;
+  }
+
+  /* ── Main ── */
+  main {
+    margin-left: 252px;
+    flex: 1;
+    padding: 40px 56px 80px;
+    max-width: 960px;
+  }
+
+  section { margin-bottom: 64px; }
+  section:first-child .page-title { margin-top: 0; }
+
+  .page-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #0f1117;
+    margin-bottom: 6px;
+  }
+  .page-subtitle {
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f1117;
+    margin: 36px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #5b8df5;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+    margin: 24px 0 10px;
+  }
+  h4 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #374151; }
+
+  p { margin-bottom: 12px; color: #374151; }
+  strong { color: #1a202c; }
+  a { color: #5b8df5; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
+
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 5px; color: #374151; }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: 13px;
+    background: #eef0f5;
+    color: #c0392b;
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  pre {
+    background: #1e2130;
+    border-radius: 8px;
+    padding: 20px;
+    overflow-x: auto;
+    margin: 14px 0 20px;
+    border: 1px solid #2d3148;
+  }
+  pre code {
+    background: none;
+    color: #c9d1d9;
+    font-size: 13px;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  blockquote {
+    border-left: 3px solid #f59e0b;
+    background: #fffbeb;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+    color: #92400e;
+    font-size: 14px;
+  }
+
+  /* ── Tables ── */
+  .table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    background: #f0f4ff;
+    color: #374151;
+    font-weight: 600;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 2px solid #dbe4ff;
+  }
+  td { padding: 9px 14px; border-bottom: 1px solid #e8ecf0; color: #374151; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #f9fafb; }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'SF Mono', monospace;
+    letter-spacing: .03em;
+  }
+  .badge-info  { background: #dbeafe; color: #1d4ed8; }
+  .badge-warn  { background: #fef3c7; color: #92400e; }
+  .badge-error { background: #fee2e2; color: #b91c1c; }
+  .badge-debug { background: #f3f4f6; color: #6b7280; }
+
+  /* ── Flow diagram ── */
+  .flow {
+    background: #1e2130;
+    border-radius: 8px;
+    padding: 20px 24px;
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 12.5px;
+    color: #8be9fd;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.6;
+    border: 1px solid #2d3148;
+    margin: 14px 0 20px;
+  }
+
+  /* ── Node tag ── */
+  .node {
+    display: inline-block;
+    background: #0f1117;
+    color: #5b8df5;
+    border: 1px solid #2d3148;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-family: 'SF Mono', monospace;
+    font-size: 12px;
+  }
+
+  /* ── Callout ── */
+  .callout {
+    background: #f0f4ff;
+    border-left: 3px solid #5b8df5;
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 16px 0;
+    font-size: 14px;
+    color: #1e3a8a;
+  }
+  .callout.green { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
+  .callout.amber { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+
+  /* ── File tree ── */
+  .filetree {
+    background: #1e2130;
+    border-radius: 8px;
+    padding: 20px 24px;
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 13px;
+    color: #c9d1d9;
+    white-space: pre;
+    line-height: 1.8;
+    border: 1px solid #2d3148;
+    margin: 14px 0 20px;
+  }
+  .filetree .dir  { color: #5b8df5; }
+  .filetree .file { color: #c9d1d9; }
+  .filetree .cmt  { color: #6b7587; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">Weekly Recap<span>Storage Pipeline — Spec v1.0</span></div>
+  <ul>
+    <li class="nav-section">Overview</li>
+    <li><a href="#overview">Pipeline Overview</a></li>
+    <li><a href="#file-structure">File Structure</a></li>
+
+    <li class="nav-section">Entry Points</li>
+    <li><a href="#trigger">trigger.ts</a></li>
+
+    <li class="nav-section">Orchestration</li>
+    <li><a href="#langgraph">LangGraph</a></li>
+    <li><a href="#usecase">usecase.ts</a></li>
+
+    <li class="nav-section">Data</li>
+    <li><a href="#data-models">Data Models</a></li>
+
+    <li class="nav-section">Services</li>
+    <li><a href="#fmp-service">FMP Service</a></li>
+    <li><a href="#ai-service">AI Service</a></li>
+    <li><a href="#firestore-service">Firestore Service</a></li>
+    <li><a href="#pubsub-service">Pub/Sub Service</a></li>
+
+    <li class="nav-section">Infrastructure</li>
+    <li><a href="#tech-stack">Tech Stack</a></li>
+    <li><a href="#logging">Logging</a></li>
+    <li><a href="#testing">Testing</a></li>
+    <li><a href="#evaluation">Evaluation</a></li>
+    <li><a href="#dead-letter">Dead-Letter Setup</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- ════════════════════════════════════════════════════════ OVERVIEW -->
+<section id="overview">
+  <div class="page-title">Weekly Recap — Storage Pipeline</div>
+  <div class="page-subtitle">Pre-implementation specification · Feature: <code>weekly_recap/storage</code></div>
+
+  <h2>Purpose</h2>
+  <p>Every Friday at 4pm EST this pipeline generates an AI-written market summary for every ticker on the global watchlist and persists it to Firestore. Those stored summaries are later consumed by the <code>retrieval_and_message</code> pipeline.</p>
+  <p>The pipeline is split into two Cloud Functions to avoid timeout limits and allow per-ticker parallelism via Pub/Sub:</p>
+  <ol>
+    <li><strong>weeklyRecapScheduler</strong> — reads every ticker from the global watchlist and publishes one Pub/Sub message per ticker.</li>
+    <li><strong>weeklyRecapProcessor</strong> — handles one ticker per invocation: fetches FMP data, generates an LLM summary, validates and stores it.</li>
+  </ol>
+
+  <h2>Triggers</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Function</th><th>Trigger</th><th>Schedule / Topic</th></tr>
+    <tr><td><code>weeklyRecapScheduler</code></td><td>Cloud Scheduler</td><td><code>0 16 * * 5</code> — Fridays at 4pm EST (America/New_York)</td></tr>
+    <tr><td><code>weeklyRecapProcessor</code></td><td>Pub/Sub push</td><td>topic: <code>weekly-recap</code></td></tr>
+  </table></div>
+
+  <h2>End-to-End Flow</h2>
+  <div class="flow">Cloud Scheduler (Fri 4pm EST)
+         │
+         ▼
+weeklyRecapScheduler  [trigger.ts]
+  retrieveCompaniesFromDb()  ── [firestore_service.ts] reads Firestore: watchlist/{ticker}
+  queueCompanies(companies)  ── [pubsub_service.ts]    publishes { ticker, companyName } per Company
+         │
+         │  (one invocation per ticker)
+         ▼
+weeklyRecapProcessor  [trigger.ts]
+  retrieveCompanyFromQueue() ── [pubsub_service.ts]  → Company { ticker, companyName }
+         │
+         ▼  LangGraph graph (WeeklyRecapState)
+  [calculateWeekWindow]      ── [usecase.ts]         → { startDate, endDate }
+  [fetchMarketData]          ── [fmp_service.ts]     → news, pressReleases, filings, prices (Promise.allSettled)
+  [calculateDeterministicFields]                     → counts, priceMovement
+  [summarizeNews]            ── [ai_service.ts]      → llmPartial (Vertex AI / Gemini)
+  [validateSchema]           ── pure TypeScript      → valid? continue : END
+  [assembleResponse]                                 → llmResponse
+  [postProcessResponse]      ── [ai_service.ts]      → sanitized llmResponse
+  [storeSummary]             ── [firestore_service.ts] → weekly_recap/{ticker}/weeks/{weekEndDate}
+  [evaluateSummary]          ── [ai_service.ts]      → Confident AI trace (fire-and-forget) → END</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════ FILE STRUCTURE -->
+<section id="file-structure">
+  <div class="page-title">File Structure</div>
+  <div class="page-subtitle">Source code only — docs live in <code>docs/storage/</code></div>
+
+  <div class="filetree"><span class="dir">src/features/weekly_recap/</span>
+└── <span class="dir">storage/</span>
+    ├── <span class="file">trigger.ts</span>          <span class="cmt"># Cloud Function entry points (scheduler + processor)</span>
+    ├── <span class="file">usecase.ts</span>          <span class="cmt"># WeeklyRecapState, graph construction, compile, execute</span>
+    ├── <span class="dir">nodes/</span>
+    │   ├── <span class="file">calculateWeekWindow.ts</span>
+    │   ├── <span class="file">fetchMarketData.ts</span>
+    │   ├── <span class="file">calculateDeterministicFields.ts</span>
+    │   ├── <span class="file">summarizeNews.ts</span>
+    │   ├── <span class="file">validateSchema.ts</span>
+    │   ├── <span class="file">assembleResponse.ts</span>
+    │   ├── <span class="file">postProcessResponse.ts</span>
+    │   ├── <span class="file">storeSummary.ts</span>
+    │   └── <span class="file">evaluateSummary.ts</span>
+    └── <span class="dir">services/</span>
+        ├── <span class="file">ai_service.ts</span>
+        ├── <span class="file">firestore_service.ts</span>
+        ├── <span class="file">fmp_service.ts</span>
+        └── <span class="file">pubsub_service.ts</span></div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ TRIGGER -->
+<section id="trigger">
+  <div class="page-title">trigger.ts</div>
+  <div class="page-subtitle">Cloud Function entry points. Instantiates service dependencies and delegates to the use case. Contains no business logic.</div>
+
+  <h2>weeklyRecapScheduler</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Config</th><th>Value</th></tr>
+    <tr><td>Type</td><td><code>onSchedule</code></td></tr>
+    <tr><td>Schedule</td><td><code>0 16 * * 5</code> (every Friday, 4pm EST)</td></tr>
+    <tr><td>Timezone</td><td><code>America/New_York</code></td></tr>
+    <tr><td>Memory</td><td><code>256MiB</code></td></tr>
+    <tr><td>Timeout</td><td><code>60s</code></td></tr>
+  </table></div>
+  <p><strong>Steps:</strong></p>
+  <ol>
+    <li>Calls <code>FirestoreService.retrieveCompaniesFromDb()</code> to read all company documents from the <code>watchlist</code> collection.</li>
+    <li>Calls <code>PubSubService.queueCompanies(companies)</code> which publishes one message per <code>Company</code> to the <code>weekly-recap</code> topic. Each message payload is <code>{ ticker: string, companyName: string }</code>. No dates are included — the week window is calculated by the processor at execution time.</li>
+  </ol>
+
+  <h2>weeklyRecapProcessor</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Config</th><th>Value</th></tr>
+    <tr><td>Type</td><td><code>onMessagePublished</code> (Pub/Sub)</td></tr>
+    <tr><td>Topic</td><td><code>weekly-recap</code></td></tr>
+    <tr><td>Memory</td><td><code>512MiB</code></td></tr>
+    <tr><td>Timeout</td><td><code>300s</code></td></tr>
+  </table></div>
+  <p><strong>Steps:</strong></p>
+  <ol>
+    <li>Calls <code>PubSubService.retrieveCompanyFromQueue(message)</code> to decode the Pub/Sub message into a <code>Company</code> object.</li>
+    <li>Instantiates <code>FmpService</code>, <code>AiService</code>, <code>FirestoreService</code>, <code>PubSubService</code>, builds the LangGraph graph, and invokes it with <code>{ ticker, companyName }</code>.</li>
+    <li>On unrecoverable error: logs and returns without re-throwing — this acknowledges the message and prevents an infinite retry loop. Pub/Sub retries up to 5 times before routing to the dead-letter topic.</li>
+  </ol>
+</section>
+
+<!-- ════════════════════════════════════════════════════ LANGGRAPH -->
+<section id="langgraph">
+  <div class="page-title">LangGraph Implementation</div>
+  <div class="page-subtitle">State graph pattern — canonical implementation for this project</div>
+
+  <h2>Why LangGraph</h2>
+  <p>Each Pub/Sub message triggers one <code>weeklyRecapProcessor</code> invocation. The pipeline has 8 discrete steps with typed data flowing between them and a conditional branch on schema validation. LangGraph models this as a compiled state graph — steps are explicit nodes, routing is declared, and state is typed end-to-end. This makes the execution path inspectable, individually testable, and straightforward to extend.</p>
+
+  <h2>State — WeeklyRecapState</h2>
+  <p>Defined in <code>usecase.ts</code> using LangGraph's <code>Annotation.Root</code> pattern. Every node reads from and writes back to this single typed object.</p>
+  <pre><code>import { Annotation } from '@langchain/langgraph';
+
+export const WeeklyRecapStateAnnotation = Annotation.Root({
+  // Seeded by trigger.ts before graph.invoke()
+  ticker:        Annotation&lt;string&gt;(),
+  companyName:   Annotation&lt;string&gt;(),
+
+  // Set by calculateWeekWindow
+  startDate:     Annotation&lt;string&gt;(),
+  endDate:       Annotation&lt;string&gt;(),
+
+  // Set by fetchMarketData
+  news:          Annotation&lt;NewsArticle[]&gt;(),
+  pressReleases: Annotation&lt;PressRelease[]&gt;(),
+  filings:       Annotation&lt;Filing8K[]&gt;(),
+  prices:        Annotation&lt;StockPrice[]&gt;(),
+
+  // Set by calculateDeterministicFields
+  counts:        Annotation&lt;CountFields&gt;(),
+  priceMovement: Annotation&lt;PriceMovement&gt;(),
+
+  // Set by summarizeNews
+  llmPartial:    Annotation&lt;Partial&lt;LLMResponse&gt;&gt;(),
+
+  // Set by assembleResponse, updated by postProcessResponse
+  llmResponse:   Annotation&lt;LLMResponse&gt;(),
+});
+
+export type WeeklyRecapState = typeof WeeklyRecapStateAnnotation.State;</code></pre>
+
+  <h2>Node Signature Pattern</h2>
+  <p>Every node is a plain async function in its own file under <code>nodes/</code>. Services are injected via closure at graph construction time — not imported as globals. Each node returns <code>Partial&lt;WeeklyRecapState&gt;</code> — only the keys it writes. LangGraph merges the partial back into state.</p>
+  <pre><code>// nodes/fetchMarketData.ts
+export function makeFetchMarketDataNode(fmp: FmpService) {
+  return async (state: WeeklyRecapState): Promise&lt;Partial&lt;WeeklyRecapState&gt;&gt; =&gt; {
+    const [newsResult, prResult, filingsResult, pricesResult] = await Promise.allSettled([
+      fmp.getNews(state.ticker, state.startDate, state.endDate),
+      fmp.getPressReleases(state.ticker, state.startDate, state.endDate),
+      fmp.get8Ks(state.ticker, state.startDate, state.endDate),
+      fmp.getEodStockPrice(state.ticker, state.startDate, state.endDate),
+    ]);
+
+    // Each call is independent — a failure defaults to [] so the graph
+    // continues with partial data. The LLM omits missing aspects.
+    return {
+      news:          newsResult.status === 'fulfilled' ? newsResult.value : [],
+      pressReleases: prResult.status === 'fulfilled' ? prResult.value : [],
+      filings:       filingsResult.status === 'fulfilled' ? filingsResult.value : [],
+      prices:        pricesResult.status === 'fulfilled' ? pricesResult.value : [],
+    };
+  };
+}</code></pre>
+
+  <div class="callout amber"><strong>Promise.allSettled — not Promise.all.</strong> Promise.all aborts all successful fetches the moment any single call fails. Promise.allSettled is independent per call — one failure defaults to [] and the graph continues with partial data.</div>
+
+  <h2>Graph Construction</h2>
+  <p>The graph is compiled <strong>once per cold-start</strong> in <code>usecase.ts</code> — compilation is expensive and must not happen per invocation.</p>
+  <pre><code>import { StateGraph, START, END } from '@langchain/langgraph';
+
+function buildGraph(fmp: FmpService, ai: AiService, db: FirestoreService) {
+  return new StateGraph(WeeklyRecapStateAnnotation)
+    .addNode('calculateWeekWindow',          makeCalculateWeekWindowNode())
+    .addNode('fetchMarketData',              makeFetchMarketDataNode(fmp))
+    .addNode('calculateDeterministicFields', makeCalculateDeterministicFieldsNode())
+    .addNode('summarizeNews',                makeSummarizeNewsNode(ai))
+    .addNode('validateSchema',               makeValidateSchemaNode())
+    .addNode('assembleResponse',             makeAssembleResponseNode())
+    .addNode('postProcessResponse',          makePostProcessResponseNode(ai))
+    .addNode('storeSummary',                 makeStoreSummaryNode(db))
+    .addEdge(START,                          'calculateWeekWindow')
+    .addEdge('calculateWeekWindow',          'fetchMarketData')
+    .addEdge('fetchMarketData',              'calculateDeterministicFields')
+    .addEdge('calculateDeterministicFields', 'summarizeNews')
+    .addEdge('summarizeNews',                'validateSchema')
+    .addConditionalEdges('validateSchema', routeAfterValidation, {
+      continue: 'assembleResponse',
+      end:      END,
+    })
+    .addEdge('assembleResponse',    'postProcessResponse')
+    .addEdge('postProcessResponse', 'storeSummary')
+    .addEdge('storeSummary',        END)
+    .compile();
+}</code></pre>
+
+  <h2>Conditional Routing</h2>
+  <pre><code>function routeAfterValidation(state: WeeklyRecapState): 'continue' | 'end' {
+  return state.llmPartial && isValidLLMPartial(state.llmPartial) ? 'continue' : 'end';
+}</code></pre>
+  <p>On <code>'end'</code>: the <code>validateSchema</code> node has already logged the <code>AppError</code>. The message is acknowledged — Pub/Sub will retry up to 5 times before routing to the dead-letter topic.</p>
+
+  <h2>Invocation</h2>
+  <pre><code>// trigger.ts → weeklyRecapProcessor
+const graph = buildGraph(fmpService, aiService, firestoreService);
+await graph.invoke({ ticker, companyName });</code></pre>
+</section>
+
+<!-- ════════════════════════════════════════════════════ USECASE -->
+<section id="usecase">
+  <div class="page-title">usecase.ts — Nodes</div>
+  <div class="page-subtitle">Orchestrates the per-ticker processing pipeline. Exports shared TypeScript interfaces.</div>
+
+  <h2>Node Table</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Node</th><th>Calls</th><th>Writes to state</th></tr>
+    <tr><td><code>calculateWeekWindow</code></td><td>pure function</td><td><code>startDate</code>, <code>endDate</code></td></tr>
+    <tr><td><code>fetchMarketData</code></td><td><code>FmpService.*</code> (Promise.allSettled)</td><td><code>news</code>, <code>pressReleases</code>, <code>filings</code>, <code>prices</code></td></tr>
+    <tr><td><code>calculateDeterministicFields</code></td><td>pure functions</td><td><code>counts</code>, <code>priceMovement</code></td></tr>
+    <tr><td><code>summarizeNews</code></td><td><code>AiService.summarizeNews</code></td><td><code>llmPartial</code></td></tr>
+    <tr><td><code>validateSchema</code></td><td>pure TypeScript check</td><td>— (routes or ends)</td></tr>
+    <tr><td><code>assembleResponse</code></td><td>pure function</td><td><code>llmResponse</code></td></tr>
+    <tr><td><code>postProcessResponse</code></td><td><code>AiService.postProcessLlmSummary</code></td><td><code>llmResponse</code></td></tr>
+    <tr><td><code>storeSummary</code></td><td><code>FirestoreService.storeSummaryInDb</code></td><td>—</td></tr>
+  </table></div>
+
+  <h2>Node Detail</h2>
+  <h3>calculateWeekWindow</h3>
+  <p>Derives <code>endDate</code> (current datetime as ISO string) and <code>startDate</code> (7 days prior). Centralised here so all downstream nodes use a consistent window.</p>
+
+  <h3>fetchMarketData</h3>
+  <p>Calls <code>FmpService.getNews</code>, <code>getPressReleases</code>, <code>get8Ks</code>, and <code>getEodStockPrice</code> concurrently via <code>Promise.allSettled</code>. Each call is independent — a failure after all retries logs a warning and defaults to <code>[]</code>. <code>Promise.all</code> is explicitly avoided. Text fields are truncated to token budget before being written to state.</p>
+
+  <h3>calculateDeterministicFields</h3>
+  <p>Derives <code>counts</code> from array lengths and <code>priceMovement</code> (<code>startPrice</code>, <code>endPrice</code>, <code>priceChange</code>, <code>priceChangePercent</code>) from the <code>prices</code> array. Returns <code>null</code> fields if <code>prices</code> is empty. No LLM involved.</p>
+
+  <h3>summarizeNews</h3>
+  <p>Calls <code>AiService.summarizeNews</code> with the full state context. Returns LLM content fields only — deterministic fields are not produced by the LLM.</p>
+
+  <h3>validateSchema</h3>
+  <p>Pure TypeScript check — no LLM. Confirms all required fields exist with correct types and <code>confidenceScore</code> is an integer in <code>[0, 100]</code>. On failure: throws <code>AppError</code>, graph routes to END, message is acknowledged without retry.</p>
+
+  <h3>assembleResponse</h3>
+  <p>Merges <code>llmPartial</code> with deterministic fields (<code>ticker</code>, <code>companyName</code>, <code>time</code>, <code>counts</code>, <code>priceMovement</code>) to produce the final <code>LLMResponse</code>.</p>
+
+  <h3>postProcessResponse</h3>
+  <p>Sanitises the assembled response: trims whitespace, hard-truncates <code>messageTitle</code> to 50 chars, strips stray markdown (backtick fences, extra asterisks).</p>
+
+  <h3>storeSummary</h3>
+  <p>Writes <code>llmResponse</code> to <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code> via <code>FirestoreService</code>. Transitions to END.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════ DATA MODELS -->
+<section id="data-models">
+  <div class="page-title">Data Models</div>
+  <div class="page-subtitle">Defined in <code>usecase.ts</code> and shared across all services.</div>
+
+  <h2>Input Types (FMP API → Use Case)</h2>
+  <pre><code>interface NewsArticle {
+  title: string;
+  text: string;
+  publishedDate: string;   // ISO 8601
+  url: string;
+}
+
+interface PressRelease {
+  title: string;
+  text: string;
+  publishedDate: string;   // ISO 8601
+  url: string;
+}
+
+interface Filing8K {
+  title: string;
+  formType: string;        // always "8-K"
+  filingDate: string;      // ISO 8601
+  link: string;            // SEC index page
+  finalLink: string;       // direct exhibit link
+}
+
+interface StockPrice {
+  date: string;    // ISO 8601
+  price: number;   // closing price for the day
+  volume: number;
+}
+
+interface PriceMovement {
+  startPrice: number | null;         // closing price on startDate; null if no data
+  endPrice: number | null;           // closing price on endDate; null if no data
+  priceChange: number | null;        // endPrice - startPrice, rounded to 2 dp
+  priceChangePercent: number | null; // % change, rounded to 2 dp
+}</code></pre>
+
+  <h2>Output Type (LLM → Firestore)</h2>
+  <pre><code>interface LLMResponse {
+  time: string;                  // ISO 8601 datetime of when the summary was generated
+  messageTitle: string;          // ≤ 50 characters (push notification title)
+  messageShortSummary: string;   // 2–3 sentences, ≤ 150 characters (push notification body)
+  messageLongSummary: string;    // Concise and catchy narrative; no hard limit
+  confidenceScore: number;       // Integer 0–100, LLM self-assessed
+  ticker: string;
+  companyName: string;
+  newArticleCount: number;       // derived deterministically from array length
+  pressReleaseCount: number;
+  eightKCount: number;           // stored as "8kCount" in Firestore
+  eodStockPriceCount: number;
+  newsLinks: string[];           // URLs from NewsArticle[]
+  pressReleaseLinks: string[];   // URLs from PressRelease[]
+  eightKLinks: string[];         // finalLink URLs from Filing8K[]
+  priceMovement: PriceMovement;  // deterministically calculated, passed to LLM as context
+}</code></pre>
+
+  <h2>Firestore Schemas</h2>
+  <h3>watchlist/{ticker} — read only</h3>
+  <pre><code>ticker:      string    // e.g. "AAPL"
+companyName: string    // e.g. "Apple Inc."
+lastAddedAt: Timestamp</code></pre>
+
+  <h3>weekly_recap/{ticker}/weeks/{weekEndDate} — written by this pipeline</h3>
+  <p><code>{weekEndDate}</code> is the document ID — the date portion extracted from <code>response.time</code> (e.g. <code>"2026-05-15"</code>). Each week produces a new document preserving the full history of summaries per ticker. Re-running the same week overwrites only that week's document.</p>
+  <pre><code>time:                string      // ISO 8601 datetime
+messageTitle:        string      // ≤ 50 chars
+messageShortSummary: string      // 2–3 sentences, ≤ 150 chars
+messageLongSummary:  string      // concise and catchy narrative
+confidenceScore:     number      // integer 0–100
+ticker:              string
+companyName:         string
+newArticleCount:     number
+pressReleaseCount:   number
+8kCount:             number      // TypeScript uses eightKCount
+eodStockPriceCount:  number
+newsLinks:           string[]
+pressReleaseLinks:   string[]
+eightKLinks:         string[]
+priceMovement:       map         // { startPrice, endPrice, priceChange, priceChangePercent }
+createdAt:           Timestamp   // server-side timestamp added by FirestoreService</code></pre>
+</section>
+
+<!-- ════════════════════════════════════════════════ FMP SERVICE -->
+<section id="fmp-service">
+  <div class="page-title">services/fmp_service.ts</div>
+  <div class="page-subtitle">Wraps all FMP REST API calls. Logger: <code>WeeklyRecap/Storage/FmpService</code></div>
+
+  <h2>Base URLs</h2>
+  <p>Resolved at runtime via <code>getRemoteConfig()</code> from <code>src/core/remote-config.ts</code> — accessed as <code>config.fmp.baseUrl</code>, <code>config.fmp.v3Url</code>, <code>config.fmp.v4Url</code>.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Key</th><th>Default URL</th><th>Used by</th></tr>
+    <tr><td><code>fmp.baseUrl</code></td><td><code>https://financialmodelingprep.com/stable</code></td><td>getNews, getPressReleases, get8Ks, getEodStockPrice</td></tr>
+    <tr><td><code>fmp.v3Url</code></td><td><code>https://financialmodelingprep.com/api/v3</code></td><td>(reserved)</td></tr>
+    <tr><td><code>fmp.v4Url</code></td><td><code>https://financialmodelingprep.com/api/v4</code></td><td>(reserved)</td></tr>
+  </table></div>
+  <p>API key: <code>config.fmpApiKey</code> from env var <code>FMP_API_KEY</code> (<code>src/core/config.ts</code>).</p>
+
+  <h2>Retry Config</h2>
+  <pre><code>retry(fn, {
+  maxAttempts: 3,
+  initialDelayMs: 1000,
+  backoffFactor: 2,        // delay series: 1s → 2s → throw
+  maxDelayMs: 30000,
+  shouldRetry: (err) => isTransientError(err),
+})</code></pre>
+  <p><strong>Transient (retried):</strong> HTTP 429, 500, 503, network timeouts.<br>
+  <strong>Permanent (not retried):</strong> HTTP 400, 401, 403, 404.</p>
+
+  <h2>Functions</h2>
+  <h3>getNews(ticker, startDate, endDate): Promise&lt;NewsArticle[]&gt;</h3>
+  <pre><code>GET {baseUrl}/news/stock?symbols={ticker}&from={startDate}&to={endDate}&page=0&limit=30&apikey={key}</code></pre>
+  <p>Returns up to 30 news articles. Maps <code>symbol</code>, <code>publishedDate</code>, <code>title</code>, <code>text</code>, <code>url</code> to <code>NewsArticle</code>.</p>
+
+  <h3>getPressReleases(ticker, startDate, endDate): Promise&lt;PressRelease[]&gt;</h3>
+  <pre><code>GET {baseUrl}/news/press-releases?symbols={ticker}&from={startDate}&to={endDate}&page=0&limit=30&apikey={key}</code></pre>
+  <p>Returns up to 30 press releases. Maps same fields as news to <code>PressRelease</code>.</p>
+
+  <h3>get8Ks(ticker, startDate, endDate): Promise&lt;Filing8K[]&gt;</h3>
+  <pre><code>GET {baseUrl}/sec-filings-search/symbol?symbol={ticker}&from={startDate}&to={endDate}&page=0&limit=20&apikey={key}</code></pre>
+  <p>Fetches all SEC filings, then filters client-side to <code>formType === '8-K'</code>. Maps <code>filingDate</code>, <code>formType</code>, <code>link</code>, <code>finalLink</code> to <code>Filing8K</code>.</p>
+
+  <h3>getEodStockPrice(ticker, startDate, endDate): Promise&lt;StockPrice[]&gt;</h3>
+  <pre><code>GET {baseUrl}/historical-price-eod/light?symbol={ticker}&from={startDate}&to={endDate}&apikey={key}</code></pre>
+  <p>Returns one <code>StockPrice</code> per trading day. Flat array — no nested unwrapping. Maps <code>date</code>, <code>price</code>, <code>volume</code> directly. Max 5000 records per request.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════ AI SERVICE -->
+<section id="ai-service">
+  <div class="page-title">services/ai_service.ts</div>
+  <div class="page-subtitle">LLM interactions: summarization and post-processing. Logger: <code>WeeklyRecap/Storage/AiService</code></div>
+
+  <div class="callout">Model instances via <code>getGeminiModel(modelName)</code> from <code>src/core/vertex-ai.ts</code>. Model name resolved via <code>getRemoteConfig().weekly_recap.model</code> from <code>src/core/remote-config.ts</code>. All calls use <code>responseMimeType: 'application/json'</code>.</div>
+
+  <h2>Model</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Task</th><th>AppConfig key</th><th>Remote Config parameter</th><th>Default</th></tr>
+    <tr><td><code>summarizeNews</code></td><td><code>config.weekly_recap.model</code></td><td><code>weekly_recap_model</code></td><td><code>gemini-3-flash-preview</code></td></tr>
+  </table></div>
+  <p><code>getRemoteConfig()</code> is called at invocation time — model is hot-swappable without a redeploy.</p>
+
+  <h2>Retry Config</h2>
+  <pre><code>retry(fn, {
+  maxAttempts: 3,
+  initialDelayMs: 2000,
+  backoffFactor: 2,   // delay series: 2s → 4s → throw
+  maxDelayMs: 30000,
+})</code></pre>
+
+  <h2>summarizeNews(...): Promise&lt;Partial&lt;LLMResponse&gt;&gt;</h2>
+  <p>Core LLM call. Interpolates inputs into a prompt template and calls the model.</p>
+
+  <h3>Prompt Architecture — LangSmith-ready from day one</h3>
+  <p>The prompt is defined as a single exported constant <code>SUMMARIZE_NEWS_PROMPT</code> using LangSmith <code>{variable}</code> placeholder syntax. During development it is interpolated locally; when moving to production it is uploaded to LangSmith Prompts and pulled at runtime via <code>client.pullPrompt('weekly-recap-summarize')</code> — no rewriting required.</p>
+  <pre><code>// dev: interpolate locally
+const prompt = SUMMARIZE_NEWS_PROMPT
+  .replace('{ticker}', ticker)
+  .replace('{companyName}', companyName) ...
+
+// prod (LangSmith): pull and invoke
+const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code></pre>
+
+  <p><strong>Template variables:</strong> <code>{ticker}</code>, <code>{companyName}</code>, <code>{startDate}</code>, <code>{endDate}</code>, <code>{startPrice}</code>, <code>{endPrice}</code>, <code>{priceChange}</code>, <code>{priceChangePercent}</code>, <code>{news}</code>, <code>{pressReleases}</code>, <code>{filings}</code>, <code>{prices}</code></p>
+
+  <h3>Prompt Constraints</h3>
+  <ul>
+    <li><code>messageTitle</code> ≤ 50 characters — must fit an Apple push notification title</li>
+    <li><code>messageShortSummary</code> — 2–3 sentences, ≤ 150 characters — must be fully visible in an Apple push notification body</li>
+    <li><code>messageLongSummary</code> — concise and catchy; written for an engaged reader, not a regulator</li>
+    <li><code>confidenceScore</code> — integer between 0 and 100</li>
+    <li>If any source data is missing or sparse, <strong>omit that aspect entirely</strong> — do not fabricate or speculate</li>
+    <li>Price movement and news/filings are <strong>summarised separately</strong>. The LLM must <strong>never imply or state that price changes were caused by any particular news item, press release, or filing</strong>. Causation is never stated.</li>
+  </ul>
+  <p>Count fields, <code>ticker</code>, <code>companyName</code>, and <code>time</code> are set by the use case — the LLM does not produce them.</p>
+
+  <h2>postProcessLlmSummary(response): LLMResponse</h2>
+  <p>Returns a new sanitized object (does not mutate). Trims whitespace from all string fields, hard-truncates <code>messageTitle</code> to 50 characters, strips stray markdown (backtick fences, extra asterisks) from summary fields.</p>
+
+</section>
+
+<!-- ════════════════════════════════════════ FIRESTORE SERVICE -->
+<section id="firestore-service">
+  <div class="page-title">services/firestore_service.ts</div>
+  <div class="page-subtitle">All Firestore reads and writes. No business logic — pure data access. Logger: <code>WeeklyRecap/Storage/FirestoreService</code></div>
+
+  <div class="callout">Uses <code>getFirebaseAdmin().firestore()</code> from <code>src/core/firebase.ts</code>.</div>
+
+  <h2>Collections</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Collection</th><th>Access</th><th>Description</th></tr>
+    <tr><td><code>watchlist/{ticker}</code></td><td>read</td><td>Global watchlist of tickers to process</td></tr>
+    <tr><td><code>weekly_recap/{ticker}/weeks/{weekEndDate}</code></td><td>write</td><td>Historical LLM summaries per ticker, consumed by retrieval_and_message</td></tr>
+  </table></div>
+
+  <h2>retrieveCompaniesFromDb(): Promise&lt;Company[]&gt;</h2>
+  <p>Called by <code>weeklyRecapScheduler</code> before publishing to Pub/Sub.</p>
+  <ul>
+    <li>Fetches all documents from the <code>watchlist</code> collection.</li>
+    <li>Returns an array of <code>Company</code> (<code>{ ticker, companyName }</code>) for every document.</li>
+    <li>Returns an empty array (no throw) if the collection is empty — scheduler logs a warning and exits cleanly.</li>
+  </ul>
+
+  <h2>storeSummaryInDb(response: LLMResponse): Promise&lt;void&gt;</h2>
+  <p>Called by <code>WeeklyRecapStorageUseCase</code> after validation and post-processing.</p>
+  <ul>
+    <li>Writes to <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code> where <code>{weekEndDate}</code> is the date portion extracted from <code>response.time</code> (e.g. <code>"2026-05-15T16:00:00.000Z"</code> → <code>"2026-05-15"</code>).</li>
+    <li>Merges <code>createdAt: FieldValue.serverTimestamp()</code> into the payload before writing.</li>
+    <li>Uses <code>set()</code> without <code>merge</code> — each <code>weekEndDate</code> is a distinct document, preserving historical summaries. Re-running the same week overwrites only that week's document.</li>
+    <li>Throws on Firestore error (caught and logged by the use case).</li>
+  </ul>
+</section>
+
+<!-- ════════════════════════════════════════ PUBSUB SERVICE -->
+<section id="pubsub-service">
+  <div class="page-title">services/pubsub_service.ts</div>
+  <div class="page-subtitle">Pub/Sub publish and deserialisation. No business logic — pure message transport. Logger: <code>WeeklyRecap/Storage/PubSubService</code></div>
+
+  <div class="callout">Uses <code>@google-cloud/pubsub</code> client. Topic and project resolved from <code>config.projectId</code> (<code>src/core/config.ts</code>).</div>
+
+  <h2>Topic</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Key</th><th>Value</th></tr>
+    <tr><td>Topic name</td><td><code>weekly-recap</code></td></tr>
+    <tr><td>Message payload</td><td><code>{ ticker: string, companyName: string }</code></td></tr>
+    <tr><td>Encoding</td><td>JSON, base64-encoded by the Pub/Sub SDK</td></tr>
+  </table></div>
+
+  <h2>queueCompanies(companies: Company[]): Promise&lt;void&gt;</h2>
+  <p>Called by <code>weeklyRecapScheduler</code> after <code>retrieveCompaniesFromDb()</code>. <code>Company</code> is <code>{ ticker: string, companyName: string }</code>.</p>
+  <ul>
+    <li>Iterates over <code>companies</code> and publishes one Pub/Sub message per <code>Company</code> to the <code>weekly-recap</code> topic.</li>
+    <li>Each message payload: <code>{ ticker, companyName }</code> serialised as JSON. Dates are not included — the processor derives the week window at execution time.</li>
+    <li>Pub/Sub will retry a failed message up to <strong>5 times</strong> before routing it to the dead-letter topic on <code>weekly-recap</code>.</li>
+    <li>Logs the count of messages published on completion.</li>
+    <li>Throws if the Pub/Sub client fails (caught and logged by the scheduler).</li>
+  </ul>
+
+  <h2>retrieveCompanyFromQueue(message): Company</h2>
+  <p>Called by <code>weeklyRecapProcessor</code> as the first step in handling each Pub/Sub push.</p>
+  <ul>
+    <li>Decodes the base64 message data and parses the JSON payload.</li>
+    <li>Returns the typed <code>Company</code> object (<code>{ ticker, companyName }</code>).</li>
+    <li>Throws a typed <code>AppError</code> (<code>src/core/errors.ts</code>) if the payload is missing required fields — this causes the message to be acknowledged without processing rather than retried indefinitely.</li>
+  </ul>
+</section>
+
+<!-- ════════════════════════════════════════════ TECH STACK -->
+<section id="tech-stack">
+  <div class="page-title">Tech Stack &amp; Strategy</div>
+  <div class="page-subtitle">Technology choices, retry config, environment pattern, token budget</div>
+
+  <h2>Technology Stack</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Layer</th><th>Technology</th></tr>
+    <tr><td>Runtime</td><td>Node.js 20, TypeScript 5.x (strict mode)</td></tr>
+    <tr><td>Cloud Functions</td><td>Google Cloud Functions 2nd Gen (<code>firebase-functions/v2</code>)</td></tr>
+    <tr><td>Scheduling</td><td>Google Cloud Scheduler</td></tr>
+    <tr><td>Message queue</td><td>Google Cloud Pub/Sub — topic: <code>weekly-recap</code></td></tr>
+    <tr><td>Database</td><td>Google Cloud Firestore</td></tr>
+    <tr><td>LLM</td><td>Google Vertex AI — Gemini (model from Firebase Remote Config)</td></tr>
+    <tr><td>Orchestration</td><td>LangGraph — state graph per ticker invocation, typed <code>WeeklyRecapState</code></td></tr>
+    <tr><td>Market data</td><td>Financial Modeling Prep (FMP) REST API — stable endpoint</td></tr>
+    <tr><td>LLM evaluation</td><td>Confident AI / DeepEval — LLM-as-Judge tracing via <code>@confident-ai/deepeval</code></td></tr>
+    <tr><td>Prompt versioning</td><td>LangSmith — local interpolation during dev, pulled at runtime in prod</td></tr>
+    <tr><td>Secrets</td><td>GCP Secret Manager — <code>CONFIDENT_API_KEY</code>, <code>FMP_API_KEY</code>, <code>LANGSMITH_API_KEY</code></td></tr>
+    <tr><td>Retry / backoff</td><td><code>src/core/retry.ts</code></td></tr>
+    <tr><td>Logging</td><td><code>src/core/logger.ts</code> — structured wrapper over <code>firebase-functions/logger</code></td></tr>
+    <tr><td>Config</td><td><code>src/core/remote-config.ts</code> — Firebase Remote Config</td></tr>
+    <tr><td>Firebase init</td><td><code>src/core/firebase.ts</code> — <code>getFirebaseAdmin()</code></td></tr>
+    <tr><td>Vertex AI init</td><td><code>src/core/vertex-ai.ts</code> — <code>getGeminiModel()</code></td></tr>
+  </table></div>
+
+  <h2>Retry Strategy</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Call site</th><th>maxAttempts</th><th>initialDelayMs</th><th>backoffFactor</th><th>Delay series</th></tr>
+    <tr><td><code>fmp_service.ts</code></td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
+    <tr><td><code>ai_service.ts</code></td><td>3</td><td>2000ms</td><td>2</td><td>2s → 4s → throw</td></tr>
+  </table></div>
+
+  <h2>Environment &amp; Secret Management</h2>
+  <p>Bizzie runs three fully isolated environments — <strong>dev</strong>, <strong>qa</strong>, <strong>prod</strong> — each backed by its own Firebase project and GCP project.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Rule</th><th>Detail</th></tr>
+    <tr><td>Secret names are identical across environments</td><td><code>CONFIDENT_API_KEY</code>, <code>FMP_API_KEY</code>, etc. are the same string in dev, qa, and prod</td></tr>
+    <tr><td>GCP project context resolves the correct value</td><td>Functions run inside their environment's GCP project — Secret Manager returns that project's secret</td></tr>
+    <tr><td>No environment conditionals in code</td><td>Never branch on <code>process.env.ENV</code> to pick a secret value</td></tr>
+    <tr><td>Secrets fetched at cold-start</td><td>Fetched once via <code>@google-cloud/secret-manager</code> and cached for the instance lifetime</td></tr>
+    <tr><td>API keys are never in Remote Config or env vars</td><td>Remote Config holds non-sensitive config only</td></tr>
+  </table></div>
+  <pre><code>async function getSecret(name: string): Promise&lt;string&gt; {
+  const [version] = await client.accessSecretVersion({
+    name: `projects/${config.projectId}/secrets/${name}/versions/latest`,
+  });
+  return version.payload!.data!.toString();
+}</code></pre>
+
+  <h2>Token Budget</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Input</th><th>Limit</th><th>Rationale</th></tr>
+    <tr><td>News article text</td><td>500 tokens (~375 words)</td><td>Captures headline + key facts; tail of long articles is rarely material</td></tr>
+    <tr><td>Press release text</td><td>750 tokens (~560 words)</td><td>Denser structured content; needs more room</td></tr>
+    <tr><td>8-K entry</td><td>No truncation</td><td>Metadata only: title, date, two URLs — ~30 tokens per entry</td></tr>
+    <tr><td>Stock price entry</td><td>No truncation</td><td>Three fields per trading day — ~15 tokens per entry</td></tr>
+  </table></div>
+  <p><strong>Estimated per invocation:</strong> ~500 (prompt) + 15,000 (30 news) + 22,500 (30 PRs) + 600 (20 8-K entries) + 110 (7 price rows) ≈ <strong>38,750 input tokens</strong>. Output ≈ 500 tokens. At Gemini Flash pricing: ~$0.003 per ticker.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════ LOGGING -->
+<section id="logging">
+  <div class="page-title">Logging Spec</div>
+  <div class="page-subtitle">All logging via <code>src/core/logger.ts</code>. Context convention: <code>WeeklyRecap/Storage/{FileName}</code></div>
+
+  <pre><code>const logger = new Logger('WeeklyRecap/Storage/FmpService'); // example</code></pre>
+
+  <h2>storage/trigger.ts — WeeklyRecap/Storage/Trigger</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Event</th><th>Level</th><th>Message</th></tr>
+    <tr><td>Scheduler started</td><td><span class="badge badge-info">info</span></td><td><code>"Scheduler started"</code></td></tr>
+    <tr><td>Companies loaded</td><td><span class="badge badge-info">info</span></td><td><code>"Loaded {n} companies from watchlist"</code></td></tr>
+    <tr><td>Watchlist empty</td><td><span class="badge badge-warn">warn</span></td><td><code>"Watchlist is empty — nothing to process"</code></td></tr>
+    <tr><td>Queue failure (per company)</td><td><span class="badge badge-error">error</span></td><td><code>"Failed to queue {ticker} ({companyName}) — skipping"</code> + error</td></tr>
+    <tr><td>All messages queued</td><td><span class="badge badge-info">info</span></td><td><code>"Queued {n}/{total} Pub/Sub messages in {ms}ms"</code></td></tr>
+    <tr><td>Processor message received</td><td><span class="badge badge-info">info</span></td><td><code>"Processing {ticker} ({companyName}) for {startDate} → {endDate}"</code></td></tr>
+    <tr><td>Processor completed</td><td><span class="badge badge-info">info</span></td><td><code>"Completed {ticker} ({companyName})"</code></td></tr>
+    <tr><td>Processor unrecoverable error</td><td><span class="badge badge-error">error</span></td><td><code>"Failed {ticker} ({companyName}) — message acknowledged"</code> + error</td></tr>
+  </table></div>
+
+  <h2>storage/services/fmp_service.ts — WeeklyRecap/Storage/FmpService</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Event</th><th>Level</th><th>Message</th></tr>
+    <tr><td>API call start</td><td><span class="badge badge-info">info</span></td><td><code>"Fetching {type} for {ticker} ({companyName})"</code></td></tr>
+    <tr><td>API call result</td><td><span class="badge badge-info">info</span></td><td><code>"Fetched {n} {type} for {ticker}"</code></td></tr>
+    <tr><td>Empty result</td><td><span class="badge badge-warn">warn</span></td><td><code>"No {type} found for {ticker} ({companyName}) in {startDate}–{endDate}"</code></td></tr>
+    <tr><td>Retry attempt</td><td><span class="badge badge-warn">warn</span></td><td><code>"Retrying {type} fetch for {ticker} ({companyName}) — attempt {n}"</code></td></tr>
+    <tr><td>All retries exhausted</td><td><span class="badge badge-error">error</span></td><td><code>"All retries exhausted for {type} fetch — {ticker} ({companyName})"</code> + error</td></tr>
+  </table></div>
+
+  <h2>storage/services/ai_service.ts — WeeklyRecap/Storage/AiService</h2>
+  <h3>summarizeNews</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Event</th><th>Level</th><th>What to log</th></tr>
+    <tr><td>Before call</td><td><span class="badge badge-debug">debug</span></td><td>Full prompt string sent to the model</td></tr>
+    <tr><td>After call</td><td><span class="badge badge-debug">debug</span></td><td>Full raw response text from the model</td></tr>
+    <tr><td>Generation duration</td><td><span class="badge badge-info">info</span></td><td><code>"LLM summary generated for {ticker} in {ms}ms"</code></td></tr>
+    <tr><td>Token usage</td><td><span class="badge badge-info">info</span></td><td><code>promptTokenCount</code>, <code>candidatesTokenCount</code>, <code>totalTokenCount</code></td></tr>
+    <tr><td>Model used</td><td><span class="badge badge-info">info</span></td><td>Model name resolved from Remote Config</td></tr>
+    <tr><td>Empty response</td><td><span class="badge badge-warn">warn</span></td><td><code>"LLM returned empty response for {ticker}"</code></td></tr>
+  </table></div>
+
+  <h3>postProcessLlmSummary</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Event</th><th>Level</th><th>Message</th></tr>
+    <tr><td>Title truncated</td><td><span class="badge badge-info">info</span></td><td><code>"messageTitle truncated for {ticker}: {originalLength} → 50 chars"</code></td></tr>
+    <tr><td>Markdown stripped</td><td><span class="badge badge-debug">debug</span></td><td><code>"Stripped markdown artefacts from summary for {ticker}"</code></td></tr>
+  </table></div>
+
+  <h2>storage/nodes/ — WeeklyRecap/Storage/Node/{NodeName}</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Event</th><th>Level</th><th>Message</th></tr>
+    <tr><td>Schema valid</td><td><span class="badge badge-info">info</span></td><td><code>"Schema valid for {ticker}"</code></td></tr>
+    <tr><td>Schema invalid</td><td><span class="badge badge-error">error</span></td><td><code>"Schema validation failed for {ticker}"</code> + field name + actual value</td></tr>
+  </table></div>
+
+  <h2>storage/services/firestore_service.ts — WeeklyRecap/Storage/FirestoreService</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Event</th><th>Level</th><th>Message</th></tr>
+    <tr><td>retrieveCompaniesFromDb success</td><td><span class="badge badge-info">info</span></td><td><code>"Retrieved {n} companies from watchlist"</code></td></tr>
+    <tr><td>storeSummaryInDb success</td><td><span class="badge badge-info">info</span></td><td><code>"Stored summary for {ticker} / {weekEndDate}"</code></td></tr>
+    <tr><td>Any Firestore error</td><td><span class="badge badge-error">error</span></td><td>Operation name + ticker + error</td></tr>
+  </table></div>
+</section>
+
+<!-- ════════════════════════════════════════════════ TESTING -->
+<section id="testing">
+  <div class="page-title">Testing</div>
+  <div class="page-subtitle">Jest unit tests for all non-LLM logic. LLM quality is handled separately by DeepEval in CI/CD — see Evaluation.</div>
+
+  <h2>Commands</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Command</th><th>What it runs</th></tr>
+    <tr><td><code>npm test</code></td><td>All Jest unit tests</td></tr>
+    <tr><td><code>npm test -- --coverage</code></td><td>With coverage report</td></tr>
+    <tr><td><code>npm test -- --watch</code></td><td>Watch mode during development</td></tr>
+  </table></div>
+
+  <h2>Test File Locations</h2>
+  <pre><code>src/features/weekly_recap/storage/
+├── services/
+│   └── __tests__/
+│       ├── fmp_service.test.ts
+│       ├── ai_service.test.ts
+│       └── firestore_service.test.ts
+└── nodes/
+    └── __tests__/
+        ├── calculateWeekWindow.test.ts
+        ├── calculateDeterministicFields.test.ts
+        ├── validateSchema.test.ts
+        ├── assembleResponse.test.ts
+        └── postProcessResponse.test.ts</code></pre>
+
+  <h2>fmp_service.ts</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Case</th><th>What to verify</th></tr>
+    <tr><td>HTTP request construction</td><td>Correct URL, query params, and API key on every method</td></tr>
+    <tr><td>Response mapping</td><td>Raw FMP fields map correctly to <code>NewsArticle</code>, <code>PressRelease</code>, <code>Filing8K</code>, <code>StockPrice</code></td></tr>
+    <tr><td>8-K client-side filter</td><td>Only records with <code>formType === '8-K'</code> returned from <code>get8Ks</code></td></tr>
+    <tr><td>Retry on transient error</td><td>Mock HTTP 429 / 503 → verify <code>retry()</code> attempts again</td></tr>
+    <tr><td>No retry on permanent error</td><td>Mock HTTP 404 → verify immediate throw, no retry</td></tr>
+    <tr><td>Empty response</td><td>FMP returns <code>[]</code> → method returns <code>[]</code>, does not throw</td></tr>
+  </table></div>
+
+  <h2>ai_service.ts</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Case</th><th>What to verify</th></tr>
+    <tr><td><code>postProcessLlmSummary</code> — truncation</td><td><code>messageTitle</code> &gt; 50 chars hard-truncated to exactly 50</td></tr>
+    <tr><td><code>postProcessLlmSummary</code> — immutability</td><td>Input object not mutated; new object returned</td></tr>
+    <tr><td><code>postProcessLlmSummary</code> — whitespace</td><td>Leading/trailing whitespace stripped from all string fields</td></tr>
+    <tr><td><code>postProcessLlmSummary</code> — markdown</td><td>Backtick fences and stray asterisks removed from summary fields</td></tr>
+    <tr><td>Prompt interpolation</td><td>All <code>{variable}</code> placeholders replaced; none remain in final string</td></tr>
+  </table></div>
+  <p>LLM output quality is not tested here — that is DeepEval's responsibility.</p>
+
+  <h2>firestore_service.ts</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Case</th><th>What to verify</th></tr>
+    <tr><td><code>retrieveCompaniesFromDb</code> — happy path</td><td>Firestore documents mapped to <code>Company[]</code> correctly</td></tr>
+    <tr><td><code>retrieveCompaniesFromDb</code> — empty collection</td><td>Returns <code>[]</code>, does not throw</td></tr>
+    <tr><td><code>storeSummaryInDb</code> — path</td><td>Writes to <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code></td></tr>
+    <tr><td><code>storeSummaryInDb</code> — document ID</td><td>Derived from date portion of <code>response.time</code> (e.g. <code>"2026-05-15T16:00:00.000Z"</code> → <code>"2026-05-15"</code>)</td></tr>
+    <tr><td><code>storeSummaryInDb</code> — timestamp</td><td><code>createdAt: FieldValue.serverTimestamp()</code> merged into payload</td></tr>
+  </table></div>
+
+  <h2>LangGraph Nodes (pure nodes only)</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Node</th><th>What to test</th></tr>
+    <tr><td><code>calculateWeekWindow</code></td><td><code>endDate</code> is today (ISO); <code>startDate</code> is exactly 7 days prior</td></tr>
+    <tr><td><code>calculateDeterministicFields</code></td><td>Counts match array lengths; <code>priceChange</code> and <code>priceChangePercent</code> math; <code>null</code> fields when <code>prices</code> is empty</td></tr>
+    <tr><td><code>validateSchema</code></td><td>Passes valid <code>LLMResponse</code>; throws <code>AppError</code> for each missing required field; throws on <code>confidenceScore</code> outside <code>[0, 100]</code></td></tr>
+    <tr><td><code>assembleResponse</code></td><td>Merges <code>llmPartial</code> + deterministic fields; deterministic fields never overwritten by LLM fields</td></tr>
+    <tr><td><code>postProcessResponse</code></td><td>Delegates to <code>AiService.postProcessLlmSummary</code>; returns a new object</td></tr>
+  </table></div>
+
+  <h2>What NOT to Test</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Area</th><th>Reason</th></tr>
+    <tr><td>LLM output quality</td><td>Handled by DeepEval in CI/CD — see <a href="#evaluation">Evaluation</a></td></tr>
+    <tr><td>FMP API response schema</td><td>External contract; mocked at the HTTP boundary</td></tr>
+    <tr><td>Firestore document structure on disk</td><td>Integration concern; not a unit test responsibility</td></tr>
+    <tr><td>LangGraph graph wiring / compilation</td><td>Framework concern; nodes are tested in isolation</td></tr>
+    <tr><td>Logger output</td><td>Never assert on log messages in unit tests</td></tr>
+  </table></div>
+
+  <h2>Mocking Strategy</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Dependency</th><th>How to mock</th></tr>
+    <tr><td>FMP HTTP calls</td><td>Mock <code>axios</code> or <code>fetch</code> at the module boundary — never call real FMP in tests</td></tr>
+    <tr><td>Vertex AI / Gemini</td><td>Mock <code>getGeminiModel()</code> from <code>src/core/vertex-ai.ts</code> — return a canned JSON response</td></tr>
+    <tr><td>Firestore</td><td>Mock <code>getFirebaseAdmin().firestore()</code> — verify calls and arguments</td></tr>
+    <tr><td>Remote Config</td><td>Mock <code>getRemoteConfig()</code> to return a fixed <code>AppConfig</code></td></tr>
+    <tr><td>Logger</td><td>Suppress or spy; never assert on log output</td></tr>
+  </table></div>
+</section>
+
+<!-- ════════════════════════════════════════════ EVALUATION -->
+<section id="evaluation">
+  <div class="page-title">Evaluation</div>
+  <div class="page-subtitle">LLM output quality via Confident AI / DeepEval — dataset-based, runs in CI/CD, entirely outside the runtime request path.</div>
+
+  <h2>Approach</h2>
+  <p>Test cases and golden datasets are maintained in the Confident AI dashboard. <code>deepeval run</code> executes evaluations in CI/CD after each deployment, pulling datasets from Confident AI, scoring outputs, and reporting results back to the dashboard.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Concern</th><th>Where it lives</th></tr>
+    <tr><td>Per-ticker processing</td><td>Runtime — <code>weeklyRecapProcessor</code> writes summaries to Firestore</td></tr>
+    <tr><td>LLM output quality</td><td>CI/CD — <code>deepeval run</code> against Confident AI datasets</td></tr>
+    <tr><td>Schema correctness</td><td>Runtime — <code>validateSchema</code> LangGraph node (pure TypeScript)</td></tr>
+    <tr><td>Service correctness</td><td>CI/CD — Jest unit tests (see <a href="#testing">Testing</a>)</td></tr>
+  </table></div>
+
+  <h2>Dataset Management</h2>
+  <p>Datasets are created and maintained in the <strong>Confident AI dashboard</strong> under the <code>weekly-recap</code> project (one project per environment: dev / qa / prod). Datasets are versioned — create a new version when the prompt template changes or evaluation criteria are revised.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Field</th><th>Description</th></tr>
+    <tr><td><code>input</code></td><td>Full prompt string passed to <code>summarizeNews</code></td></tr>
+    <tr><td><code>actual_output</code></td><td>The <code>messageLongSummary</code> produced by the LLM</td></tr>
+    <tr><td><code>context</code></td><td>Source grounding: news articles, press releases, 8-K links</td></tr>
+    <tr><td><code>expected_output</code></td><td>(Optional) Reference summary for comparison metrics</td></tr>
+  </table></div>
+
+  <h2>Metrics Evaluated</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Metric</th><th>DeepEval class</th><th>What it checks</th></tr>
+    <tr><td>Answer relevancy</td><td><code>AnswerRelevancyMetric</code></td><td>Summary content is germane to the ticker and week window</td></tr>
+    <tr><td>Faithfulness</td><td><code>FaithfulnessMetric</code></td><td>Claims are grounded in the provided source documents</td></tr>
+    <tr><td>Hallucination</td><td><code>HallucinationMetric</code></td><td>No fabricated names, events, dates, or figures</td></tr>
+  </table></div>
+  <p>Thresholds and LLM-as-Judge model are configured per dataset in the Confident AI dashboard — not hardcoded in test files.</p>
+
+  <h2>Test Files</h2>
+  <p>Evaluation tests live in <code>tests/evaluation/</code> using the Python <code>deepeval</code> framework — separate from the TypeScript Jest unit tests.</p>
+  <pre><code>tests/
+└── evaluation/
+    ├── conftest.py
+    └── test_weekly_recap_summary.py</code></pre>
+  <pre><code>import pytest
+from deepeval import assert_test
+from deepeval.dataset import EvaluationDataset
+from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, HallucinationMetric
+
+dataset = EvaluationDataset()
+dataset.pull(alias="weekly-recap-v1")  # pulls from Confident AI
+
+@pytest.mark.parametrize("test_case", dataset.test_cases)
+def test_weekly_recap_summary(test_case):
+    assert_test(test_case, [
+        AnswerRelevancyMetric(threshold=0.7),
+        FaithfulnessMetric(threshold=0.8),
+        HallucinationMetric(threshold=0.5),
+    ])</code></pre>
+
+  <h2>CI/CD Integration</h2>
+  <p><code>deepeval run</code> executes after a successful deployment to each environment. If scores fall below configured thresholds, the step fails and the deployment is flagged.</p>
+  <pre><code>- name: Run LLM evaluation
+  run: deepeval run tests/evaluation/
+  env:
+    CONFIDENT_API_KEY: ${{ secrets.CONFIDENT_API_KEY }}</code></pre>
+
+  <h2>Authentication &amp; Multi-Environment Pattern</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Rule</th><th>Detail</th></tr>
+    <tr><td>Identical secret name across environments</td><td><code>CONFIDENT_API_KEY</code> is the same string in dev, qa, and prod CI secrets</td></tr>
+    <tr><td>One Confident AI project per environment</td><td>Dev, qa, and prod datasets and results are isolated by project</td></tr>
+    <tr><td>No env conditionals in code</td><td>The CI/CD job targets a specific environment's API key via its secret</td></tr>
+  </table></div>
+</section>
+
+<!-- ════════════════════════════════════════ DEAD LETTER -->
+<section id="dead-letter">
+  <div class="page-title">Dead-Letter Topic Setup</div>
+  <div class="page-subtitle">One-time GCP console configuration — required before production. Repeat for dev, qa, prod.</div>
+
+  <h2>Why this matters</h2>
+  <p>Pub/Sub retries a failed message up to 5 times before giving up. Without a dead-letter topic, the message is <strong>silently dropped</strong> after those 5 attempts. You would never know a ticker failed permanently, you could not inspect what the message contained, and you could not re-process it later.</p>
+  <p>A dead-letter topic (<code>weekly-recap-dead-letter</code>) catches those exhausted messages. You can inspect them, alert on them, and republish them once the root cause is fixed.</p>
+
+  <h2>Step 1 — Create the dead-letter topic</h2>
+  <ol>
+    <li>Open GCP Console and select the correct project (dev / qa / prod).</li>
+    <li>Navigate to <strong>Pub/Sub → Topics</strong>.</li>
+    <li>Click <strong>Create Topic</strong>. Topic ID: <code>weekly-recap-dead-letter</code></li>
+    <li>Check <strong>Add a default subscription</strong> — creates a pull subscription automatically so you can inspect dead-lettered messages in the console.</li>
+    <li>Leave <strong>Use a schema</strong> unchecked. The DLT must accept any message unconditionally — a schema would reject malformed messages and lose them, defeating the purpose.</li>
+    <li>Leave all other fields as default. Click <strong>Create</strong>.</li>
+  </ol>
+
+  <h2>Step 2 — Grant the Pub/Sub service account publish permission</h2>
+  <p>Pub/Sub moves failed messages on your behalf using its own service account. That account needs publish permission on the DLT — otherwise the move silently fails.</p>
+  <ol>
+    <li>Find your <strong>project number</strong> on the Project Overview page (plain integer, not the project ID string).</li>
+    <li>Navigate to <strong>Pub/Sub → Topics</strong>, click <code>weekly-recap-dead-letter</code>.</li>
+    <li>Click the <strong>Permissions</strong> tab → <strong>Add Principal</strong>.</li>
+    <li>New principal: <code>service-{PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com</code></li>
+    <li>In the role search box type <code>publisher</code> (not <code>pub</code>) to surface <strong>Pub/Sub Publisher</strong>. The "Pub/Sub Lite Service Agent" that appears with <code>pub</code> is unrelated.</li>
+    <li>Click <strong>Save</strong>.</li>
+  </ol>
+
+  <h2>Step 3 — Enable dead lettering on the weeklyRecapProcessor subscription</h2>
+  <blockquote>Do this after the first deployment of <code>weeklyRecapProcessor</code>. Firebase creates the push subscription automatically on first deploy — it does not exist until then.</blockquote>
+  <ol>
+    <li>Navigate to <strong>Pub/Sub → Subscriptions</strong>.</li>
+    <li>Find the subscription for the <code>weekly-recap</code> topic with delivery type <strong>Push</strong>. Its name will start with <code>eventarc-us-central1-weeklyRecapProcessor-</code>.</li>
+    <li>Click the subscription name → <strong>Edit</strong>.</li>
+    <li>Scroll to <strong>Dead lettering</strong> → toggle on.</li>
+    <li>Dead letter topic: <code>weekly-recap-dead-letter</code>. Max delivery attempts: <code>5</code>.</li>
+    <li>Click <strong>Update</strong>.</li>
+  </ol>
+
+  <h2>Step 4 — Repeat for each environment</h2>
+  <p>Perform steps 1–3 in the dev, qa, and prod GCP projects independently. The topic and subscription names are identical across environments — the GCP project boundary provides isolation.</p>
+</section>
+
+</main>
+
+<script>
+  // Highlight active nav link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

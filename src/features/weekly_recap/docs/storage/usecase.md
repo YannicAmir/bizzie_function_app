@@ -1,0 +1,97 @@
+# usecase.ts
+
+Orchestrates the per-ticker processing pipeline using a **LangGraph** state graph. Receives injected `FmpService`, `AiService`, and `FirestoreService` instances. Also exports the shared TypeScript interfaces used across all services (see [data-models.md](data-models.md)).
+
+---
+
+## Graph State
+
+Typed state object that flows through every node. Each node reads what it needs and writes its outputs back into state.
+
+```typescript
+interface WeeklyRecapState {
+  // Input (seeded by trigger.ts)
+  ticker: string;
+  companyName: string;
+
+  // Derived by calculateWeekWindow node
+  startDate: string;
+  endDate: string;
+
+  // Fetched by fetchMarketData node
+  news: NewsArticle[];
+  pressReleases: PressRelease[];
+  filings: Filing8K[];
+  prices: StockPrice[];
+
+  // Derived deterministically
+  counts: Pick<LLMResponse, 'newArticleCount' | 'pressReleaseCount' | 'eightKCount' | 'eodStockPriceCount'>;
+  priceMovement: PriceMovement;
+
+  // LLM output (content fields only)
+  llmPartial: Partial<LLMResponse>;
+
+  // Final assembled + post-processed response
+  llmResponse: LLMResponse;
+}
+```
+
+---
+
+## Nodes
+
+| Node | Calls | Writes to state |
+|---|---|---|
+| `calculateWeekWindow` | pure function | `startDate`, `endDate` |
+| `fetchMarketData` | `FmpService.*` (parallel) | `news`, `pressReleases`, `filings`, `prices` |
+| `calculateDeterministicFields` | pure functions | `counts`, `priceMovement` |
+| `summarizeNews` | `AiService.summarizeNews` | `llmPartial` |
+| `validateSchema` | pure TypeScript check | — (throws or continues) |
+| `assembleResponse` | pure function | `llmResponse` |
+| `postProcessResponse` | `AiService.postProcessLlmSummary` | `llmResponse` |
+| `storeSummary` | `FirestoreService.storeSummaryInDb` | — |
+
+---
+
+## Graph Edges
+
+```
+START
+  └─▶ calculateWeekWindow
+        └─▶ fetchMarketData          (Promise.all within node)
+              └─▶ calculateDeterministicFields
+                    └─▶ summarizeNews
+                          └─▶ validateSchema
+                                ├─▶ (valid)   assembleResponse
+                                │               └─▶ postProcessResponse
+                                │                     └─▶ storeSummary ──▶ END
+                                └─▶ (invalid) END  (AppError logged, message acknowledged)
+```
+
+---
+
+## Node Detail
+
+### `calculateWeekWindow`
+Derives `endDate` (current datetime as ISO string) and `startDate` (7 days prior). Centralised here so all downstream nodes use a consistent window.
+
+### `fetchMarketData`
+Calls `FmpService.getNews`, `getPressReleases`, `get8Ks`, and `getEodStockPrice` concurrently via `Promise.allSettled`. Each call is independent — a failure after all retries logs a warning and defaults to an empty array, allowing the graph to continue with partial data. The LLM is instructed to omit any aspect where data is missing. `Promise.all` is explicitly avoided here: it would abort all successful fetches the moment any single call fails. Text fields are truncated to token budget before being written to state (see [tech-stack.md](tech-stack.md)).
+
+### `calculateDeterministicFields`
+Derives `counts` from array lengths and `priceMovement` (`startPrice`, `endPrice`, `priceChange`, `priceChangePercent`) from the `prices` array. Returns `null` fields if `prices` is empty. No LLM involved.
+
+### `summarizeNews`
+Calls `AiService.summarizeNews` with the full state context. Returns LLM content fields only — deterministic fields are not produced by the LLM.
+
+### `validateSchema`
+Pure TypeScript check — no LLM. Confirms all required fields exist with correct types and `confidenceScore` is an integer in `[0, 100]`. On failure: throws `AppError`, graph routes to END, message is acknowledged without retry.
+
+### `assembleResponse`
+Merges `llmPartial` with deterministic fields (`ticker`, `companyName`, `time`, `counts`, `priceMovement`) to produce the final `LLMResponse`.
+
+### `postProcessResponse`
+Sanitises the assembled response: trims whitespace, hard-truncates `messageTitle` to 50 chars, strips stray markdown.
+
+### `storeSummary`
+Writes `llmResponse` to `weekly_recap/{ticker}/weeks/{weekEndDate}` via `FirestoreService`. Transitions to END.
