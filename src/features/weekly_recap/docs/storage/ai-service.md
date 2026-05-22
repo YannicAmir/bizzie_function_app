@@ -58,7 +58,7 @@ The prompt instructs the model to return a JSON object with the content fields o
 - `messageLongSummary` concise and catchy — no hard character limit, but should be tight; written for an engaged reader, not a regulator
 - `confidenceScore` as an integer between `0` and `100`
 - If any source data is missing or sparse, **omit that aspect entirely** — do not fabricate or speculate.
-- Price movement and news/filings are **summarised separately** within the same output. The LLM must **never imply or state that price changes were caused by any particular news item, press release, or filing**. Causation is never stated.
+- Price movement and news/filings are **summarized separately** within the same output. The LLM must **never imply or state that price changes were caused by any particular news item, press release, or filing**. Causation is never stated.
 
 Count fields (`newArticleCount`, `pressReleaseCount`, `eightKCount`, `eodStockPriceCount`), `ticker`, `companyName`, and `time` are set by the use case — the LLM does not produce them.
 

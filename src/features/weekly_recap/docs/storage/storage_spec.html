@@ -229,7 +229,42 @@
   .filetree .dir  { color: #5b8df5; }
   .filetree .file { color: #c9d1d9; }
   .filetree .cmt  { color: #6b7587; }
+
+  /* ── Mermaid diagrams ── */
+  .mermaid-wrap {
+    background: #1e2130;
+    border: 1px solid #2d3148;
+    border-radius: 8px;
+    padding: 28px 16px;
+    margin: 14px 0 20px;
+    overflow-x: auto;
+  }
+  .mermaid-wrap .mermaid { width: 100%; }
+  .mermaid-wrap svg { width: 100% !important; max-width: 100%; height: auto; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#1e2130',
+      mainBkg: '#2d3148',
+      primaryColor: '#2d3148',
+      primaryBorderColor: '#5b8df5',
+      primaryTextColor: '#c9d1d9',
+      secondaryColor: '#0f1117',
+      tertiaryColor: '#0f1117',
+      lineColor: '#5b8df5',
+      textColor: '#c9d1d9',
+      edgeLabelBackground: '#1e2130',
+      clusterBkg: '#0f1117',
+      clusterBorder: '#5b8df5',
+      labelTextColor: '#c9d1d9',
+      nodeTextColor: '#c9d1d9',
+    }
+  });
+</script>
 </head>
 <body>
 
@@ -238,6 +273,7 @@
   <ul>
     <li class="nav-section">Overview</li>
     <li><a href="#overview">Pipeline Overview</a></li>
+    <li><a href="#processing-flow">Processing Flow</a></li>
     <li><a href="#file-structure">File Structure</a></li>
 
     <li class="nav-section">Entry Points</li>
@@ -273,7 +309,7 @@
   <div class="page-subtitle">Pre-implementation specification · Feature: <code>weekly_recap/storage</code></div>
 
   <h2>Purpose</h2>
-  <p>Every Friday at 4pm EST this pipeline generates an AI-written market summary for every ticker on the global watchlist and persists it to Firestore. Those stored summaries are later consumed by the <code>retrieval_and_message</code> pipeline.</p>
+  <p>Every Friday at 4pm EST this pipeline generates an AI-written market summary for every ticker on the global watchlist and persists it to Firestore. Those stored summaries are later consumed by the <code>retrieval_and_messaging</code> pipeline.</p>
   <p>The pipeline is split into two Cloud Functions to avoid timeout limits and allow per-ticker parallelism via Pub/Sub:</p>
   <ol>
     <li><strong>weeklyRecapScheduler</strong> — reads every ticker from the global watchlist and publishes one Pub/Sub message per ticker.</li>
@@ -310,6 +346,32 @@ weeklyRecapProcessor  [trigger.ts]
   [postProcessResponse]      ── [ai_service.ts]      → sanitized llmResponse
   [storeSummary]             ── [firestore_service.ts] → weekly_recap/{ticker}/weeks/{weekEndDate}
   [evaluateSummary]          ── [ai_service.ts]      → Confident AI trace (fire-and-forget) → END</div>
+
+  <h2 id="processing-flow">Processing Flow</h2>
+  <div class="mermaid-wrap"><div class="mermaid">
+flowchart TD
+    CS([Cloud Scheduler\nFri 4:00pm EST]) --> SCH[weeklyRecapScheduler]
+    SCH -- reads --> FS1[(Firestore\nwatchlist collection)]
+    FS1 -- Company list --> SCH
+    SCH -- one message per ticker --> PS[Pub/Sub\nweekly-recap]
+    PS -- concurrent invocations --> PROC[weeklyRecapProcessor]
+
+    subgraph LG[LangGraph — WeeklyRecapState]
+        direction TB
+        PROC --> N1[calculateWeekWindow\nstartDate · endDate]
+        N1 --> N2[fetchMarketData\nnews · pressReleases · filings · prices · Promise.allSettled]
+        N2 --> N3[calculateDeterministicFields\ncounts · priceMovement]
+        N3 --> N4[summarizeNews\nVertex AI / Gemini]
+        N4 --> N5{validateSchema}
+        N5 -- invalid --> DL[END\ndead-letter topic]
+        N5 -- valid --> N6[assembleResponse\nllmResponse]
+        N6 --> N7[postProcessResponse\ntrim · truncate · strip markdown]
+        N7 --> N8[storeSummary]
+        N8 -- writes --> FS2[(Firestore\nweekly_recap/ticker/weeks/date)]
+        N8 --> N9[evaluateSummary\nConfident AI — fire-and-forget]
+        N9 --> DONE[END]
+    end
+  </div></div>
 </section>
 
 <!-- ════════════════════════════════════════════════════ FILE STRUCTURE -->
@@ -698,7 +760,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <li><code>messageLongSummary</code> — concise and catchy; written for an engaged reader, not a regulator</li>
     <li><code>confidenceScore</code> — integer between 0 and 100</li>
     <li>If any source data is missing or sparse, <strong>omit that aspect entirely</strong> — do not fabricate or speculate</li>
-    <li>Price movement and news/filings are <strong>summarised separately</strong>. The LLM must <strong>never imply or state that price changes were caused by any particular news item, press release, or filing</strong>. Causation is never stated.</li>
+    <li>Price movement and news/filings are <strong>summarized separately</strong>. The LLM must <strong>never imply or state that price changes were caused by any particular news item, press release, or filing</strong>. Causation is never stated.</li>
   </ul>
   <p>Count fields, <code>ticker</code>, <code>companyName</code>, and <code>time</code> are set by the use case — the LLM does not produce them.</p>
 
@@ -718,7 +780,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <div class="table-wrap"><table>
     <tr><th>Collection</th><th>Access</th><th>Description</th></tr>
     <tr><td><code>watchlist/{ticker}</code></td><td>read</td><td>Global watchlist of tickers to process</td></tr>
-    <tr><td><code>weekly_recap/{ticker}/weeks/{weekEndDate}</code></td><td>write</td><td>Historical LLM summaries per ticker, consumed by retrieval_and_message</td></tr>
+    <tr><td><code>weekly_recap/{ticker}/weeks/{weekEndDate}</code></td><td>write</td><td>Historical LLM summaries per ticker, consumed by retrieval_and_messaging</td></tr>
   </table></div>
 
   <h2>retrieveCompaniesFromDb(): Promise&lt;Company[]&gt;</h2>

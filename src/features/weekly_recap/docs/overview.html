@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weekly Recap — Overview</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #1a202c;
+    background: #f7f8fa;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 252px;
+    background: #0f1117;
+    overflow-y: auto;
+    padding: 0 0 32px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  nav .brand {
+    padding: 24px 20px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: #5b8df5;
+    border-bottom: 1px solid #1e2130;
+  }
+  nav .brand span { display: block; color: #8b92a5; font-weight: 400; margin-top: 2px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+  nav ul { list-style: none; padding: 12px 0; }
+  nav li a {
+    display: block;
+    padding: 6px 20px;
+    color: #8b92a5;
+    text-decoration: none;
+    font-size: 13px;
+    transition: color .15s;
+  }
+  nav li a:hover, nav li a.active { color: #fff; }
+  nav .nav-section {
+    padding: 14px 20px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #3d4251;
+  }
+
+  /* ── Main ── */
+  main {
+    margin-left: 252px;
+    flex: 1;
+    padding: 40px 56px 80px;
+    max-width: 960px;
+  }
+
+  section { margin-bottom: 64px; }
+
+  .page-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #0f1117;
+    margin-bottom: 6px;
+  }
+  .page-subtitle {
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f1117;
+    margin: 36px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #5b8df5;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a202c;
+    margin: 24px 0 10px;
+  }
+
+  p { margin-bottom: 12px; color: #374151; }
+  strong { color: #1a202c; }
+  a { color: #5b8df5; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
+
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 5px; color: #374151; }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: 13px;
+    background: #eef0f5;
+    color: #c0392b;
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  pre {
+    background: #1e2130;
+    border-radius: 8px;
+    padding: 20px;
+    overflow-x: auto;
+    margin: 14px 0 20px;
+    border: 1px solid #2d3148;
+  }
+  pre code {
+    background: none;
+    color: #c9d1d9;
+    font-size: 13px;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  /* ── Tables ── */
+  .table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    background: #f0f4ff;
+    color: #374151;
+    font-weight: 600;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 2px solid #dbe4ff;
+  }
+  td { padding: 9px 14px; border-bottom: 1px solid #e8ecf0; color: #374151; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #f9fafb; }
+
+  /* ── Flow diagram ── */
+  .flow {
+    background: #1e2130;
+    border-radius: 8px;
+    padding: 20px 24px;
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 12.5px;
+    color: #8be9fd;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.6;
+    border: 1px solid #2d3148;
+    margin: 14px 0 20px;
+  }
+
+  /* ── Pipeline cards ── */
+  .pipeline-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 14px 0 20px;
+  }
+  .pipeline-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 24px;
+  }
+  .pipeline-card .card-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #5b8df5;
+    margin-bottom: 6px;
+  }
+  .pipeline-card .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f1117;
+    margin-bottom: 4px;
+  }
+  .pipeline-card .card-time {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 14px;
+  }
+  .pipeline-card ul { margin-bottom: 0; }
+  .pipeline-card .card-link {
+    display: inline-block;
+    margin-top: 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #5b8df5;
+  }
+
+  /* ── Callout ── */
+  .callout {
+    background: #f0f4ff;
+    border-left: 3px solid #5b8df5;
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 16px 0;
+    font-size: 14px;
+    color: #1e3a8a;
+  }
+  .callout.amber { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+
+  /* ── Mermaid diagrams ── */
+  .mermaid-wrap {
+    background: #1e2130;
+    border: 1px solid #2d3148;
+    border-radius: 8px;
+    padding: 28px 16px;
+    margin: 14px 0 20px;
+    overflow-x: auto;
+  }
+  .mermaid-wrap .mermaid { width: 100%; }
+  .mermaid-wrap svg { width: 100% !important; max-width: 100%; height: auto; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#1e2130',
+      mainBkg: '#2d3148',
+      primaryColor: '#2d3148',
+      primaryBorderColor: '#5b8df5',
+      primaryTextColor: '#c9d1d9',
+      secondaryColor: '#0f1117',
+      tertiaryColor: '#0f1117',
+      lineColor: '#5b8df5',
+      textColor: '#c9d1d9',
+      edgeLabelBackground: '#1e2130',
+      labelBoxBkgColor: '#2d3148',
+      labelBoxBorderColor: '#5b8df5',
+      labelTextColor: '#c9d1d9',
+      noteBkgColor: '#0f1117',
+      noteBorderColor: '#5b8df5',
+      noteTextColor: '#8be9fd',
+    }
+  });
+</script>
+</head>
+<body>
+
+<nav>
+  <div class="brand">Weekly Recap<span>Feature Overview</span></div>
+  <ul>
+    <li class="nav-section">Overview</li>
+    <li><a href="#purpose">Purpose</a></li>
+    <li><a href="#pipelines">Pipelines</a></li>
+    <li><a href="#timeline">End-to-End Timeline</a></li>
+
+    <li class="nav-section">Shared Data</li>
+    <li><a href="#llm-response">LLMResponse Model</a></li>
+
+    <li class="nav-section">Specs</li>
+    <li><a href="docs/storage/storage_spec.html">Storage Spec →</a></li>
+    <li><a href="docs/retrieval_and_messaging/retrieval_and_messaging_spec.html">Retrieval &amp; Messaging Spec →</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- ════════════════════════════════════════════════════════ PURPOSE -->
+<section id="purpose">
+  <div class="page-title">Weekly Recap</div>
+  <div class="page-subtitle">Feature overview — <code>src/features/weekly_recap</code></div>
+
+  <h2>Purpose</h2>
+  <p>Generates and delivers a weekly AI-written market summary for every ticker on the global watchlist. Each Friday the feature runs in two sequential phases:</p>
+  <ol>
+    <li><strong>Storage (4:00pm EST)</strong> — fetches the previous week's news, press releases, SEC 8-K filings, and stock prices from FMP; generates an LLM summary per ticker via LangGraph; validates and persists results to Firestore.</li>
+    <li><strong>Retrieval &amp; Messaging (4:30pm EST)</strong> — reads stored summaries from Firestore, loads eligible users into Redis, and delivers one push notification per user via FCM/APNS.</li>
+  </ol>
+  <div class="callout amber">The 30-minute buffer is intentional — the storage pipeline must complete before the retrieval pipeline begins reading.</div>
+  <p>Redis enforces deduplication: a user subscribed to 10 tickers receives exactly 1 notification.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ PIPELINES -->
+<section id="pipelines">
+  <h2>Pipelines</h2>
+  <div class="pipeline-grid">
+    <div class="pipeline-card">
+      <div class="card-label">Phase 1</div>
+      <div class="card-title">Storage</div>
+      <div class="card-time">Cloud Scheduler · Fridays 4:00pm EST</div>
+      <ul>
+        <li>Fetch news, press releases, 8-K filings, and prices from FMP</li>
+        <li>Generate LLM summary per ticker via LangGraph</li>
+        <li>Validate schema and persist to Firestore</li>
+      </ul>
+      <a class="card-link" href="docs/storage/storage_spec.html">View Storage Spec →</a>
+    </div>
+    <div class="pipeline-card">
+      <div class="card-label">Phase 2</div>
+      <div class="card-title">Retrieval &amp; Messaging</div>
+      <div class="card-time">Cloud Scheduler · Fridays 4:30pm EST</div>
+      <ul>
+        <li>Load eligible users into Redis (deduplicated by UID)</li>
+        <li>Read weekly summaries from Firestore</li>
+        <li>Deliver one FCM/APNS push per user via Pub/Sub fan-out</li>
+      </ul>
+      <a class="card-link" href="docs/retrieval_and_messaging/retrieval_and_messaging_spec.html">View Retrieval &amp; Messaging Spec →</a>
+    </div>
+  </div>
+
+  <div class="table-wrap"><table>
+    <tr><th>Sub-feature</th><th>Trigger</th><th>Cloud Functions</th><th>Responsibility</th></tr>
+    <tr>
+      <td><code>storage</code></td>
+      <td>Cloud Scheduler 4:00pm EST</td>
+      <td><code>weeklyRecapScheduler</code><br><code>weeklyRecapProcessor</code></td>
+      <td>FMP fetch · LangGraph LLM summarization · schema validation · Firestore write</td>
+    </tr>
+    <tr>
+      <td><code>retrieval_and_messaging</code></td>
+      <td>Cloud Scheduler 4:30pm EST</td>
+      <td><code>weeklyRecapRetrievalScheduler</code><br><code>weeklyRecapDeliveryProcessor</code></td>
+      <td>Redis deduplication · FCM/APNS delivery · per-user fan-out</td>
+    </tr>
+  </table></div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ TIMELINE -->
+<section id="timeline">
+  <h2>End-to-End Timeline</h2>
+
+  <div class="flow">Fri 4:00pm EST                              Fri 4:30pm EST
+      │                                           │
+      ▼                                           ▼
+weeklyRecapScheduler                  weeklyRecapRetrievalScheduler
+weeklyRecapProcessor ×N               weeklyRecapDeliveryProcessor ×N
+      │                                           │
+      ▼                                           ▼
+Firestore                                  User Devices
+weekly_recap/{ticker}/weeks/{date}         (APNS push via FCM)</div>
+
+  <div class="mermaid-wrap"><div class="mermaid">
+flowchart TD
+    CS1(["Cloud Scheduler\n4:00pm EST"])
+    CS2(["Cloud Scheduler\n4:30pm EST"])
+
+    subgraph STORAGE ["Phase 1 — Storage"]
+        direction TB
+        SCH["weeklyRecapScheduler"]
+        PS1[/"Pub/Sub\nweekly-recap"/]
+        PROC["weeklyRecapProcessor ×N"]
+        FMP["FMP API\nnews · press releases · filings · prices"]
+        LG["LangGraph\nLLM summarization"]
+        FS1[("Firestore\nweekly_recap/{ticker}/weeks/{date}")]
+    end
+
+    subgraph RETRIEVAL ["Phase 2 — Retrieval &amp; Messaging"]
+        direction TB
+        RSCH["weeklyRecapRetrievalScheduler"]
+        REDIS[("Redis Cloud\nuser:{uid} · ticker:{ticker}")]
+        PS2[/"Pub/Sub\nweekly-recap-delivery"/]
+        DPROC["weeklyRecapDeliveryProcessor ×N"]
+        FCM["FCM / APNS\nsendEachForMulticast"]
+        DEVICE["User Devices"]
+    end
+
+    CS1 --> SCH
+    SCH --> PS1
+    PS1 --> PROC
+    PROC --> FMP
+    FMP --> LG
+    LG --> FS1
+
+    CS2 --> RSCH
+    FS1 --> RSCH
+    RSCH --> REDIS
+    RSCH --> PS2
+    PS2 --> DPROC
+    DPROC --> REDIS
+    DPROC --> FCM
+    FCM --> DEVICE
+  </div></div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ LLM RESPONSE -->
+<section id="llm-response">
+  <h2>Shared Data Model — <code>LLMResponse</code></h2>
+  <p>Written by the storage pipeline to <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code>. The retrieval &amp; message pipeline reads a subset of these fields (<code>WeeklySummary</code>) to construct the push notification payload.</p>
+
+  <div class="table-wrap"><table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>time</code></td><td>string</td><td>ISO 8601 datetime of summary generation</td></tr>
+    <tr><td><code>ticker</code></td><td>string</td><td>Stock ticker symbol</td></tr>
+    <tr><td><code>companyName</code></td><td>string</td><td>Full company name</td></tr>
+    <tr><td><code>messageTitle</code></td><td>string</td><td>LLM headline, ≤ 50 chars (APNS notification title)</td></tr>
+    <tr><td><code>messageShortSummary</code></td><td>string</td><td>2–3 sentence digest, ≤ 150 chars (APNS notification body)</td></tr>
+    <tr><td><code>messageLongSummary</code></td><td>string</td><td>Full narrative summary</td></tr>
+    <tr><td><code>confidenceScore</code></td><td>number</td><td>LLM self-assessed confidence, integer 0–100</td></tr>
+    <tr><td><code>newArticleCount</code></td><td>number</td><td>News articles ingested</td></tr>
+    <tr><td><code>pressReleaseCount</code></td><td>number</td><td>Press releases ingested</td></tr>
+    <tr><td><code>eightKCount</code></td><td>number</td><td>SEC 8-K filings ingested</td></tr>
+    <tr><td><code>eodStockPriceCount</code></td><td>number</td><td>End-of-day price data points ingested</td></tr>
+    <tr><td><code>newsLinks</code></td><td>string[]</td><td>Source URLs for news articles</td></tr>
+    <tr><td><code>pressReleaseLinks</code></td><td>string[]</td><td>Source URLs for press releases</td></tr>
+    <tr><td><code>eightKLinks</code></td><td>string[]</td><td>Source URLs for 8-K filings</td></tr>
+    <tr><td><code>priceMovement</code></td><td>PriceMovement</td><td>Start/end price, change, % change — deterministically calculated</td></tr>
+  </table></div>
+
+  <div class="callout">The retrieval &amp; message pipeline reads only <code>ticker</code>, <code>companyName</code>, <code>messageTitle</code>, and <code>messageShortSummary</code> from this document. The full <code>LLMResponse</code> is fetched by the app when the user opens the notification.</div>
+</section>
+
+</main>
+</body>
+</html>

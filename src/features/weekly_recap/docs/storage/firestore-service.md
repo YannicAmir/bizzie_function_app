@@ -11,7 +11,7 @@ Uses `getFirebaseAdmin().firestore()` from `src/core/firebase.ts`. Logger instan
 | Collection | Access | Description |
 |---|---|---|
 | `watchlist/{ticker}` | read | Global watchlist of tickers to process |
-| `weekly_recap/{ticker}/weeks/{weekEndDate}` | write | Historical LLM summaries per ticker, consumed by `retrieval_and_message` |
+| `weekly_recap/{ticker}/weeks/{weekEndDate}` | write | Historical LLM summaries per ticker, consumed by `retrieval_and_messaging` |
 
 ---
 

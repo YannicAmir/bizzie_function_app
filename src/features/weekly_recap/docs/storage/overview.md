@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Every Friday at 4pm EST this pipeline generates an AI-written market summary for every ticker on the global watchlist and persists it to Firestore. Those stored summaries are later consumed by the `retrieval_and_message` pipeline.
+Every Friday at 4pm EST this pipeline generates an AI-written market summary for every ticker on the global watchlist and persists it to Firestore. Those stored summaries are later consumed by the `retrieval_and_messaging` pipeline.
 
 The pipeline is split into **two Cloud Functions** to avoid timeout limits and allow per-ticker parallelism via Pub/Sub:
 
@@ -85,7 +85,7 @@ src/features/weekly_recap/
 | [firestore-service.md](firestore-service.md) | `storage/services/firestore_service.ts` | Firestore reads/writes |
 | [pubsub-service.md](pubsub-service.md) | `storage/services/pubsub_service.ts` | Pub/Sub publish and message deserialisation |
 | [fmp-service.md](fmp-service.md) | `storage/services/fmp_service.ts` | FMP API calls |
-| [ai-service.md](ai-service.md) | `storage/services/ai_service.ts` | LLM summarisation, validation, post-processing, evaluation |
+| [ai-service.md](ai-service.md) | `storage/services/ai_service.ts` | LLM summarization, validation, post-processing, evaluation |
 | [langgraph.md](langgraph.md) | `storage/usecase.ts` + `storage/nodes/` | LangGraph state, node pattern, graph construction, conditional routing |
 | [tech-stack.md](tech-stack.md) | — | Technologies, retry strategy, token budget, environment pattern |
 | [logging.md](logging.md) | all files | Logging spec: what to log, where, and at what level |
