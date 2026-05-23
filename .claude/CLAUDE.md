@@ -13,6 +13,3 @@
 - `npm run lint` — ESLint
 - `npm run shell` — interactive local Firebase shell
 
-## Detailed Rules
-Detailed architecture, tech stack, logging, and per-agent rules live in `.claude/instructions/`.
-Agents load only the instruction files relevant to their task.
