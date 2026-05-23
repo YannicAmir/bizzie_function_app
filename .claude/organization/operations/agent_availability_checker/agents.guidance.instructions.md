@@ -417,3 +417,34 @@ After AgentBuilder successfully builds a new agent, update the **Agent Registry*
 ## SpecWriter
 - **Path:** `.claude/organization/operations/spec_agents/spec_writer/spec.writer.agent.md`
 - **Description:** Writes a complete feature spec as structured markdown docs before coding begins. Invoke as a prerequisite step any time a new feature is being added.
+
+## SpecBuilderManager
+- **Path:** `.claude/organization/technology/spec_builder/spec_builder_manager/spec.builder.manager.agent.md`
+- **Description:** Entry point for building features from spec docs. Reads a spec file or folder, scans the doc structure, and delegates to SpecBuildPlanner to plan and execute the implementation.
+
+## SpecBuildPlanner
+- **Path:** `.claude/organization/technology/spec_builder/spec_build_planner/spec.build.planner.agent.md`
+- **Description:** Reads all spec docs in a feature folder and produces an ordered implementation plan mapping each file to its spec docs and tech instruction files. Delegates to SpecBuildExecutor.
+
+## SpecBuildExecutor
+- **Path:** `.claude/organization/technology/spec_builder/spec_build_executor/spec.build.executor.agent.md`
+- **Description:** Implements a Cloud Function feature file by file from a build plan, reading spec docs and tech-specific best practice instructions. Delegates LangGraph files to LangGraphBuilder, Redis to RedisServiceBuilder, and FCM to FcmServiceBuilder. Runs npm run build to verify.
+
+## SpecBuildCorrector
+- **Path:** `.claude/organization/technology/spec_builder/spec_build_corrector/spec.build.corrector.agent.md`
+- **Description:** Applies targeted corrections to a feature implementation built from a spec. Fixes build failures, spec divergences, and functional issues without rebuilding from scratch. Delegates LangGraph rework to LangGraphBuilder.
+
+## LangGraphBuilder
+- **Path:** `.claude/organization/technology/spec_builder/langgraph_builder/langgraph.builder.agent.md`
+- **Description:** Implements LangGraph TypeScript state graphs and node files from a spec — Annotation.Root state, node factory functions with service injection, graph construction, conditional routing, and cold-start compilation.
+
+## RedisServiceBuilder
+- **Path:** `.claude/organization/technology/spec_builder/redis_service_builder/redis.service.builder.agent.md`
+- **Description:** Implements Redis services using ioredis following best practices for TLS connection, GETDEL atomic claim, TTL management, and error handling in Cloud Functions.
+
+## FcmServiceBuilder
+- **Path:** `.claude/organization/technology/spec_builder/fcm_service_builder/fcm.service.builder.agent.md`
+- **Description:** Implements FCM notification services using sendEachForMulticast with APNS configuration, partial failure handling, and stale token management following Firebase best practices.
+## PromptSyncAgent
+- **Path:** `.claude/organization/technology/prompt_sync_agent/prompt.sync.agent.md`
+- **Description:** Finds all UPPER_SNAKE_CASE prompt constants in a feature's `prompts/` files and pushes them to LangSmith Prompt Hub for versioning. Derives hub names automatically from constant names. Invoke with "sync prompts for [path]".
