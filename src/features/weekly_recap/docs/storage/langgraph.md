@@ -77,35 +77,33 @@ Every node returns `Partial<WeeklyRecapState>` — only the keys it writes. Lang
 
 ## Graph Construction
 
-The graph is compiled **once per cold-start** in `usecase.ts` — compilation is expensive and must not happen per invocation.
+The graph is compiled **once per cold-start** in `trigger.ts` — `buildGraph` is exported from `usecase.ts` and called at module scope in `trigger.ts` alongside all service instantiation. Compilation is expensive and must not happen per invocation.
 
 ```typescript
 import { StateGraph, START, END } from '@langchain/langgraph';
 
 function buildGraph(fmp: FmpService, ai: AiService, db: FirestoreService) {
   return new StateGraph(WeeklyRecapStateAnnotation)
-    .addNode('calculateWeekWindow',        makeCalculateWeekWindowNode())
-    .addNode('fetchMarketData',            makeFetchMarketDataNode(fmp))
+    .addNode('calculateWeekWindow',          makeCalculateWeekWindowNode())
+    .addNode('fetchMarketData',              makeFetchMarketDataNode(fmp))
     .addNode('calculateDeterministicFields', makeCalculateDeterministicFieldsNode())
-    .addNode('summarizeNews',              makeSummarizeNewsNode(ai))
-    .addNode('validateSchema',             makeValidateSchemaNode())
-    .addNode('assembleResponse',           makeAssembleResponseNode())
-    .addNode('postProcessResponse',        makePostProcessResponseNode(ai))
-    .addNode('storeSummary',              makeStoreSummaryNode(db))
-    .addNode('evaluateSummary',           makeEvaluateSummaryNode(ai))
-    .addEdge(START,                        'calculateWeekWindow')
-    .addEdge('calculateWeekWindow',        'fetchMarketData')
-    .addEdge('fetchMarketData',            'calculateDeterministicFields')
+    .addNode('summarizeNews',                makeSummarizeNewsNode(ai))
+    .addNode('validateSchema',               makeValidateSchemaNode())
+    .addNode('assembleResponse',             makeAssembleResponseNode())
+    .addNode('postProcessResponse',          makePostProcessResponseNode(ai))
+    .addNode('storeSummary',                 makeStoreSummaryNode(db))
+    .addEdge(START,                          'calculateWeekWindow')
+    .addEdge('calculateWeekWindow',          'fetchMarketData')
+    .addEdge('fetchMarketData',              'calculateDeterministicFields')
     .addEdge('calculateDeterministicFields', 'summarizeNews')
-    .addEdge('summarizeNews',              'validateSchema')
+    .addEdge('summarizeNews',                'validateSchema')
     .addConditionalEdges('validateSchema', routeAfterValidation, {
       continue: 'assembleResponse',
       end:      END,
     })
-    .addEdge('assembleResponse',           'postProcessResponse')
-    .addEdge('postProcessResponse',        'storeSummary')
-    .addEdge('storeSummary',               'evaluateSummary')
-    .addEdge('evaluateSummary',            END)
+    .addEdge('assembleResponse',             'postProcessResponse')
+    .addEdge('postProcessResponse',          'storeSummary')
+    .addEdge('storeSummary',                 END)
     .compile();
 }
 ```
@@ -115,12 +113,13 @@ function buildGraph(fmp: FmpService, ai: AiService, db: FirestoreService) {
 ## Conditional Routing
 
 ```typescript
+// isValidLLMPartial is defined in and exported from nodes/validateSchema.ts
 function routeAfterValidation(state: WeeklyRecapState): 'continue' | 'end' {
   return state.llmPartial && isValidLLMPartial(state.llmPartial) ? 'continue' : 'end';
 }
 ```
 
-On `'end'`: the `validateSchema` node has already logged the `AppError`. The message is acknowledged — Pub/Sub will retry up to 5 times before routing to the dead-letter topic.
+On `'end'`: the `validateSchema` node has already logged each invalid field. The graph completes normally — the message is acknowledged and Pub/Sub does not retry. The node intentionally does not throw: throwing would bypass `routeAfterValidation` and trigger unwanted Pub/Sub retries for a non-retriable failure.
 
 ---
 

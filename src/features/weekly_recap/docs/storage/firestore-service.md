@@ -2,7 +2,7 @@
 
 All Firestore reads and writes for the storage pipeline. No business logic — pure data access.
 
-Uses `getFirebaseAdmin().firestore()` from `src/core/firebase.ts`. Logger instantiated as `new Logger('WeeklyRecap/Storage/FirestoreService')` from `src/core/logger.ts`.
+Uses `getFirebaseAdmin().firestore()` from `src/core/firebase.ts`. Logger instantiated as `new Logger('WeeklyRecap/Storage/FirestoreService')` from `src/core/logger.ts`. `Company` is imported from `../models` — not defined here.
 
 ---
 

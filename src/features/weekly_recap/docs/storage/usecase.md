@@ -1,6 +1,6 @@
 # usecase.ts
 
-Orchestrates the per-ticker processing pipeline using a **LangGraph** state graph. Receives injected `FmpService`, `AiService`, and `FirestoreService` instances. Also exports the shared TypeScript interfaces used across all services (see [data-models.md](data-models.md)).
+Orchestrates the per-ticker processing pipeline using a **LangGraph** state graph. Exports `buildGraph(fmp, ai, db)` — called once at cold-start by `trigger.ts`, which owns all service instantiation. `EvaluationService` is injected directly into `AiService` at construction time, so it does not appear as a `buildGraph` parameter. Model types are sourced directly from `models/` by each consumer.
 
 ---
 
@@ -45,8 +45,8 @@ interface WeeklyRecapState {
 | `calculateWeekWindow` | pure function | `startDate`, `endDate` |
 | `fetchMarketData` | `FmpService.*` (parallel) | `news`, `pressReleases`, `filings`, `prices` |
 | `calculateDeterministicFields` | pure functions | `counts`, `priceMovement` |
-| `summarizeNews` | `AiService.summarizeNews` | `llmPartial` |
-| `validateSchema` | pure TypeScript check | — (throws or continues) |
+| `summarizeNews` | `AiService.summarizeNews` (internally wraps `generateContent` with `traceCallback` via injected `EvaluationService`) | `llmPartial` |
+| `validateSchema` | pure TypeScript check | — (logs invalid fields, returns `{}`; `routeAfterValidation` routes to END or continue) |
 | `assembleResponse` | pure function | `llmResponse` |
 | `postProcessResponse` | `AiService.postProcessLlmSummary` | `llmResponse` |
 | `storeSummary` | `FirestoreService.storeSummaryInDb` | — |
@@ -58,9 +58,9 @@ interface WeeklyRecapState {
 ```
 START
   └─▶ calculateWeekWindow
-        └─▶ fetchMarketData          (Promise.all within node)
+        └─▶ fetchMarketData          (Promise.allSettled within node)
               └─▶ calculateDeterministicFields
-                    └─▶ summarizeNews
+                    └─▶ summarizeNews           (EvaluationService.wrapCall wraps live LLM call)
                           └─▶ validateSchema
                                 ├─▶ (valid)   assembleResponse
                                 │               └─▶ postProcessResponse
@@ -82,10 +82,10 @@ Calls `FmpService.getNews`, `getPressReleases`, `get8Ks`, and `getEodStockPrice`
 Derives `counts` from array lengths and `priceMovement` (`startPrice`, `endPrice`, `priceChange`, `priceChangePercent`) from the `prices` array. Returns `null` fields if `prices` is empty. No LLM involved.
 
 ### `summarizeNews`
-Calls `AiService.summarizeNews` with the full state context. Returns LLM content fields only — deterministic fields are not produced by the LLM.
+Calls `AiService.summarizeNews`. Tracing is handled inside `AiService` — `traceCallback` wraps the `model.generateContent` call directly, with `model`, estimated token counts, and trace attributes. Returns LLM content fields only — deterministic fields are not produced by the LLM.
 
 ### `validateSchema`
-Pure TypeScript check — no LLM. Confirms all required fields exist with correct types and `confidenceScore` is an integer in `[0, 100]`. On failure: throws `AppError`, graph routes to END, message is acknowledged without retry.
+Pure TypeScript check — no LLM. Confirms all required fields exist with correct types and `confidenceScore` is an integer in `[0, 100]`. On failure: logs each invalid field individually and returns `{}` — does NOT throw. `routeAfterValidation` detects the invalid `llmPartial` via `isValidLLMPartial` and routes to END, acknowledging the message without a Pub/Sub retry. Throwing would bypass conditional routing and cause unwanted retries — the LLM has already been retried 3× internally.
 
 ### `assembleResponse`
 Merges `llmPartial` with deterministic fields (`ticker`, `companyName`, `time`, `counts`, `priceMovement`) to produce the final `LLMResponse`.
@@ -94,4 +94,4 @@ Merges `llmPartial` with deterministic fields (`ticker`, `companyName`, `time`, 
 Sanitises the assembled response: trims whitespace, hard-truncates `messageTitle` to 50 chars, strips stray markdown.
 
 ### `storeSummary`
-Writes `llmResponse` to `weekly_recap/{ticker}/weeks/{weekEndDate}` via `FirestoreService`. Transitions to END.
+Writes `llmResponse` to `weekly_recap/{ticker}/weeks/{weekEndDate}` via `FirestoreService`. The write is wrapped in `retry` (3 attempts, 1s initial delay, ×2 backoff) so transient Firestore failures resolve locally without re-running the full pipeline. On final exhaustion the error is logged and re-thrown, causing Pub/Sub to retry. Transitions to END.

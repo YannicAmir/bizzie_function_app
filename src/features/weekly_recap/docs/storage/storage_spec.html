@@ -340,12 +340,11 @@ weeklyRecapProcessor  [trigger.ts]
   [calculateWeekWindow]      ── [usecase.ts]         → { startDate, endDate }
   [fetchMarketData]          ── [fmp_service.ts]     → news, pressReleases, filings, prices (Promise.allSettled)
   [calculateDeterministicFields]                     → counts, priceMovement
-  [summarizeNews]            ── [ai_service.ts]      → llmPartial (Vertex AI / Gemini)
+  [summarizeNews]            ── [ai_service.ts]      → llmPartial (Vertex AI / Gemini, traceCallback inline)
   [validateSchema]           ── pure TypeScript      → valid? continue : END
   [assembleResponse]                                 → llmResponse
   [postProcessResponse]      ── [ai_service.ts]      → sanitized llmResponse
-  [storeSummary]             ── [firestore_service.ts] → weekly_recap/{ticker}/weeks/{weekEndDate}
-  [evaluateSummary]          ── [ai_service.ts]      → Confident AI trace (fire-and-forget) → END</div>
+  [storeSummary]             ── [firestore_service.ts] → weekly_recap/{ticker}/weeks/{weekEndDate} → END</div>
 
   <h2 id="processing-flow">Processing Flow</h2>
   <div class="mermaid-wrap"><div class="mermaid">
@@ -361,15 +360,14 @@ flowchart TD
         PROC --> N1[calculateWeekWindow\nstartDate · endDate]
         N1 --> N2[fetchMarketData\nnews · pressReleases · filings · prices · Promise.allSettled]
         N2 --> N3[calculateDeterministicFields\ncounts · priceMovement]
-        N3 --> N4[summarizeNews\nVertex AI / Gemini]
+        N3 --> N4[summarizeNews\nVertex AI / Gemini + traceCallback]
         N4 --> N5{validateSchema}
         N5 -- invalid --> DL[END\ndead-letter topic]
         N5 -- valid --> N6[assembleResponse\nllmResponse]
         N6 --> N7[postProcessResponse\ntrim · truncate · strip markdown]
         N7 --> N8[storeSummary]
         N8 -- writes --> FS2[(Firestore\nweekly_recap/ticker/weeks/date)]
-        N8 --> N9[evaluateSummary\nConfident AI — fire-and-forget]
-        N9 --> DONE[END]
+        N8 --> DONE[END]
     end
   </div></div>
 </section>
@@ -383,6 +381,20 @@ flowchart TD
 └── <span class="dir">storage/</span>
     ├── <span class="file">trigger.ts</span>          <span class="cmt"># Cloud Function entry points (scheduler + processor)</span>
     ├── <span class="file">usecase.ts</span>          <span class="cmt"># WeeklyRecapState, graph construction, compile, execute</span>
+    ├── <span class="dir">constants/</span>
+    │   └── <span class="file">index.ts</span>            <span class="cmt"># Shared constants (TOPIC_NAME, FEATURE_NAME)</span>
+    ├── <span class="dir">helpers/</span>
+    │   └── <span class="file">llm.ts</span>              <span class="cmt"># isValidLLMPartial, isRetryableLlmError, truncateToTokens, stripMarkdown</span>
+    ├── <span class="dir">models/</span>             <span class="cmt"># one interface per file, re-exported through index.ts</span>
+    │   ├── <span class="file">index.ts</span>
+    │   ├── <span class="file">Company.ts</span>
+    │   ├── <span class="file">SummarizeNewsInput.ts</span>
+    │   ├── <span class="file">NewsArticle.ts</span>
+    │   ├── <span class="file">PressRelease.ts</span>
+    │   ├── <span class="file">Filing8K.ts</span>
+    │   ├── <span class="file">StockPrice.ts</span>
+    │   ├── <span class="file">PriceMovement.ts</span>
+    │   └── <span class="file">LLMResponse.ts</span>      <span class="cmt"># includes CountFields</span>
     ├── <span class="dir">nodes/</span>
     │   ├── <span class="file">calculateWeekWindow.ts</span>
     │   ├── <span class="file">fetchMarketData.ts</span>
@@ -391,10 +403,10 @@ flowchart TD
     │   ├── <span class="file">validateSchema.ts</span>
     │   ├── <span class="file">assembleResponse.ts</span>
     │   ├── <span class="file">postProcessResponse.ts</span>
-    │   ├── <span class="file">storeSummary.ts</span>
-    │   └── <span class="file">evaluateSummary.ts</span>
+    │   └── <span class="file">storeSummary.ts</span>
     └── <span class="dir">services/</span>
         ├── <span class="file">ai_service.ts</span>
+        ├── <span class="file">evaluation_service.ts</span>
         ├── <span class="file">firestore_service.ts</span>
         ├── <span class="file">fmp_service.ts</span>
         └── <span class="file">pubsub_service.ts</span></div>
@@ -403,7 +415,7 @@ flowchart TD
 <!-- ════════════════════════════════════════════════════════ TRIGGER -->
 <section id="trigger">
   <div class="page-title">trigger.ts</div>
-  <div class="page-subtitle">Cloud Function entry points. Instantiates service dependencies and delegates to the use case. Contains no business logic.</div>
+  <div class="page-subtitle">Cloud Function entry points. Contains no business logic. <code>EvaluationService</code> is instantiated first, then injected into <code>AiService</code> via constructor — <code>AiService</code> owns the <code>traceCallback</code> integration. <code>FmpService</code>, <code>FirestoreService</code>, and <code>PubSubService</code> are also instantiated at module scope. <code>void evaluationService.init()</code> is called at module scope for cold-start DeepEval setup. <code>buildGraph(fmpService, aiService, firestoreService)</code> is called at module scope, compiling the LangGraph graph once at cold-start. <code>TOPIC_NAME</code> is imported from <code>constants/index.ts</code> — no string literals in this file. <code>CONFIDENT_API_KEY</code> and <code>CONFIDENT_PROJECT_NAME</code> are declared using <code>defineSecret</code> from <code>firebase-functions/params</code> and bound to <code>weeklyRecapProcessor</code> — Firebase injects them as <code>process.env</code> at runtime (locally from <code>.secret.local</code>, deployed from GCP Secret Manager).</div>
 
   <h2>weeklyRecapScheduler</h2>
   <div class="table-wrap"><table>
@@ -416,8 +428,8 @@ flowchart TD
   </table></div>
   <p><strong>Steps:</strong></p>
   <ol>
-    <li>Calls <code>FirestoreService.retrieveCompaniesFromDb()</code> to read all company documents from the <code>watchlist</code> collection.</li>
-    <li>Calls <code>PubSubService.queueCompanies(companies)</code> which publishes one message per <code>Company</code> to the <code>weekly-recap</code> topic. Each message payload is <code>{ ticker: string, companyName: string }</code>. No dates are included — the week window is calculated by the processor at execution time.</li>
+    <li>Calls <code>FirestoreService.retrieveCompaniesFromDb()</code> via <code>retry()</code> (<code>src/core/retry.ts</code>) — 3 attempts, 1s initial delay, backoff factor 2 (1s → 2s → throw). Per-attempt warn logs are emitted by the retry utility. On final failure, logs an error and re-throws.</li>
+    <li>Calls <code>PubSubService.queueCompanies(companies)</code> once with the full array. Per-company error isolation happens inside <code>queueCompanies</code> — a single publish failure is caught, logged, and skipped; remaining companies continue to publish. Returns the count of successfully published messages. Each message payload is <code>{ ticker: string, companyName: string }</code>. No dates are included — the week window is calculated by the processor at execution time.</li>
   </ol>
 
   <h2>weeklyRecapProcessor</h2>
@@ -427,12 +439,14 @@ flowchart TD
     <tr><td>Topic</td><td><code>weekly-recap</code></td></tr>
     <tr><td>Memory</td><td><code>512MiB</code></td></tr>
     <tr><td>Timeout</td><td><code>300s</code></td></tr>
+    <tr><td>Secrets</td><td><code>CONFIDENT_API_KEY</code>, <code>CONFIDENT_PROJECT_NAME</code> (via <code>defineSecret</code>)</td></tr>
   </table></div>
   <p><strong>Steps:</strong></p>
   <ol>
-    <li>Calls <code>PubSubService.retrieveCompanyFromQueue(message)</code> to decode the Pub/Sub message into a <code>Company</code> object.</li>
-    <li>Instantiates <code>FmpService</code>, <code>AiService</code>, <code>FirestoreService</code>, <code>PubSubService</code>, builds the LangGraph graph, and invokes it with <code>{ ticker, companyName }</code>.</li>
-    <li>On unrecoverable error: logs and returns without re-throwing — this acknowledges the message and prevents an infinite retry loop. Pub/Sub retries up to 5 times before routing to the dead-letter topic.</li>
+    <li>Reads <code>event.data.message.messageId</code> and includes it in all log entries for this invocation so scheduler → processor failures can be correlated.</li>
+    <li>Calls <code>PubSubService.retrieveCompanyFromQueue(message)</code> to decode the Pub/Sub message into a <code>Company</code> object. On failure, logs the raw base64 payload and <code>messageId</code>, then returns — acknowledging the message without retry (deserialization errors are unrecoverable).</li>
+    <li>Calls <code>graph.invoke({ ticker, companyName })</code>. The graph is compiled once at cold-start in <code>usecase.ts</code> and derives the week window internally as its first node.</li>
+    <li>On graph execution error: logs and re-throws — this nacks the message and allows Pub/Sub to retry up to 5 times before routing it to the dead-letter topic.</li>
   </ol>
 </section>
 
@@ -449,28 +463,17 @@ flowchart TD
   <pre><code>import { Annotation } from '@langchain/langgraph';
 
 export const WeeklyRecapStateAnnotation = Annotation.Root({
-  // Seeded by trigger.ts before graph.invoke()
   ticker:        Annotation&lt;string&gt;(),
   companyName:   Annotation&lt;string&gt;(),
-
-  // Set by calculateWeekWindow
   startDate:     Annotation&lt;string&gt;(),
   endDate:       Annotation&lt;string&gt;(),
-
-  // Set by fetchMarketData
   news:          Annotation&lt;NewsArticle[]&gt;(),
   pressReleases: Annotation&lt;PressRelease[]&gt;(),
   filings:       Annotation&lt;Filing8K[]&gt;(),
   prices:        Annotation&lt;StockPrice[]&gt;(),
-
-  // Set by calculateDeterministicFields
   counts:        Annotation&lt;CountFields&gt;(),
   priceMovement: Annotation&lt;PriceMovement&gt;(),
-
-  // Set by summarizeNews
   llmPartial:    Annotation&lt;Partial&lt;LLMResponse&gt;&gt;(),
-
-  // Set by assembleResponse, updated by postProcessResponse
   llmResponse:   Annotation&lt;LLMResponse&gt;(),
 });
 
@@ -502,7 +505,7 @@ export function makeFetchMarketDataNode(fmp: FmpService) {
   <div class="callout amber"><strong>Promise.allSettled — not Promise.all.</strong> Promise.all aborts all successful fetches the moment any single call fails. Promise.allSettled is independent per call — one failure defaults to [] and the graph continues with partial data.</div>
 
   <h2>Graph Construction</h2>
-  <p>The graph is compiled <strong>once per cold-start</strong> in <code>usecase.ts</code> — compilation is expensive and must not happen per invocation.</p>
+  <p>The graph is compiled <strong>once per cold-start</strong> in <code>trigger.ts</code> — <code>buildGraph</code> is exported from <code>usecase.ts</code> and called at module scope in <code>trigger.ts</code> alongside all service instantiation. Compilation is expensive and must not happen per invocation.</p>
   <pre><code>import { StateGraph, START, END } from '@langchain/langgraph';
 
 function buildGraph(fmp: FmpService, ai: AiService, db: FirestoreService) {
@@ -534,18 +537,20 @@ function buildGraph(fmp: FmpService, ai: AiService, db: FirestoreService) {
   <pre><code>function routeAfterValidation(state: WeeklyRecapState): 'continue' | 'end' {
   return state.llmPartial && isValidLLMPartial(state.llmPartial) ? 'continue' : 'end';
 }</code></pre>
-  <p>On <code>'end'</code>: the <code>validateSchema</code> node has already logged the <code>AppError</code>. The message is acknowledged — Pub/Sub will retry up to 5 times before routing to the dead-letter topic.</p>
+  <p>On <code>'end'</code>: the <code>validateSchema</code> node has already logged each invalid field. The graph completes normally — the message is acknowledged and Pub/Sub does not retry. The node intentionally does not throw: throwing would bypass <code>routeAfterValidation</code> and trigger unwanted Pub/Sub retries for a non-retriable failure.</p>
 
   <h2>Invocation</h2>
-  <pre><code>// trigger.ts → weeklyRecapProcessor
+  <pre><code>// trigger.ts — module scope (cold-start)
 const graph = buildGraph(fmpService, aiService, firestoreService);
+
+// trigger.ts → weeklyRecapProcessor (per invocation)
 await graph.invoke({ ticker, companyName });</code></pre>
 </section>
 
 <!-- ════════════════════════════════════════════════════ USECASE -->
 <section id="usecase">
   <div class="page-title">usecase.ts — Nodes</div>
-  <div class="page-subtitle">Orchestrates the per-ticker processing pipeline. Exports shared TypeScript interfaces.</div>
+  <div class="page-subtitle">Orchestrates the per-ticker processing pipeline. Exports <code>buildGraph(fmp, ai, db)</code> — called once at cold-start by <code>trigger.ts</code>, which owns all service instantiation. Model types are sourced directly from <code>models/</code> by each consumer.</div>
 
   <h2>Node Table</h2>
   <div class="table-wrap"><table>
@@ -553,11 +558,11 @@ await graph.invoke({ ticker, companyName });</code></pre>
     <tr><td><code>calculateWeekWindow</code></td><td>pure function</td><td><code>startDate</code>, <code>endDate</code></td></tr>
     <tr><td><code>fetchMarketData</code></td><td><code>FmpService.*</code> (Promise.allSettled)</td><td><code>news</code>, <code>pressReleases</code>, <code>filings</code>, <code>prices</code></td></tr>
     <tr><td><code>calculateDeterministicFields</code></td><td>pure functions</td><td><code>counts</code>, <code>priceMovement</code></td></tr>
-    <tr><td><code>summarizeNews</code></td><td><code>AiService.summarizeNews</code></td><td><code>llmPartial</code></td></tr>
+    <tr><td><code>summarizeNews</code></td><td><code>AiService.summarizeNews</code> (internally wraps <code>generateContent</code> with <code>traceCallback</code> via injected <code>EvaluationService</code>)</td><td><code>llmPartial</code></td></tr>
     <tr><td><code>validateSchema</code></td><td>pure TypeScript check</td><td>— (routes or ends)</td></tr>
     <tr><td><code>assembleResponse</code></td><td>pure function</td><td><code>llmResponse</code></td></tr>
     <tr><td><code>postProcessResponse</code></td><td><code>AiService.postProcessLlmSummary</code></td><td><code>llmResponse</code></td></tr>
-    <tr><td><code>storeSummary</code></td><td><code>FirestoreService.storeSummaryInDb</code></td><td>—</td></tr>
+    <tr><td><code>storeSummary</code></td><td><code>FirestoreService.storeSummaryInDb</code></td><td>— (transitions to END)</td></tr>
   </table></div>
 
   <h2>Node Detail</h2>
@@ -571,25 +576,46 @@ await graph.invoke({ ticker, companyName });</code></pre>
   <p>Derives <code>counts</code> from array lengths and <code>priceMovement</code> (<code>startPrice</code>, <code>endPrice</code>, <code>priceChange</code>, <code>priceChangePercent</code>) from the <code>prices</code> array. Returns <code>null</code> fields if <code>prices</code> is empty. No LLM involved.</p>
 
   <h3>summarizeNews</h3>
-  <p>Calls <code>AiService.summarizeNews</code> with the full state context. Returns LLM content fields only — deterministic fields are not produced by the LLM.</p>
+  <p>Calls <code>AiService.summarizeNews</code> with the full state context. Tracing is handled inside <code>AiService</code> — <code>traceCallback</code> wraps the <code>model.generateContent</code> call with <code>model</code> and trace attributes. Returns LLM content fields only — deterministic fields are not produced by the LLM. Node-level failures (after all internal retries) are logged before re-throwing to Pub/Sub.</p>
 
   <h3>validateSchema</h3>
-  <p>Pure TypeScript check — no LLM. Confirms all required fields exist with correct types and <code>confidenceScore</code> is an integer in <code>[0, 100]</code>. On failure: throws <code>AppError</code>, graph routes to END, message is acknowledged without retry.</p>
+  <p>Pure TypeScript check — no LLM. Confirms all required fields exist with correct types and <code>confidenceScore</code> is an integer in <code>[0, 100]</code>. On failure: logs each invalid field individually and returns <code>{}</code> — does NOT throw. <code>routeAfterValidation</code> detects the invalid <code>llmPartial</code> and routes to END, acknowledging the message without a Pub/Sub retry. Throwing would bypass conditional routing and cause unwanted retries — the LLM has already been retried 3× internally.</p>
 
   <h3>assembleResponse</h3>
-  <p>Merges <code>llmPartial</code> with deterministic fields (<code>ticker</code>, <code>companyName</code>, <code>time</code>, <code>counts</code>, <code>priceMovement</code>) to produce the final <code>LLMResponse</code>.</p>
+  <p>Merges <code>llmPartial</code> with deterministic fields (<code>ticker</code>, <code>companyName</code>, <code>time</code>, <code>counts</code>, <code>priceMovement</code>) to produce the final <code>LLMResponse</code>. Uses a type assertion on <code>llmPartial</code> rather than <code>??</code> fallback defaults — <code>validateSchema</code> has already confirmed all content fields are present.</p>
 
   <h3>postProcessResponse</h3>
   <p>Sanitises the assembled response: trims whitespace, hard-truncates <code>messageTitle</code> to 50 chars, strips stray markdown (backtick fences, extra asterisks).</p>
 
   <h3>storeSummary</h3>
-  <p>Writes <code>llmResponse</code> to <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code> via <code>FirestoreService</code>. Transitions to END.</p>
+  <p>Writes <code>llmResponse</code> to <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code> via <code>FirestoreService</code>. The write is wrapped in <code>retry</code> (3 attempts, 1s initial delay, ×2 backoff) so transient Firestore failures resolve locally without re-running the full pipeline. On final exhaustion the error is logged and re-thrown, causing Pub/Sub to retry. Transitions to END.</p>
 </section>
 
 <!-- ════════════════════════════════════════════════ DATA MODELS -->
 <section id="data-models">
   <div class="page-title">Data Models</div>
-  <div class="page-subtitle">Defined in <code>usecase.ts</code> and shared across all services.</div>
+  <div class="page-subtitle">Defined in <code>models/</code> — one interface per file, re-exported through <code>models/index.ts</code>. Services and nodes import from <code>../models</code>.</div>
+
+  <h2>Trigger / Queue Type</h2>
+  <pre><code>interface Company {
+  ticker: string;
+  companyName: string;
+}</code></pre>
+  <p>Defined in <code>models/Company.ts</code>. Represents a single watchlist entry. Used by <code>FirestoreService</code>, <code>PubSubService</code>, and <code>trigger.ts</code> — sourced from <code>models/</code> so no service owns it.</p>
+
+  <h2>AI Service Input Type</h2>
+  <pre><code>interface SummarizeNewsInput {
+  ticker: string;
+  companyName: string;
+  news: NewsArticle[];
+  pressReleases: PressRelease[];
+  filings: Filing8K[];
+  prices: StockPrice[];
+  priceMovement: PriceMovement;
+  startDate: string;
+  endDate: string;
+}</code></pre>
+  <p>Defined in <code>models/SummarizeNewsInput.ts</code>. Parameter object for <code>AiService.summarizeNews</code>.</p>
 
   <h2>Input Types (FMP API → Use Case)</h2>
   <pre><code>interface NewsArticle {
@@ -687,41 +713,73 @@ createdAt:           Timestamp   // server-side timestamp added by FirestoreServ
   </table></div>
   <p>API key: <code>config.fmpApiKey</code> from env var <code>FMP_API_KEY</code> (<code>src/core/config.ts</code>).</p>
 
+  <h2>Constants</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Constant</th><th>Value</th><th>Purpose</th></tr>
+    <tr><td><code>FMP_PAGE</code></td><td><code>0</code></td><td>First-page offset sent on all paginated requests</td></tr>
+    <tr><td><code>FMP_NEWS_LIMIT</code></td><td><code>30</code></td><td>Max items returned by <code>getNews</code> and <code>getPressReleases</code></td></tr>
+    <tr><td><code>FMP_FILINGS_LIMIT</code></td><td><code>20</code></td><td>Max items returned by <code>get8Ks</code> (before client-side filtering)</td></tr>
+  </table></div>
+
+  <h2>Raw DTOs</h2>
+  <p>Internal <code>Readonly&lt;{...}&gt;</code> types that represent the shape of raw FMP API array items before mapping to domain models. Not exported outside the service file.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Type</th><th>Fields</th><th>Used by</th></tr>
+    <tr><td><code>FmpArticleRaw</code></td><td><code>title</code>, <code>text</code>, <code>publishedDate</code>, <code>url</code></td><td><code>getNews</code>, <code>getPressReleases</code></td></tr>
+    <tr><td><code>FmpFilingRaw</code></td><td><code>formType</code>, <code>title</code>, <code>filingDate</code>, <code>link</code>, <code>finalLink</code></td><td><code>get8Ks</code></td></tr>
+    <tr><td><code>FmpPriceRaw</code></td><td><code>date</code>, <code>price</code>, <code>volume</code></td><td><code>getEodStockPrice</code></td></tr>
+  </table></div>
+
   <h2>Retry Config</h2>
-  <pre><code>retry(fn, {
+  <p>All four public methods share a single <code>FMP_RETRY_OPTIONS</code> object passed into the private <code>fetchJson</code> helper:</p>
+  <pre><code>const FMP_RETRY_OPTIONS = {
   maxAttempts: 3,
   initialDelayMs: 1000,
   backoffFactor: 2,        // delay series: 1s → 2s → throw
   maxDelayMs: 30000,
-  shouldRetry: (err) => isTransientError(err),
-})</code></pre>
+  shouldRetry: isTransientError,
+};</code></pre>
+  <p>HTTP errors are thrown as <code>new AppError(message, 'FMP_FETCH_FAILED', response.status)</code> (from <code>src/core/errors.ts</code>). <code>isTransientError</code> checks <code>err instanceof AppError</code> first and reads <code>err.status</code> directly. Network-level errors (not <code>AppError</code>) are matched by message string.</p>
   <p><strong>Transient (retried):</strong> HTTP 429, 500, 503, network timeouts.<br>
   <strong>Permanent (not retried):</strong> HTTP 400, 401, 403, 404.</p>
 
-  <h2>Functions</h2>
+  <h2>Private Helpers</h2>
+  <h3>getBaseUrl(): Promise&lt;string&gt;</h3>
+  <p>Resolves <code>fmp.baseUrl</code> from Remote Config. Called once per public method to avoid duplicating the <code>getRemoteConfig()</code> + field extraction across all four methods.</p>
+
+  <h3>fetchJson(url, type, ticker): Promise&lt;unknown[]&gt;</h3>
+  <p>Executes a single FMP HTTP request inside the retry wrapper. Shared by all four public methods.</p>
+  <ul>
+    <li>Throws <code>new AppError(message, 'FMP_FETCH_FAILED', response.status)</code> if <code>response.ok</code> is false.</li>
+    <li>Passes <code>FMP_RETRY_OPTIONS</code> plus an <code>onRetry</code> callback that logs each retry attempt at <code>warn</code> level.</li>
+    <li>Catches exhaustion errors, logs at <code>error</code> level, then re-throws.</li>
+    <li>Returns <code>[]</code> if the response body is not an array.</li>
+  </ul>
+
+  <h2>Public Methods</h2>
   <h3>getNews(ticker, startDate, endDate): Promise&lt;NewsArticle[]&gt;</h3>
   <pre><code>GET {baseUrl}/news/stock?symbols={ticker}&from={startDate}&to={endDate}&page=0&limit=30&apikey={key}</code></pre>
-  <p>Returns up to 30 news articles. Maps <code>symbol</code>, <code>publishedDate</code>, <code>title</code>, <code>text</code>, <code>url</code> to <code>NewsArticle</code>.</p>
+  <p>Returns up to <code>FMP_NEWS_LIMIT</code> news articles. Maps <code>FmpArticleRaw</code> fields (<code>publishedDate</code>, <code>title</code>, <code>text</code>, <code>url</code>) to <code>NewsArticle</code>.</p>
 
   <h3>getPressReleases(ticker, startDate, endDate): Promise&lt;PressRelease[]&gt;</h3>
   <pre><code>GET {baseUrl}/news/press-releases?symbols={ticker}&from={startDate}&to={endDate}&page=0&limit=30&apikey={key}</code></pre>
-  <p>Returns up to 30 press releases. Maps same fields as news to <code>PressRelease</code>.</p>
+  <p>Returns up to <code>FMP_NEWS_LIMIT</code> press releases. Maps <code>FmpArticleRaw</code> fields to <code>PressRelease</code>.</p>
 
   <h3>get8Ks(ticker, startDate, endDate): Promise&lt;Filing8K[]&gt;</h3>
   <pre><code>GET {baseUrl}/sec-filings-search/symbol?symbol={ticker}&from={startDate}&to={endDate}&page=0&limit=20&apikey={key}</code></pre>
-  <p>Fetches all SEC filings, then filters client-side to <code>formType === '8-K'</code>. Maps <code>filingDate</code>, <code>formType</code>, <code>link</code>, <code>finalLink</code> to <code>Filing8K</code>.</p>
+  <p>Fetches up to <code>FMP_FILINGS_LIMIT</code> SEC filings, then filters client-side to <code>formType === '8-K'</code>. Maps <code>FmpFilingRaw</code> fields (<code>filingDate</code>, <code>formType</code>, <code>link</code>, <code>finalLink</code>) to <code>Filing8K</code>.</p>
 
   <h3>getEodStockPrice(ticker, startDate, endDate): Promise&lt;StockPrice[]&gt;</h3>
   <pre><code>GET {baseUrl}/historical-price-eod/light?symbol={ticker}&from={startDate}&to={endDate}&apikey={key}</code></pre>
-  <p>Returns one <code>StockPrice</code> per trading day. Flat array — no nested unwrapping. Maps <code>date</code>, <code>price</code>, <code>volume</code> directly. Max 5000 records per request.</p>
+  <p>Returns one <code>StockPrice</code> per trading day. Flat array — no nested unwrapping. Maps <code>FmpPriceRaw</code> fields (<code>date</code>, <code>price</code>, <code>volume</code>) directly to <code>StockPrice</code>. Max 5000 records per request.</p>
 </section>
 
 <!-- ════════════════════════════════════════════════ AI SERVICE -->
 <section id="ai-service">
   <div class="page-title">services/ai_service.ts</div>
-  <div class="page-subtitle">LLM interactions: summarization and post-processing. Logger: <code>WeeklyRecap/Storage/AiService</code></div>
+  <div class="page-subtitle">LLM summarization and post-processing. Owns the <code>traceCallback</code> integration — <code>EvaluationService</code> injected via constructor, consulted at call time. Logger: <code>WeeklyRecap/Storage/AiService</code></div>
 
-  <div class="callout">Model instances via <code>getGeminiModel(modelName)</code> from <code>src/core/vertex-ai.ts</code>. Model name resolved via <code>getRemoteConfig().weekly_recap.model</code> from <code>src/core/remote-config.ts</code>. All calls use <code>responseMimeType: 'application/json'</code>.</div>
+  <div class="callout">Model instances via <code>getGeminiModel(modelName)</code> from <code>src/core/vertex-ai.ts</code>. Model name resolved via <code>getRemoteConfig().weekly_recap.model</code> from <code>src/core/remote-config.ts</code>. All calls use <code>responseMimeType: 'application/json'</code>. Helper functions (<code>isValidLLMPartial</code>, <code>isRetryableLlmError</code>, <code>truncateToTokens</code>, <code>stripMarkdown</code>) live in <code>helpers/llm.ts</code>.</div>
 
   <h2>Model</h2>
   <div class="table-wrap"><table>
@@ -738,7 +796,7 @@ createdAt:           Timestamp   // server-side timestamp added by FirestoreServ
   maxDelayMs: 30000,
 })</code></pre>
 
-  <h2>summarizeNews(...): Promise&lt;Partial&lt;LLMResponse&gt;&gt;</h2>
+  <h2>summarizeNews(input: SummarizeNewsInput): Promise&lt;Partial&lt;LLMResponse&gt;&gt;</h2>
   <p>Core LLM call. Interpolates inputs into a prompt template and calls the model.</p>
 
   <h3>Prompt Architecture — LangSmith-ready from day one</h3>
@@ -763,6 +821,8 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <li>Price movement and news/filings are <strong>summarized separately</strong>. The LLM must <strong>never imply or state that price changes were caused by any particular news item, press release, or filing</strong>. Causation is never stated.</li>
   </ul>
   <p>Count fields, <code>ticker</code>, <code>companyName</code>, and <code>time</code> are set by the use case — the LLM does not produce them.</p>
+  <p>After parsing the model response, <code>isValidLLMPartial</code> (from <code>helpers/llm.ts</code>) is called inside the retry loop. If validation fails, a warning is logged with the raw parsed value and <code>Error('Invalid LLM response schema')</code> is thrown — triggering the retry.</p>
+  <p><strong>Confident AI tracing:</strong> Inside the <code>retry</code> closure, if <code>evaluation.isInitialized</code>, the <code>model.generateContent</code> call is wrapped with <code>traceCallback</code> from <code>@confident-ai/deepeval</code> with <code>model</code> (resolved from Remote Config) and <code>traceAttributes: { ticker, feature: FEATURE_NAME }</code>. Each retry attempt is traced independently. If <code>EvaluationService</code> is not initialized, <code>runGenerate()</code> is called directly with no overhead. <code>inputTokenCount</code> and <code>outputTokenCount</code> are intentionally omitted — the API requires them before the function runs, so actual values from <code>usageMetadata</code> are unavailable at that point; exact counts are logged separately after the call.</p>
 
   <h2>postProcessLlmSummary(response): LLMResponse</h2>
   <p>Returns a new sanitized object (does not mutate). Trims whitespace from all string fields, hard-truncates <code>messageTitle</code> to 50 characters, strips stray markdown (backtick fences, extra asterisks) from summary fields.</p>
@@ -774,7 +834,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <div class="page-title">services/firestore_service.ts</div>
   <div class="page-subtitle">All Firestore reads and writes. No business logic — pure data access. Logger: <code>WeeklyRecap/Storage/FirestoreService</code></div>
 
-  <div class="callout">Uses <code>getFirebaseAdmin().firestore()</code> from <code>src/core/firebase.ts</code>.</div>
+  <div class="callout">Uses <code>getFirebaseAdmin().firestore()</code> from <code>src/core/firebase.ts</code>. <code>Company</code> is imported from <code>../models</code> — not defined here.</div>
 
   <h2>Collections</h2>
   <div class="table-wrap"><table>
@@ -792,7 +852,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   </ul>
 
   <h2>storeSummaryInDb(response: LLMResponse): Promise&lt;void&gt;</h2>
-  <p>Called by <code>WeeklyRecapStorageUseCase</code> after validation and post-processing.</p>
+  <p>Called by the <code>storeSummary</code> LangGraph node after post-processing.</p>
   <ul>
     <li>Writes to <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code> where <code>{weekEndDate}</code> is the date portion extracted from <code>response.time</code> (e.g. <code>"2026-05-15T16:00:00.000Z"</code> → <code>"2026-05-15"</code>).</li>
     <li>Merges <code>createdAt: FieldValue.serverTimestamp()</code> into the payload before writing.</li>
@@ -811,27 +871,42 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <h2>Topic</h2>
   <div class="table-wrap"><table>
     <tr><th>Key</th><th>Value</th></tr>
-    <tr><td>Topic name</td><td><code>weekly-recap</code></td></tr>
+    <tr><td>Topic name</td><td><code>weekly-recap</code> (constant <code>TOPIC_NAME</code> defined in <code>constants/index.ts</code>, imported by both <code>pubsub_service.ts</code> and <code>trigger.ts</code>)</td></tr>
     <tr><td>Message payload</td><td><code>{ ticker: string, companyName: string }</code></td></tr>
     <tr><td>Encoding</td><td>JSON, base64-encoded by the Pub/Sub SDK</td></tr>
   </table></div>
 
-  <h2>queueCompanies(companies: Company[]): Promise&lt;void&gt;</h2>
+  <h2>Retry Config</h2>
+  <p>Publish calls are wrapped in <code>retry()</code> using <code>PUBSUB_RETRY_OPTIONS</code> (<code>maxAttempts: 3</code>, <code>initialDelayMs: 1000</code>, <code>backoffFactor: 2</code>, <code>shouldRetry: isTransientPubSubError</code>).</p>
+  <p><code>isTransientPubSubError</code> checks the gRPC <code>code</code> on the error object:</p>
+  <div class="table-wrap"><table>
+    <tr><th>gRPC code</th><th>Meaning</th><th>Action</th></tr>
+    <tr><td>4</td><td>DEADLINE_EXCEEDED</td><td>Retry</td></tr>
+    <tr><td>8</td><td>RESOURCE_EXHAUSTED</td><td>Retry</td></tr>
+    <tr><td>13</td><td>INTERNAL</td><td>Retry</td></tr>
+    <tr><td>14</td><td>UNAVAILABLE</td><td>Retry</td></tr>
+    <tr><td>3, 5, 7…</td><td>Permanent (invalid arg, not found, permission denied)</td><td>Do not retry</td></tr>
+  </table></div>
+
+  <h2>queueCompanies(companies: Company[]): Promise&lt;number&gt;</h2>
   <p>Called by <code>weeklyRecapScheduler</code> after <code>retrieveCompaniesFromDb()</code>. <code>Company</code> is <code>{ ticker: string, companyName: string }</code>.</p>
   <ul>
     <li>Iterates over <code>companies</code> and publishes one Pub/Sub message per <code>Company</code> to the <code>weekly-recap</code> topic.</li>
     <li>Each message payload: <code>{ ticker, companyName }</code> serialised as JSON. Dates are not included — the processor derives the week window at execution time.</li>
-    <li>Pub/Sub will retry a failed message up to <strong>5 times</strong> before routing it to the dead-letter topic on <code>weekly-recap</code>.</li>
-    <li>Logs the count of messages published on completion.</li>
-    <li>Throws if the Pub/Sub client fails (caught and logged by the scheduler).</li>
+    <li>Each <code>publishMessage</code> call is wrapped in <code>retry()</code> with <code>PUBSUB_RETRY_OPTIONS</code> — transient gRPC errors are retried up to 3 times before falling through to the skip path.</li>
+    <li>Per-company error isolation: a publish call that exhausts all retries is caught, logged with the ticker name, and skipped — remaining companies continue to be published.</li>
+    <li>Returns the count of successfully published messages so the caller can log <code>n/total</code>.</li>
+    <li>Logs the final <code>published/total</code> count on completion.</li>
+    <li>Never throws — all errors are caught per-company.</li>
   </ul>
 
   <h2>retrieveCompanyFromQueue(message): Company</h2>
   <p>Called by <code>weeklyRecapProcessor</code> as the first step in handling each Pub/Sub push.</p>
   <ul>
     <li>Decodes the base64 message data and parses the JSON payload.</li>
+    <li>Casts the parsed payload to <code>CompanyMessageRaw</code> (<code>Readonly&lt;{ ticker?: unknown; companyName?: unknown }&gt;</code>) and validates both fields are strings.</li>
     <li>Returns the typed <code>Company</code> object (<code>{ ticker, companyName }</code>).</li>
-    <li>Throws a typed <code>AppError</code> (<code>src/core/errors.ts</code>) if the payload is missing required fields — this causes the message to be acknowledged without processing rather than retried indefinitely.</li>
+    <li>Throws a typed <code>AppError</code> (<code>src/core/errors.ts</code>) on parse failure (<code>PUBSUB_DESERIALIZE_ERROR</code>) or missing fields (<code>PUBSUB_INVALID_PAYLOAD</code>) — both <code>status: 400</code>. This causes the message to be acknowledged without retry.</li>
   </ul>
 </section>
 
@@ -853,7 +928,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <tr><td>Market data</td><td>Financial Modeling Prep (FMP) REST API — stable endpoint</td></tr>
     <tr><td>LLM evaluation</td><td>Confident AI / DeepEval — LLM-as-Judge tracing via <code>@confident-ai/deepeval</code></td></tr>
     <tr><td>Prompt versioning</td><td>LangSmith — local interpolation during dev, pulled at runtime in prod</td></tr>
-    <tr><td>Secrets</td><td>GCP Secret Manager — <code>CONFIDENT_API_KEY</code>, <code>FMP_API_KEY</code>, <code>LANGSMITH_API_KEY</code></td></tr>
+    <tr><td>Secrets</td><td>GCP Secret Manager — <code>CONFIDENT_API_KEY</code>, <code>CONFIDENT_PROJECT_NAME</code>, <code>FMP_API_KEY</code>, <code>LANGSMITH_API_KEY</code></td></tr>
     <tr><td>Retry / backoff</td><td><code>src/core/retry.ts</code></td></tr>
     <tr><td>Logging</td><td><code>src/core/logger.ts</code> — structured wrapper over <code>firebase-functions/logger</code></td></tr>
     <tr><td>Config</td><td><code>src/core/remote-config.ts</code> — Firebase Remote Config</td></tr>
@@ -864,6 +939,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <h2>Retry Strategy</h2>
   <div class="table-wrap"><table>
     <tr><th>Call site</th><th>maxAttempts</th><th>initialDelayMs</th><th>backoffFactor</th><th>Delay series</th></tr>
+    <tr><td><code>trigger.ts</code> (watchlist fetch)</td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
     <tr><td><code>fmp_service.ts</code></td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
     <tr><td><code>ai_service.ts</code></td><td>3</td><td>2000ms</td><td>2</td><td>2s → 4s → throw</td></tr>
   </table></div>
@@ -907,23 +983,38 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <div class="table-wrap"><table>
     <tr><th>Event</th><th>Level</th><th>Message</th></tr>
     <tr><td>Scheduler started</td><td><span class="badge badge-info">info</span></td><td><code>"Scheduler started"</code></td></tr>
+    <tr><td>Watchlist fetch exhausted</td><td><span class="badge badge-error">error</span></td><td><code>"Watchlist fetch exhausted retries — aborting"</code> + error (then re-throws). Per-attempt warn logs emitted by the retry utility under context <code>Retry Utility</code>.</td></tr>
     <tr><td>Companies loaded</td><td><span class="badge badge-info">info</span></td><td><code>"Loaded {n} companies from watchlist"</code></td></tr>
     <tr><td>Watchlist empty</td><td><span class="badge badge-warn">warn</span></td><td><code>"Watchlist is empty — nothing to process"</code></td></tr>
-    <tr><td>Queue failure (per company)</td><td><span class="badge badge-error">error</span></td><td><code>"Failed to queue {ticker} ({companyName}) — skipping"</code> + error</td></tr>
     <tr><td>All messages queued</td><td><span class="badge badge-info">info</span></td><td><code>"Queued {n}/{total} Pub/Sub messages in {ms}ms"</code></td></tr>
-    <tr><td>Processor message received</td><td><span class="badge badge-info">info</span></td><td><code>"Processing {ticker} ({companyName}) for {startDate} → {endDate}"</code></td></tr>
-    <tr><td>Processor completed</td><td><span class="badge badge-info">info</span></td><td><code>"Completed {ticker} ({companyName})"</code></td></tr>
-    <tr><td>Processor unrecoverable error</td><td><span class="badge badge-error">error</span></td><td><code>"Failed {ticker} ({companyName}) — message acknowledged"</code> + error</td></tr>
+    <tr><td>Processor message received</td><td><span class="badge badge-info">info</span></td><td><code>"Processing {ticker} ({companyName})"</code> + <code>{ messageId }</code></td></tr>
+    <tr><td>Processor completed</td><td><span class="badge badge-info">info</span></td><td><code>"Completed {ticker} ({companyName})"</code> + <code>{ messageId }</code></td></tr>
+    <tr><td>Deserialization error</td><td><span class="badge badge-error">error</span></td><td><code>"Failed to deserialize Pub/Sub message — acknowledging without retry"</code> + <code>{ messageId, raw, err }</code> (returns — ack, no retry)</td></tr>
+    <tr><td>Graph execution error</td><td><span class="badge badge-error">error</span></td><td><code>"Graph execution failed for {ticker} ({companyName})"</code> + <code>{ messageId, err }</code> (re-throws — Pub/Sub retries up to 5× then DLT)</td></tr>
+  </table></div>
+
+  <h2>storage/services/pubsub_service.ts — WeeklyRecap/Storage/PubSubService</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Event</th><th>Level</th><th>Message</th></tr>
+    <tr><td>Per-company publish failure</td><td><span class="badge badge-error">error</span></td><td><code>"Failed to queue {ticker} ({companyName}) — skipping"</code> + error</td></tr>
+    <tr><td>Batch complete</td><td><span class="badge badge-info">info</span></td><td><code>"Published {n}/{total} Pub/Sub messages"</code></td></tr>
   </table></div>
 
   <h2>storage/services/fmp_service.ts — WeeklyRecap/Storage/FmpService</h2>
   <div class="table-wrap"><table>
     <tr><th>Event</th><th>Level</th><th>Message</th></tr>
-    <tr><td>API call start</td><td><span class="badge badge-info">info</span></td><td><code>"Fetching {type} for {ticker} ({companyName})"</code></td></tr>
+    <tr><td>API call start</td><td><span class="badge badge-info">info</span></td><td><code>"Fetching {type} for {ticker}"</code></td></tr>
     <tr><td>API call result</td><td><span class="badge badge-info">info</span></td><td><code>"Fetched {n} {type} for {ticker}"</code></td></tr>
-    <tr><td>Empty result</td><td><span class="badge badge-warn">warn</span></td><td><code>"No {type} found for {ticker} ({companyName}) in {startDate}–{endDate}"</code></td></tr>
-    <tr><td>Retry attempt</td><td><span class="badge badge-warn">warn</span></td><td><code>"Retrying {type} fetch for {ticker} ({companyName}) — attempt {n}"</code></td></tr>
-    <tr><td>All retries exhausted</td><td><span class="badge badge-error">error</span></td><td><code>"All retries exhausted for {type} fetch — {ticker} ({companyName})"</code> + error</td></tr>
+    <tr><td>Empty result</td><td><span class="badge badge-warn">warn</span></td><td><code>"No {type} found for {ticker} in {startDate}–{endDate}"</code></td></tr>
+    <tr><td>Retry attempt</td><td><span class="badge badge-warn">warn</span></td><td><code>"Retrying {type} fetch for {ticker} — attempt {n}"</code></td></tr>
+    <tr><td>All retries exhausted</td><td><span class="badge badge-error">error</span></td><td><code>"All retries exhausted for {type} fetch — {ticker}"</code> + error</td></tr>
+  </table></div>
+
+  <h2>storage/services/evaluation_service.ts — WeeklyRecap/Storage/EvaluationService</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Event</th><th>Level</th><th>Message</th></tr>
+    <tr><td>Key or project name absent</td><td><span class="badge badge-warn">warn</span></td><td><code>"CONFIDENT_API_KEY or CONFIDENT_PROJECT_NAME not set — DeepEval tracing disabled"</code></td></tr>
+    <tr><td>Init failed</td><td><span class="badge badge-warn">warn</span></td><td><code>"DeepEval initialization failed — tracing disabled"</code> + error</td></tr>
   </table></div>
 
   <h2>storage/services/ai_service.ts — WeeklyRecap/Storage/AiService</h2>
@@ -936,6 +1027,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <tr><td>Token usage</td><td><span class="badge badge-info">info</span></td><td><code>promptTokenCount</code>, <code>candidatesTokenCount</code>, <code>totalTokenCount</code></td></tr>
     <tr><td>Model used</td><td><span class="badge badge-info">info</span></td><td>Model name resolved from Remote Config</td></tr>
     <tr><td>Empty response</td><td><span class="badge badge-warn">warn</span></td><td><code>"LLM returned empty response for {ticker}"</code></td></tr>
+    <tr><td>Invalid schema</td><td><span class="badge badge-warn">warn</span></td><td><code>"LLM returned invalid schema for {ticker}"</code> + raw parsed value</td></tr>
   </table></div>
 
   <h3>postProcessLlmSummary</h3>
@@ -949,7 +1041,9 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <div class="table-wrap"><table>
     <tr><th>Event</th><th>Level</th><th>Message</th></tr>
     <tr><td>Schema valid</td><td><span class="badge badge-info">info</span></td><td><code>"Schema valid for {ticker}"</code></td></tr>
-    <tr><td>Schema invalid</td><td><span class="badge badge-error">error</span></td><td><code>"Schema validation failed for {ticker}"</code> + field name + actual value</td></tr>
+    <tr><td>Schema invalid (per field)</td><td><span class="badge badge-error">error</span></td><td><code>"Schema validation failed for {ticker}: field "{field}" is invalid"</code> + field name + JSON-serialised value</td></tr>
+    <tr><td><code>summarizeNews</code> node failure</td><td><span class="badge badge-error">error</span></td><td><code>"summarizeNews failed"</code> + ticker + error</td></tr>
+    <tr><td><code>storeSummaryInDb</code> node failure (after retries)</td><td><span class="badge badge-error">error</span></td><td><code>"storeSummaryInDb failed after retries"</code> + ticker + error</td></tr>
   </table></div>
 
   <h2>storage/services/firestore_service.ts — WeeklyRecap/Storage/FirestoreService</h2>
@@ -1026,7 +1120,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <tr><th>Node</th><th>What to test</th></tr>
     <tr><td><code>calculateWeekWindow</code></td><td><code>endDate</code> is today (ISO); <code>startDate</code> is exactly 7 days prior</td></tr>
     <tr><td><code>calculateDeterministicFields</code></td><td>Counts match array lengths; <code>priceChange</code> and <code>priceChangePercent</code> math; <code>null</code> fields when <code>prices</code> is empty</td></tr>
-    <tr><td><code>validateSchema</code></td><td>Passes valid <code>LLMResponse</code>; throws <code>AppError</code> for each missing required field; throws on <code>confidenceScore</code> outside <code>[0, 100]</code></td></tr>
+    <tr><td><code>validateSchema</code></td><td>Passes valid <code>LLMResponse</code>; logs and returns <code>{}</code> for each missing required field; logs and returns <code>{}</code> on <code>confidenceScore</code> outside <code>[0, 100]</code></td></tr>
     <tr><td><code>assembleResponse</code></td><td>Merges <code>llmPartial</code> + deterministic fields; deterministic fields never overwritten by LLM fields</td></tr>
     <tr><td><code>postProcessResponse</code></td><td>Delegates to <code>AiService.postProcessLlmSummary</code>; returns a new object</td></tr>
   </table></div>

@@ -1,6 +1,39 @@
 # Data Models
 
-Defined in `usecase.ts` and shared across all services.
+Defined in `models/` — one interface per file, re-exported through `models/index.ts`. Services and nodes import from `../models`.
+
+---
+
+## AI Service Input Type
+
+```typescript
+interface SummarizeNewsInput {
+  ticker: string;
+  companyName: string;
+  news: NewsArticle[];
+  pressReleases: PressRelease[];
+  filings: Filing8K[];
+  prices: StockPrice[];
+  priceMovement: PriceMovement;
+  startDate: string;
+  endDate: string;
+}
+```
+
+Defined in `models/SummarizeNewsInput.ts`. Parameter object for `AiService.summarizeNews` — replaces 9 positional parameters.
+
+---
+
+## Trigger / Queue Type
+
+```typescript
+interface Company {
+  ticker: string;
+  companyName: string;
+}
+```
+
+Defined in `models/Company.ts`. Represents a single watchlist entry. Used by `FirestoreService`, `PubSubService`, and `trigger.ts` — the shared type is sourced from `models/` so no service owns it.
 
 ---
 

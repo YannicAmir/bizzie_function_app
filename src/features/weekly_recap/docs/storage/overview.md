@@ -39,12 +39,11 @@ weeklyRecapProcessor  [trigger.ts]
   [calculateWeekWindow]      ── [usecase.ts]         → { startDate, endDate }
   [fetchMarketData]          ── [fmp_service.ts]     → news, pressReleases, filings, prices (Promise.allSettled)
   [calculateDeterministicFields]                     → counts, priceMovement
-  [summarizeNews]            ── [ai_service.ts]      → llmPartial (Vertex AI / Gemini)
+  [summarizeNews]            ── [ai_service.ts]      → llmPartial (Vertex AI / Gemini, traceCallback inline)
   [validateSchema]           ── pure TypeScript      → valid? continue : END
   [assembleResponse]                                 → llmResponse
   [postProcessResponse]      ── [ai_service.ts]      → sanitized llmResponse
-  [storeSummary]             ── [firestore_service.ts] → weekly_recap/{ticker}/weeks/{weekEndDate}
-  [evaluateSummary]          ── [ai_service.ts]      → Confident AI trace (fire-and-forget) → END
+  [storeSummary]             ── [firestore_service.ts] → weekly_recap/{ticker}/weeks/{weekEndDate} → END
 ```
 
 ---
@@ -56,6 +55,20 @@ src/features/weekly_recap/
 └── storage/
     ├── trigger.ts                          # Cloud Function entry points (scheduler + processor)
     ├── usecase.ts                          # WeeklyRecapState, graph construction, compile, execute
+    ├── constants/
+    │   └── index.ts                        # Shared constants (TOPIC_NAME, FEATURE_NAME)
+    ├── helpers/
+    │   └── llm.ts                          # isValidLLMPartial, isRetryableLlmError, truncateToTokens, stripMarkdown
+    ├── models/
+    │   ├── index.ts                        # Barrel re-export
+    │   ├── Company.ts
+    │   ├── SummarizeNewsInput.ts
+    │   ├── NewsArticle.ts
+    │   ├── PressRelease.ts
+    │   ├── Filing8K.ts
+    │   ├── StockPrice.ts
+    │   ├── PriceMovement.ts
+    │   └── LLMResponse.ts                  # includes CountFields
     ├── nodes/
     │   ├── calculateWeekWindow.ts
     │   ├── fetchMarketData.ts
@@ -64,10 +77,10 @@ src/features/weekly_recap/
     │   ├── validateSchema.ts
     │   ├── assembleResponse.ts
     │   ├── postProcessResponse.ts
-    │   ├── storeSummary.ts
-    │   └── evaluateSummary.ts
+    │   └── storeSummary.ts
     └── services/
         ├── ai_service.ts
+        ├── evaluation_service.ts
         ├── firestore_service.ts
         ├── fmp_service.ts
         └── pubsub_service.ts
@@ -85,7 +98,8 @@ src/features/weekly_recap/
 | [firestore-service.md](firestore-service.md) | `storage/services/firestore_service.ts` | Firestore reads/writes |
 | [pubsub-service.md](pubsub-service.md) | `storage/services/pubsub_service.ts` | Pub/Sub publish and message deserialisation |
 | [fmp-service.md](fmp-service.md) | `storage/services/fmp_service.ts` | FMP API calls |
-| [ai-service.md](ai-service.md) | `storage/services/ai_service.ts` | LLM summarization, validation, post-processing, evaluation |
+| [ai-service.md](ai-service.md) | `storage/services/ai_service.ts` | LLM summarization and post-processing |
+| [evaluation-service.md](evaluation-service.md) | `storage/services/evaluation_service.ts` | Confident AI / DeepEval tracing |
 | [langgraph.md](langgraph.md) | `storage/usecase.ts` + `storage/nodes/` | LangGraph state, node pattern, graph construction, conditional routing |
 | [tech-stack.md](tech-stack.md) | — | Technologies, retry strategy, token budget, environment pattern |
 | [logging.md](logging.md) | all files | Logging spec: what to log, where, and at what level |

@@ -16,7 +16,7 @@
 | Market data | Financial Modeling Prep (FMP) REST API — v3, v4, stable endpoints |
 | LLM evaluation | Confident AI / DeepEval — LLM-as-Judge tracing via `@confident-ai/deepeval` |
 | Prompt versioning | LangSmith — prompts versioned in Confident AI; local interpolation during dev |
-| Secrets | GCP Secret Manager — `CONFIDENT_API_KEY`, `FMP_API_KEY`, `LANGSMITH_API_KEY` etc. |
+| Secrets | GCP Secret Manager — `CONFIDENT_API_KEY`, `CONFIDENT_PROJECT_NAME`, `FMP_API_KEY`, `LANGSMITH_API_KEY` etc. |
 | Retry / backoff | `src/core/retry.ts` — exponential backoff, configurable per call site |
 | Logging | `src/core/logger.ts` — structured wrapper over `firebase-functions/logger` |
 | Config | `src/core/remote-config.ts` — Firebase Remote Config (model names, FMP URLs) |
@@ -35,6 +35,7 @@ retry<T>(fn, { maxAttempts, initialDelayMs, backoffFactor, maxDelayMs, shouldRet
 
 | Call site | maxAttempts | initialDelayMs | backoffFactor | Delay series |
 |---|---|---|---|---|
+| Watchlist fetch (`trigger.ts`) | 3 | 1000ms | 2 | 1s → 2s → throw |
 | FMP API (`fmp_service.ts`) | 3 | 1000ms | 2 | 1s → 2s → throw |
 | LLM (`ai_service.ts`) | 3 | 2000ms | 2 | 2s → 4s → throw |
 
@@ -94,7 +95,7 @@ Text content from FMP (news `text`, press release `text`) is truncated per item 
 
 | Decision | Resolution |
 |---|---|
-| `evaluateSummary` in-process vs separate job | In-process, fire-and-forget SDK call. Confident AI receives traces automatically — no separate queue needed. See [evaluation.md](evaluation.md). |
+| DeepEval tracing placement | Tracing is inline inside the `summarizeNews` node via `EvaluationService.wrapCall`, which wraps the live `AiService.summarizeNews` call with `traceCallback`. No separate `evaluateSummary` node. Confident AI receives traces automatically — no separate queue needed. |
 | LLM evaluation metrics | Configured in the Confident AI dashboard per project, not in code. DeepEval SDK sends trace data; metric definition, scoring, and LLM-as-Judge are managed on the Confident AI platform. See [evaluation.md](evaluation.md). |
 | Remote Config model key | `weekly_recap_model` (dedicated key, already added to dev/qa/prod Remote Config). Default: `gemini-3-flash-preview`. |
 | Dead-letter topic setup | Required before going to production. See [dead-letter-setup.md](dead-letter-setup.md) for step-by-step instructions. |

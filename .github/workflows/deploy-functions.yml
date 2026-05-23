@@ -121,6 +121,11 @@ jobs:
               echo "Updating REDIS_URL to latest for $SVC..."
               gcloud run services update $SVC --region=us-central1 --update-secrets=REDIS_URL=REDIS_URL:latest --quiet || true
             fi
+
+            if echo "$ENV_VARS" | grep -q "CONFIDENT_PROJECT_NAME"; then
+              echo "Updating CONFIDENT_PROJECT_NAME to latest for $SVC..."
+              gcloud run services update $SVC --region=us-central1 --update-secrets=CONFIDENT_PROJECT_NAME=CONFIDENT_PROJECT_NAME:latest --quiet || true
+            fi
           done
 
       - name: Deploy LangGraph Services to Cloud Run
