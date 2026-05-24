@@ -27,7 +27,7 @@ Each test case contains:
 |---|---|
 | `input` | Full prompt string passed to `summarizeNews` |
 | `actual_output` | The `messageLongSummary` produced by the LLM |
-| `context` | Source grounding: news articles, press releases, 8-K links |
+| `context` | Source grounding: news articles, 8-K links |
 | `expected_output` | (Optional) Reference summary for comparison metrics |
 
 Datasets are versioned in Confident AI (e.g. `weekly-recap-v1`). Create a new dataset version when the prompt template changes, new source data types are added, or evaluation criteria are revised.

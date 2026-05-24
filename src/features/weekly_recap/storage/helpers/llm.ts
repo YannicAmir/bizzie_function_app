@@ -10,7 +10,6 @@ export function isValidLLMPartial(partial: Partial<LLMResponse>): boolean {
     partial.confidenceScore >= 0 &&
     partial.confidenceScore <= 100 &&
     Array.isArray(partial.newsLinks) &&
-    Array.isArray(partial.pressReleaseLinks) &&
     Array.isArray(partial.eightKLinks)
   );
 }

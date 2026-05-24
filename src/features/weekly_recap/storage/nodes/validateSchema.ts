@@ -31,9 +31,8 @@ export function makeValidateSchemaNode() {
         llmPartial.confidenceScore >= 0 &&
         llmPartial.confidenceScore <= 100,
     );
-    assertField('newsLinks',         llmPartial?.newsLinks,         Array.isArray(llmPartial?.newsLinks));
-    assertField('pressReleaseLinks', llmPartial?.pressReleaseLinks, Array.isArray(llmPartial?.pressReleaseLinks));
-    assertField('eightKLinks',       llmPartial?.eightKLinks,       Array.isArray(llmPartial?.eightKLinks));
+    assertField('newsLinks',   llmPartial?.newsLinks,   Array.isArray(llmPartial?.newsLinks));
+    assertField('eightKLinks', llmPartial?.eightKLinks, Array.isArray(llmPartial?.eightKLinks));
 
     if (!valid) return {};  // routeAfterValidation routes to END
 

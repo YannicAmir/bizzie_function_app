@@ -39,7 +39,7 @@ Each file uses `new Logger(context)` from `src/core/logger.ts`. Context naming c
 
 | Event | Level | Message |
 |---|---|---|
-| Each API call start | `info` | `"Fetching {news|pressReleases|8Ks|eodPrices} for {ticker}"` |
+| Each API call start | `info` | `"Fetching {news|8Ks|eodPrices} for {ticker}"` |
 | Each API call result | `info` | `"Fetched {n} {type} for {ticker}"` |
 | Empty result | `warn` | `"No {type} found for {ticker} in {startDate}–{endDate}"` |
 | Retry attempt | `warn` | `"Retrying {type} fetch for {ticker} — attempt {n}"` |
@@ -51,7 +51,7 @@ Each file uses `new Logger(context)` from `src/core/logger.ts`. Context naming c
 
 | Event | Level | Message |
 |---|---|---|
-| Key or project name absent | `warn` | `"CONFIDENT_API_KEY or CONFIDENT_PROJECT_NAME not set — DeepEval tracing disabled"` |
+| Key absent | `warn` | `"CONFIDENT_API_KEY not set — DeepEval tracing disabled"` |
 | Init failed | `warn` | `"DeepEval initialization failed — tracing disabled"` + error |
 
 ---

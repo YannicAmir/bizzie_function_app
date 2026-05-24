@@ -10,7 +10,7 @@ import { makeValidateSchemaNode, isValidLLMPartial } from './nodes/validateSchem
 import { makeAssembleResponseNode } from './nodes/assembleResponse';
 import { makePostProcessResponseNode } from './nodes/postProcessResponse';
 import { makeStoreSummaryNode } from './nodes/storeSummary';
-import type { NewsArticle, PressRelease, Filing8K, StockPrice, PriceMovement, LLMResponse, CountFields } from './models';
+import type { NewsArticle, Filing8K, StockPrice, PriceMovement, LLMResponse, CountFields } from './models';
 
 export const WeeklyRecapStateAnnotation = Annotation.Root({
   ticker: Annotation<string>(),
@@ -18,7 +18,6 @@ export const WeeklyRecapStateAnnotation = Annotation.Root({
   startDate: Annotation<string>(),
   endDate: Annotation<string>(),
   news: Annotation<NewsArticle[]>(),
-  pressReleases: Annotation<PressRelease[]>(),
   filings: Annotation<Filing8K[]>(),
   prices: Annotation<StockPrice[]>(),
   counts: Annotation<CountFields>(),

@@ -7,7 +7,7 @@ export function makeAssembleResponseNode() {
 
     const content = llmPartial as Required<Pick<LLMResponse,
       'messageTitle' | 'messageShortSummary' | 'messageLongSummary' |
-      'confidenceScore' | 'newsLinks' | 'pressReleaseLinks' | 'eightKLinks'>>;
+      'confidenceScore' | 'newsLinks' | 'eightKLinks'>>;
 
     const llmResponse: LLMResponse = {
       ...content,
@@ -15,7 +15,6 @@ export function makeAssembleResponseNode() {
       ticker,
       companyName,
       newArticleCount: counts.newArticleCount,
-      pressReleaseCount: counts.pressReleaseCount,
       eightKCount: counts.eightKCount,
       eodStockPriceCount: counts.eodStockPriceCount,
       priceMovement,

@@ -24,7 +24,6 @@ export const WeeklyRecapStateAnnotation = Annotation.Root({
 
   // Set by fetchMarketData
   news:          Annotation<NewsArticle[]>(),
-  pressReleases: Annotation<PressRelease[]>(),
   filings:       Annotation<Filing8K[]>(),
   prices:        Annotation<StockPrice[]>(),
 
@@ -52,9 +51,8 @@ Every node is a plain async function in its own file under `nodes/`. Services ar
 // nodes/fetchMarketData.ts
 export function makeFetchMarketDataNode(fmp: FmpService) {
   return async (state: WeeklyRecapState): Promise<Partial<WeeklyRecapState>> => {
-    const [newsResult, prResult, filingsResult, pricesResult] = await Promise.allSettled([
+    const [newsResult, filingsResult, pricesResult] = await Promise.allSettled([
       fmp.getNews(state.ticker, state.startDate, state.endDate),
-      fmp.getPressReleases(state.ticker, state.startDate, state.endDate),
       fmp.get8Ks(state.ticker, state.startDate, state.endDate),
       fmp.getEodStockPrice(state.ticker, state.startDate, state.endDate),
     ]);
@@ -62,10 +60,9 @@ export function makeFetchMarketDataNode(fmp: FmpService) {
     // Each call is independent — a failure defaults to [] so the graph
     // continues with partial data. The LLM is instructed to omit missing aspects.
     return {
-      news:          newsResult.status === 'fulfilled' ? newsResult.value : [],
-      pressReleases: prResult.status === 'fulfilled' ? prResult.value : [],
-      filings:       filingsResult.status === 'fulfilled' ? filingsResult.value : [],
-      prices:        pricesResult.status === 'fulfilled' ? pricesResult.value : [],
+      news:    newsResult.status === 'fulfilled' ? newsResult.value : [],
+      filings: filingsResult.status === 'fulfilled' ? filingsResult.value : [],
+      prices:  pricesResult.status === 'fulfilled' ? pricesResult.value : [],
     };
   };
 }

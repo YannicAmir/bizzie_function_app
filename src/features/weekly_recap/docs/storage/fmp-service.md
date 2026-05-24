@@ -10,7 +10,7 @@ Resolved at runtime via `getRemoteConfig()` from `src/core/remote-config.ts` —
 
 | Key | Default URL | Used by |
 |---|---|---|
-| `fmp.baseUrl` | `https://financialmodelingprep.com/stable` | `getNews`, `getPressReleases`, `get8Ks`, `getEodStockPrice` |
+| `fmp.baseUrl` | `https://financialmodelingprep.com/stable` | `getNews`, `get8Ks`, `getEodStockPrice` |
 | `fmp.v3Url` | `https://financialmodelingprep.com/api/v3` | (reserved) |
 | `fmp.v4Url` | `https://financialmodelingprep.com/api/v4` | (reserved) |
 
@@ -23,7 +23,7 @@ API key: `config.fmpApiKey` from env var `FMP_API_KEY` (`src/core/config.ts`).
 | Constant | Value | Purpose |
 |---|---|---|
 | `FMP_PAGE` | `0` | First-page offset sent on all paginated requests |
-| `FMP_NEWS_LIMIT` | `30` | Max items returned by `getNews` and `getPressReleases` |
+| `FMP_NEWS_LIMIT` | `30` | Max items returned by `getNews` |
 | `FMP_FILINGS_LIMIT` | `20` | Max items returned by `get8Ks` (before client-side filtering) |
 
 ---
@@ -34,7 +34,7 @@ Internal types that represent the shape of raw FMP API array items before they a
 
 | Type | Used by |
 |---|---|
-| `FmpArticleRaw` | `getNews`, `getPressReleases` |
+| `FmpArticleRaw` | `getNews` |
 | `FmpFilingRaw` | `get8Ks` |
 | `FmpPriceRaw` | `getEodStockPrice` |
 
@@ -89,16 +89,6 @@ GET {baseUrl}/news/stock?symbols={ticker}&from={startDate}&to={endDate}&page=0&l
 ```
 
 Returns up to `FMP_NEWS_LIMIT` news articles for the ticker within the date window. Maps `FmpArticleRaw` fields (`publishedDate`, `title`, `text`, `url`) to `NewsArticle`.
-
----
-
-### `getPressReleases(ticker, startDate, endDate): Promise<PressRelease[]>`
-
-```
-GET {baseUrl}/news/press-releases?symbols={ticker}&from={startDate}&to={endDate}&page=0&limit=30&apikey={key}
-```
-
-Returns up to `FMP_NEWS_LIMIT` press releases for the ticker within the date window. Maps `FmpArticleRaw` fields to `PressRelease`.
 
 ---
 

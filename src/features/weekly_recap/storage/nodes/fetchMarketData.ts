@@ -16,23 +16,20 @@ export function makeFetchMarketDataNode(fmp: FmpService) {
   return async (state: WeeklyRecapState): Promise<Partial<WeeklyRecapState>> => {
     const { ticker, startDate, endDate } = state;
 
-    const [newsResult, prResult, filingsResult, pricesResult] = await Promise.allSettled([
+    const [newsResult, filingsResult, pricesResult] = await Promise.allSettled([
       fmp.getNews(ticker, startDate, endDate),
-      fmp.getPressReleases(ticker, startDate, endDate),
       fmp.get8Ks(ticker, startDate, endDate),
       fmp.getEodStockPrice(ticker, startDate, endDate),
     ]);
 
-    logRejection(newsResult,    'getNews',          ticker);
-    logRejection(prResult,      'getPressReleases',  ticker);
-    logRejection(filingsResult, 'get8Ks',            ticker);
-    logRejection(pricesResult,  'getEodStockPrice',  ticker);
+    logRejection(newsResult,    'getNews',         ticker);
+    logRejection(filingsResult, 'get8Ks',           ticker);
+    logRejection(pricesResult,  'getEodStockPrice', ticker);
 
     return {
-      news:         newsResult.status    === 'fulfilled' ? newsResult.value    : [],
-      pressReleases: prResult.status     === 'fulfilled' ? prResult.value      : [],
-      filings:      filingsResult.status === 'fulfilled' ? filingsResult.value : [],
-      prices:       pricesResult.status  === 'fulfilled' ? pricesResult.value  : [],
+      news:    newsResult.status    === 'fulfilled' ? newsResult.value    : [],
+      filings: filingsResult.status === 'fulfilled' ? filingsResult.value : [],
+      prices:  pricesResult.status  === 'fulfilled' ? pricesResult.value  : [],
     };
   };
 }

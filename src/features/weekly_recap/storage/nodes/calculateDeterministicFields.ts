@@ -3,11 +3,10 @@ import type { CountFields, PriceMovement } from '../models';
 
 export function makeCalculateDeterministicFieldsNode() {
   return async (state: WeeklyRecapState): Promise<Partial<WeeklyRecapState>> => {
-    const { news, pressReleases, filings, prices } = state;
+    const { news, filings, prices } = state;
 
     const counts: CountFields = {
       newArticleCount: news.length,
-      pressReleaseCount: pressReleases.length,
       eightKCount: filings.length,
       eodStockPriceCount: prices.length,
     };

@@ -13,7 +13,6 @@ import { TOPIC_NAME } from './constants';
 import { buildGraph } from './usecase';
 
 const confidentApiKey = defineSecret('CONFIDENT_API_KEY');
-const confidentProjectName = defineSecret('CONFIDENT_PROJECT_NAME');
 
 const logger = new Logger('WeeklyRecap/Storage/Trigger');
 const firestoreService = new FirestoreService();
@@ -21,8 +20,6 @@ const fmpService = new FmpService();
 const evaluationService = new EvaluationService();
 const aiService = new AiService(evaluationService);
 const pubSubService = new PubSubService();
-
-void evaluationService.init();
 
 const graph = buildGraph(fmpService, aiService, firestoreService);
 
@@ -66,9 +63,10 @@ export const weeklyRecapScheduler = onSchedule(
 export const weeklyRecapProcessor = onMessagePublished(
   {
     topic: TOPIC_NAME,
+    retry: true,
     memory: '512MiB',
     timeoutSeconds: 300,
-    secrets: [confidentApiKey, confidentProjectName],
+    secrets: [confidentApiKey],
   },
   async (event) => {
     const messageId = event.data.message.messageId;
@@ -87,6 +85,8 @@ export const weeklyRecapProcessor = onMessagePublished(
 
     const { ticker, companyName } = company;
     logger.info(`Processing ${ticker} (${companyName})`, { messageId });
+
+    await evaluationService.init();
 
     try {
       await graph.invoke({ ticker, companyName });

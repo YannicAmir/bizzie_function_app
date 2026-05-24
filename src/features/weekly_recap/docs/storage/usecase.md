@@ -20,12 +20,11 @@ interface WeeklyRecapState {
 
   // Fetched by fetchMarketData node
   news: NewsArticle[];
-  pressReleases: PressRelease[];
   filings: Filing8K[];
   prices: StockPrice[];
 
   // Derived deterministically
-  counts: Pick<LLMResponse, 'newArticleCount' | 'pressReleaseCount' | 'eightKCount' | 'eodStockPriceCount'>;
+  counts: Pick<LLMResponse, 'newArticleCount' | 'eightKCount' | 'eodStockPriceCount'>;
   priceMovement: PriceMovement;
 
   // LLM output (content fields only)
@@ -43,7 +42,7 @@ interface WeeklyRecapState {
 | Node | Calls | Writes to state |
 |---|---|---|
 | `calculateWeekWindow` | pure function | `startDate`, `endDate` |
-| `fetchMarketData` | `FmpService.*` (parallel) | `news`, `pressReleases`, `filings`, `prices` |
+| `fetchMarketData` | `FmpService.*` (parallel) | `news`, `filings`, `prices` |
 | `calculateDeterministicFields` | pure functions | `counts`, `priceMovement` |
 | `summarizeNews` | `AiService.summarizeNews` (internally wraps `generateContent` with `traceCallback` via injected `EvaluationService`) | `llmPartial` |
 | `validateSchema` | pure TypeScript check | — (logs invalid fields, returns `{}`; `routeAfterValidation` routes to END or continue) |
@@ -76,7 +75,7 @@ START
 Derives `endDate` (current datetime as ISO string) and `startDate` (7 days prior). Centralised here so all downstream nodes use a consistent window.
 
 ### `fetchMarketData`
-Calls `FmpService.getNews`, `getPressReleases`, `get8Ks`, and `getEodStockPrice` concurrently via `Promise.allSettled`. Each call is independent — a failure after all retries logs a warning and defaults to an empty array, allowing the graph to continue with partial data. The LLM is instructed to omit any aspect where data is missing. `Promise.all` is explicitly avoided here: it would abort all successful fetches the moment any single call fails. Text fields are truncated to token budget before being written to state (see [tech-stack.md](tech-stack.md)).
+Calls `FmpService.getNews`, `get8Ks`, and `getEodStockPrice` concurrently via `Promise.allSettled`. Each call is independent — a failure after all retries logs a warning and defaults to an empty array, allowing the graph to continue with partial data. The LLM is instructed to omit any aspect where data is missing. `Promise.all` is explicitly avoided here: it would abort all successful fetches the moment any single call fails. Text fields are truncated to token budget before being written to state (see [tech-stack.md](tech-stack.md)).
 
 ### `calculateDeterministicFields`
 Derives `counts` from array lengths and `priceMovement` (`startPrice`, `endPrice`, `priceChange`, `priceChangePercent`) from the `prices` array. Returns `null` fields if `prices` is empty. No LLM involved.

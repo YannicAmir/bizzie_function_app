@@ -14,9 +14,9 @@
 | LLM | Google Vertex AI — Gemini (model resolved from Firebase Remote Config) |
 | Orchestration | LangGraph — state graph per ticker invocation, typed `WeeklyRecapState` |
 | Market data | Financial Modeling Prep (FMP) REST API — v3, v4, stable endpoints |
-| LLM evaluation | Confident AI / DeepEval — LLM-as-Judge tracing via `@confident-ai/deepeval` |
+| LLM evaluation | Confident AI / DeepEval — LLM-as-Judge tracing via `deepeval` |
 | Prompt versioning | LangSmith — prompts versioned in Confident AI; local interpolation during dev |
-| Secrets | GCP Secret Manager — `CONFIDENT_API_KEY`, `CONFIDENT_PROJECT_NAME`, `FMP_API_KEY`, `LANGSMITH_API_KEY` etc. |
+| Secrets | GCP Secret Manager — `CONFIDENT_API_KEY`, `FMP_API_KEY`, `LANGSMITH_API_KEY` etc. |
 | Retry / backoff | `src/core/retry.ts` — exponential backoff, configurable per call site |
 | Logging | `src/core/logger.ts` — structured wrapper over `firebase-functions/logger` |
 | Config | `src/core/remote-config.ts` — Firebase Remote Config (model names, FMP URLs) |
@@ -83,11 +83,10 @@ Text content from FMP (news `text`, press release `text`) is truncated per item 
 | Input | Limit | Rationale |
 |---|---|---|
 | News article text | 500 tokens (~375 words) | Captures headline + key facts; tail of long articles is rarely material |
-| Press release text | 750 tokens (~560 words) | Denser structured content; needs more room |
 | 8-K entry | No truncation | Metadata only: title, date, two URLs — ~30 tokens per entry |
 | Stock price entry | No truncation | Three fields per trading day — ~15 tokens per entry |
 
-**Estimated tokens per invocation:** ~500 (prompt) + 15,000 (30 news) + 22,500 (30 PRs) + 600 (20 8-K entries) + 110 (7 price rows) + 20 (price movement) ≈ **38,750 input tokens**. Output JSON ≈ 500 tokens. At Gemini Flash pricing this is ~$0.003 per ticker.
+**Estimated tokens per invocation:** ~500 (prompt) + 15,000 (30 news) + 600 (20 8-K entries) + 110 (7 price rows) + 20 (price movement) ≈ **16,230 input tokens**. Output JSON ≈ 500 tokens. At Gemini Flash pricing this is ~$0.001 per ticker.
 
 ---
 

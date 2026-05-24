@@ -9,16 +9,14 @@ export interface LLMResponse {
   ticker: string;
   companyName: string;
   newArticleCount: number;
-  pressReleaseCount: number;
   eightKCount: number;
   eodStockPriceCount: number;
   newsLinks: string[];
-  pressReleaseLinks: string[];
   eightKLinks: string[];
   priceMovement: PriceMovement;
 }
 
 export type CountFields = Pick<
   LLMResponse,
-  'newArticleCount' | 'pressReleaseCount' | 'eightKCount' | 'eodStockPriceCount'
+  'newArticleCount' | 'eightKCount' | 'eodStockPriceCount'
 >;

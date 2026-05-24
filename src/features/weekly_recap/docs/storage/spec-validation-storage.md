@@ -20,7 +20,6 @@
 - `src/features/weekly_recap/storage/trigger.ts`
 - `src/features/weekly_recap/storage/usecase.ts`
 - `src/features/weekly_recap/storage/models/NewsArticle.ts`
-- `src/features/weekly_recap/storage/models/PressRelease.ts`
 - `src/features/weekly_recap/storage/models/Filing8K.ts`
 - `src/features/weekly_recap/storage/models/StockPrice.ts`
 - `src/features/weekly_recap/storage/models/PriceMovement.ts`
@@ -127,7 +126,7 @@
 
 **Spec says** (`logging.md`): `"No {type} found for {ticker} in {startDate}–{endDate}"`.
 
-**Code does:** `fmp_service.ts:53` — `"No news found for ${ticker} (${ticker}) in ${startDate}–${endDate}"`. The same double-ticker pattern appears for press releases (`line:99`), 8-Ks (`line:149`), and EOD prices (`line:196`). The `(${companyName})` slot was never wired up — it falls back to the ticker variable, producing a redundant repetition.
+**Code does:** `fmp_service.ts:53` — `"No news found for ${ticker} (${ticker}) in ${startDate}–${endDate}"`. The same double-ticker pattern appears for 8-Ks and EOD prices. The `(${companyName})` slot was never wired up — it falls back to the ticker variable, producing a redundant repetition.
 
 **Difference:** Every empty-result warning message contains `{ticker} ({ticker})` instead of just `{ticker}`. The `companyName` is not available in `FmpService` method signatures, so it cannot be substituted without a signature change (see Undocumented U8).
 
@@ -203,7 +202,7 @@
 
 ### U8: `fmp_service.ts` — `companyName` unavailable in method signatures; logging spec is irreconcilable
 
-**Code does:** All four `FmpService` methods (`getNews`, `getPressReleases`, `get8Ks`, `getEodStockPrice`) have signature `(ticker, startDate, endDate)`. `companyName` is not a parameter and is not accessible within these methods.
+**Code does:** All three `FmpService` methods (`getNews`, `get8Ks`, `getEodStockPrice`) have signature `(ticker, startDate, endDate)`. `companyName` is not a parameter and is not accessible within these methods.
 
 **Not in spec (as a conflict):** `logging.md` prescribes FmpService log messages that include `{companyName}`. `fmp-service.md` defines method signatures without `companyName`. The two spec documents are irreconcilable as written.
 
@@ -220,13 +219,13 @@ Key conforming areas include:
 - `weeklyRecapScheduler` config: `onSchedule`, schedule `'0 16 * * 5'`, timezone `America/New_York`, memory `256MiB`, timeout `60s`.
 - `weeklyRecapProcessor` config: `onMessagePublished`, topic `weekly-recap`, memory `512MiB`, timeout `300s`.
 - `weeklyRecapProcessor` unrecoverable error handling: catches, logs `"Graph execution failed for {ticker} ({companyName}) — message acked, no retry"`, returns without re-throwing.
-- All five data model interfaces (`NewsArticle`, `PressRelease`, `Filing8K`, `StockPrice`, `PriceMovement`) match spec exactly in field names, types, and nullability.
+- All four data model interfaces (`NewsArticle`, `Filing8K`, `StockPrice`, `PriceMovement`) match spec exactly in field names, types, and nullability.
 - `LLMResponse` interface matches spec including `eightKCount` TypeScript name vs `'8kCount'` Firestore field (correctly handled in `firestore_service.ts:54`).
 - `WeeklyRecapStateAnnotation` matches spec — all 12 state fields, `Annotation.Root` pattern, and exported `WeeklyRecapState` type.
 - Graph node set and edge wiring match `langgraph.md` exactly: 8 nodes, correct edge order, `storeSummary` → END.
 - `routeAfterValidation` conditional routing: `'continue'` → `assembleResponse`, `'end'` → `END`.
 - `calculateWeekWindow`: `endDate` = current ISO datetime, `startDate` = 7 days prior (ISO string).
-- `fetchMarketData`: uses `Promise.allSettled` (not `Promise.all`), defaults rejected calls to `[]`, writes `news`, `pressReleases`, `filings`, `prices` to state.
+- `fetchMarketData`: uses `Promise.allSettled` (not `Promise.all`), defaults rejected calls to `[]`, writes `news`, `filings`, `prices` to state.
 - `calculateDeterministicFields`: counts from array lengths, `priceMovement` with all null fields when prices is empty, rounding to 2 dp.
 - `summarizeNews` node: calls `AiService.summarizeNews` with all nine arguments in the correct order.
 - `validateSchema`: throws `AppError` on field failure with field name + actual value in message, logs `"Schema valid for {ticker}"` on success.
@@ -238,7 +237,7 @@ Key conforming areas include:
 - `AiService.summarizeNews`: `responseMimeType: 'application/json'` in `generationConfig`.
 - `AiService.summarizeNews`: model name resolved from `appConfig.weekly_recap.model` via `getRemoteConfig()` at call time (hot-swappable).
 - `SUMMARIZE_NEWS_PROMPT` exported constant with all 12 specified `{variable}` placeholders; prompt enforces all field constraints.
-- Token truncation: news at 500 tokens, press releases at 750 tokens; 8-K entries and prices not truncated.
+- Token truncation: news at 500 tokens; 8-K entries and prices not truncated.
 - `AiService.summarizeNews` logging: `debug` prompt before call, `debug` raw response after, `info` generation duration, `info` token usage (`promptTokenCount`, `candidatesTokenCount`, `totalTokenCount`), `warn` empty response.
 - `AiService.postProcessLlmSummary`: trims whitespace from all string fields, hard-truncates `messageTitle` to 50 chars, strips markdown from `messageLongSummary`, returns new object (does not mutate input), logs truncation and markdown-strip events at correct levels.
 - `FirestoreService` logger context `'WeeklyRecap/Storage/FirestoreService'`.
@@ -246,7 +245,6 @@ Key conforming areas include:
 - `FirestoreService.storeSummaryInDb`: path `weekly_recap/{ticker}/weeks/{weekEndDate}`, document ID from `response.time.slice(0, 10)`, `createdAt: FieldValue.serverTimestamp()` merged, `set()` without merge option, Firestore field `'8kCount'` mapped from `response.eightKCount`, logs `"Stored summary for {ticker} / {weekEndDate}"`.
 - `FmpService` logger context `'WeeklyRecap/Storage/FmpService'`; retry config (`maxAttempts: 3`, `initialDelayMs: 1000`, `backoffFactor: 2`, `maxDelayMs: 30000`); `shouldRetry: isTransientError`.
 - `FmpService.getNews`: URL pattern matches spec exactly, `limit=30`, maps to `NewsArticle`.
-- `FmpService.getPressReleases`: URL pattern matches spec exactly, `limit=30`, maps to `PressRelease`.
 - `FmpService.get8Ks`: URL pattern matches spec exactly, `limit=20`, client-side filter `formType === '8-K'`, maps to `Filing8K`.
 - `FmpService.getEodStockPrice`: URL pattern matches spec exactly, maps `date`, `price`, `volume` to `StockPrice`.
 - `PubSubService` logger context `'WeeklyRecap/Storage/PubSubService'`, topic `'weekly-recap'`.

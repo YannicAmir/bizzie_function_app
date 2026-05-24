@@ -21,8 +21,8 @@ async function generateTestToken() {
                 password: 'password123',
             });
             console.log(`Created new test user: ${email}`);
-        } catch (e: any) {
-            if (e.code === 'auth/uid-already-exists') {
+        } catch (e) {
+            if ((e as { code?: string }).code === 'auth/uid-already-exists') {
                 console.log(`Test user ${email} already exists.`);
             } else {
                 throw e;
@@ -45,7 +45,7 @@ async function generateTestToken() {
             headers: { 'Content-Type': 'application/json' }
         });
 
-        const data: any = await response.json();
+        const data = await response.json() as { idToken?: string };
 
         if (data.idToken) {
             console.log('\n--- BEARER TOKEN FOR POSTMAN ---');

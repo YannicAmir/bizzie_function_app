@@ -1,4 +1,4 @@
-import { monitor } from '@confident-ai/deepeval';
+import { traceManager } from 'deepeval/tracing';
 import { Logger } from '../../../../core/logger';
 
 const logger = new Logger('WeeklyRecap/Storage/EvaluationService');
@@ -14,12 +14,11 @@ export class EvaluationService {
     if (this._initialized) return;
     try {
       const apiKey = process.env.CONFIDENT_API_KEY ?? '';
-      const projectName = process.env.CONFIDENT_PROJECT_NAME ?? '';
-      if (apiKey && projectName) {
-        monitor({ apiKey, projectName });
+      if (apiKey) {
+        traceManager.configure({ confidentApiKey: apiKey, tracingEnabled: true });
         this._initialized = true;
       } else {
-        logger.warn('CONFIDENT_API_KEY or CONFIDENT_PROJECT_NAME not set — DeepEval tracing disabled');
+        logger.warn('CONFIDENT_API_KEY not set — DeepEval tracing disabled');
       }
     } catch (err) {
       logger.warn('DeepEval initialization failed — tracing disabled', {

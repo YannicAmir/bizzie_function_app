@@ -37,7 +37,7 @@ weeklyRecapProcessor  [trigger.ts]
          │
          ▼  LangGraph graph (WeeklyRecapState)
   [calculateWeekWindow]      ── [usecase.ts]         → { startDate, endDate }
-  [fetchMarketData]          ── [fmp_service.ts]     → news, pressReleases, filings, prices (Promise.allSettled)
+  [fetchMarketData]          ── [fmp_service.ts]     → news, filings, prices (Promise.allSettled)
   [calculateDeterministicFields]                     → counts, priceMovement
   [summarizeNews]            ── [ai_service.ts]      → llmPartial (Vertex AI / Gemini, traceCallback inline)
   [validateSchema]           ── pure TypeScript      → valid? continue : END
@@ -64,7 +64,6 @@ src/features/weekly_recap/
     │   ├── Company.ts
     │   ├── SummarizeNewsInput.ts
     │   ├── NewsArticle.ts
-    │   ├── PressRelease.ts
     │   ├── Filing8K.ts
     │   ├── StockPrice.ts
     │   ├── PriceMovement.ts
@@ -104,3 +103,4 @@ src/features/weekly_recap/
 | [tech-stack.md](tech-stack.md) | — | Technologies, retry strategy, token budget, environment pattern |
 | [logging.md](logging.md) | all files | Logging spec: what to log, where, and at what level |
 | [dead-letter-setup.md](dead-letter-setup.md) | — | Step-by-step GCP console setup for the `weekly-recap-dead-letter` topic |
+| [running-in-dev.md](running-in-dev.md) | — | How to manually trigger the pipeline in dev: shell vs deploy, command reference, what to look for in logs |

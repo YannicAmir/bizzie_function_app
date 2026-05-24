@@ -1,11 +1,10 @@
-import { traceCallback } from '@confident-ai/deepeval';
+import { observe, SpanType } from 'deepeval/tracing';
 import { getGeminiModel } from '../../../../core/vertex-ai';
 import { getRemoteConfig } from '../../../../core/remote-config';
 import { Logger } from '../../../../core/logger';
 import { retry } from '../../../../core/retry';
 import type { LLMResponse, SummarizeNewsInput } from '../models';
 import { isRetryableLlmError, truncateToTokens, stripMarkdown, isValidLLMPartial } from '../helpers/llm';
-import { FEATURE_NAME } from '../constants';
 import type { EvaluationService } from './evaluation_service';
 
 const logger = new Logger('WeeklyRecap/Storage/AiService');
@@ -25,9 +24,6 @@ Price change %: {priceChangePercent}
 ## News Articles
 {news}
 
-## Press Releases
-{pressReleases}
-
 ## SEC 8-K Filings
 {filings}
 
@@ -41,11 +37,10 @@ Return a JSON object with ONLY the following fields:
 - messageLongSummary: string — concise and catchy narrative for an engaged reader; no hard character limit but keep it tight
 - confidenceScore: integer — your self-assessed confidence score from 0 to 100
 - newsLinks: string[] — URLs from the news articles provided
-- pressReleaseLinks: string[] — URLs from the press releases provided
 - eightKLinks: string[] — finalLink URLs from the 8-K filings provided
 
 CRITICAL RULES:
-1. NEVER imply or state that price changes were caused by any particular news item, press release, or filing. Causation is never stated.
+1. NEVER imply or state that price changes were caused by any particular news item or filing. Causation is never stated.
 2. If any source data is missing or sparse, omit that aspect entirely — do not fabricate or speculate.
 3. Price movement and news/filings are summarized separately within the same output.
 4. messageTitle MUST be ≤ 50 characters.
@@ -57,7 +52,7 @@ export class AiService {
   constructor(private readonly evaluation?: EvaluationService) {}
 
   async summarizeNews(input: SummarizeNewsInput): Promise<Partial<LLMResponse>> {
-    const { ticker, companyName, news, pressReleases, filings, prices, priceMovement, startDate, endDate } = input;
+    const { ticker, companyName, news, filings, prices, priceMovement, startDate, endDate } = input;
 
     const appConfig = await getRemoteConfig();
     const modelName = appConfig.weekly_recap.model;
@@ -65,11 +60,6 @@ export class AiService {
     const newsText =
       news
         .map((n) => `Title: ${n.title}\nDate: ${n.publishedDate}\nURL: ${n.url}\n${truncateToTokens(n.text, 500)}`)
-        .join('\n\n') || '(none)';
-
-    const prText =
-      pressReleases
-        .map((pr) => `Title: ${pr.title}\nDate: ${pr.publishedDate}\nURL: ${pr.url}\n${truncateToTokens(pr.text, 750)}`)
         .join('\n\n') || '(none)';
 
     const filingsText =
@@ -90,7 +80,6 @@ export class AiService {
       .replace('{priceChange}', priceMovement.priceChange !== null ? String(priceMovement.priceChange) : 'N/A')
       .replace('{priceChangePercent}', priceMovement.priceChangePercent !== null ? String(priceMovement.priceChangePercent) : 'N/A')
       .replace('{news}', newsText)
-      .replace('{pressReleases}', prText)
       .replace('{filings}', filingsText)
       .replace('{prices}', pricesText);
 
@@ -110,10 +99,7 @@ export class AiService {
           });
 
         const response = await (evaluation?.isInitialized
-          ? traceCallback(runGenerate, {
-              model: modelName,
-              traceAttributes: { ticker, feature: FEATURE_NAME },
-            })
+          ? observe({ type: SpanType.LLM, name: 'summarizeNews', model: modelName, fn: runGenerate })()
           : runGenerate());
 
         const text = response.response.candidates?.[0]?.content?.parts?.[0]?.text;

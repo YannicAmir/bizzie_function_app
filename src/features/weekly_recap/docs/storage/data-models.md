@@ -11,7 +11,6 @@ interface SummarizeNewsInput {
   ticker: string;
   companyName: string;
   news: NewsArticle[];
-  pressReleases: PressRelease[];
   filings: Filing8K[];
   prices: StockPrice[];
   priceMovement: PriceMovement;
@@ -41,13 +40,6 @@ Defined in `models/Company.ts`. Represents a single watchlist entry. Used by `Fi
 
 ```typescript
 interface NewsArticle {
-  title: string;
-  text: string;
-  publishedDate: string;   // ISO 8601
-  url: string;
-}
-
-interface PressRelease {
   title: string;
   text: string;
   publishedDate: string;   // ISO 8601
@@ -90,11 +82,9 @@ interface LLMResponse {
   ticker: string;
   companyName: string;
   newArticleCount: number;       // length of NewsArticle[] fed to the LLM
-  pressReleaseCount: number;     // length of PressRelease[] fed to the LLM
   eightKCount: number;           // stored as "8kCount" in Firestore (invalid JS identifier)
   eodStockPriceCount: number;    // length of StockPrice[] fed to the LLM
   newsLinks: string[];           // URLs from NewsArticle[], preserved for retrieval pipeline
-  pressReleaseLinks: string[];   // URLs from PressRelease[], preserved for retrieval pipeline
   eightKLinks: string[];         // finalLink URLs from Filing8K[], preserved for retrieval pipeline
   priceMovement: PriceMovement;  // deterministically calculated by use case, passed to LLM as context
 }
@@ -127,11 +117,9 @@ confidenceScore:     number      // integer 0–100
 ticker:              string
 companyName:         string
 newArticleCount:     number
-pressReleaseCount:   number
 8kCount:             number      // note: stored as "8kCount" in Firestore; TypeScript uses eightKCount
 eodStockPriceCount:  number
 newsLinks:           string[]
-pressReleaseLinks:   string[]
 eightKLinks:         string[]
 priceMovement:       map         // { startPrice, endPrice, priceChange, priceChangePercent } — nullable fields
 createdAt:           Timestamp   // server-side, added by FirestoreService before writing

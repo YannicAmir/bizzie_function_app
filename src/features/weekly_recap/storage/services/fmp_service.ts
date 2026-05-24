@@ -3,7 +3,7 @@ import { getRemoteConfig } from '../../../../core/remote-config';
 import { Logger } from '../../../../core/logger';
 import { retry } from '../../../../core/retry';
 import { AppError } from '../../../../core/errors';
-import type { NewsArticle, PressRelease, Filing8K, StockPrice } from '../models';
+import type { NewsArticle, Filing8K, StockPrice } from '../models';
 
 const logger = new Logger('WeeklyRecap/Storage/FmpService');
 
@@ -108,23 +108,6 @@ export class FmpService {
     }
 
     return articles.map(mapArticle);
-  }
-
-  async getPressReleases(ticker: string, startDate: string, endDate: string): Promise<PressRelease[]> {
-    const baseUrl = await this.getBaseUrl();
-    const url = `${baseUrl}/news/press-releases?symbols=${ticker}&from=${startDate}&to=${endDate}&page=${FMP_PAGE}&limit=${FMP_NEWS_LIMIT}&apikey=${config.fmpApiKey}`;
-
-    logger.info(`Fetching pressReleases for ${ticker}`, { ticker, startDate, endDate });
-
-    const releases = await this.fetchJson(url, 'pressReleases', ticker);
-
-    if (releases.length === 0) {
-      logger.warn(`No pressReleases found for ${ticker} in ${startDate}–${endDate}`);
-    } else {
-      logger.info(`Fetched ${releases.length} pressReleases for ${ticker}`);
-    }
-
-    return releases.map(mapArticle);
   }
 
   async get8Ks(ticker: string, startDate: string, endDate: string): Promise<Filing8K[]> {

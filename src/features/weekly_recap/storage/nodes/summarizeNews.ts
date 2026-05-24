@@ -6,11 +6,11 @@ const logger = new Logger('WeeklyRecap/Storage/Node/SummarizeNews');
 
 export function makeSummarizeNewsNode(ai: AiService) {
   return async (state: WeeklyRecapState): Promise<Partial<WeeklyRecapState>> => {
-    const { ticker, companyName, news, pressReleases, filings, prices, priceMovement, startDate, endDate } = state;
+    const { ticker, companyName, news, filings, prices, priceMovement, startDate, endDate } = state;
 
     try {
       const llmPartial = await ai.summarizeNews({
-        ticker, companyName, news, pressReleases, filings, prices, priceMovement, startDate, endDate,
+        ticker, companyName, news, filings, prices, priceMovement, startDate, endDate,
       });
       return { llmPartial };
     } catch (err) {

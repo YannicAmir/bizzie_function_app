@@ -43,7 +43,7 @@ src/features/weekly_recap/storage/
 | Case | What to verify |
 |---|---|
 | HTTP request construction | Correct URL, query params, and API key on every method |
-| Response mapping | Raw FMP fields map correctly to `NewsArticle`, `PressRelease`, `Filing8K`, `StockPrice` |
+| Response mapping | Raw FMP fields map correctly to `NewsArticle`, `Filing8K`, `StockPrice` |
 | 8-K client-side filter | Only records with `formType === '8-K'` are returned from `get8Ks` |
 | Retry on transient error | Mock HTTP 429 / 503 → verify `retry()` attempts again |
 | No retry on permanent error | Mock HTTP 404 → verify immediate throw, no retry |
@@ -77,7 +77,7 @@ LLM output quality is not tested here — that is DeepEval's responsibility.
 |---|---|
 | `calculateWeekWindow` | `endDate` is today (ISO); `startDate` is exactly 7 days prior |
 | `calculateDeterministicFields` | Counts match array lengths; `priceChange` and `priceChangePercent` math; `null` fields when `prices` is empty |
-| `validateSchema` | Passes valid `LLMResponse`; throws `AppError` for each missing required field; throws on `confidenceScore` outside `[0, 100]` |
+| `validateSchema` | Passes valid `LLMResponse`; logs and returns `{}` for each missing required field (does not throw); logs and returns `{}` on `confidenceScore` outside `[0, 100]`; `routeAfterValidation` routes to END on invalid state |
 | `assembleResponse` | Merges `llmPartial` + deterministic fields; deterministic fields are never overwritten by LLM fields |
 | `postProcessResponse` | Delegates to `AiService.postProcessLlmSummary`; returns a new object |
 

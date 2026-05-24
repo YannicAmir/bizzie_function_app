@@ -338,7 +338,7 @@ weeklyRecapProcessor  [trigger.ts]
          │
          ▼  LangGraph graph (WeeklyRecapState)
   [calculateWeekWindow]      ── [usecase.ts]         → { startDate, endDate }
-  [fetchMarketData]          ── [fmp_service.ts]     → news, pressReleases, filings, prices (Promise.allSettled)
+  [fetchMarketData]          ── [fmp_service.ts]     → news, filings, prices (Promise.allSettled)
   [calculateDeterministicFields]                     → counts, priceMovement
   [summarizeNews]            ── [ai_service.ts]      → llmPartial (Vertex AI / Gemini, traceCallback inline)
   [validateSchema]           ── pure TypeScript      → valid? continue : END
@@ -358,7 +358,7 @@ flowchart TD
     subgraph LG[LangGraph — WeeklyRecapState]
         direction TB
         PROC --> N1[calculateWeekWindow\nstartDate · endDate]
-        N1 --> N2[fetchMarketData\nnews · pressReleases · filings · prices · Promise.allSettled]
+        N1 --> N2[fetchMarketData\nnews · filings · prices · Promise.allSettled]
         N2 --> N3[calculateDeterministicFields\ncounts · priceMovement]
         N3 --> N4[summarizeNews\nVertex AI / Gemini + traceCallback]
         N4 --> N5{validateSchema}
@@ -390,7 +390,6 @@ flowchart TD
     │   ├── <span class="file">Company.ts</span>
     │   ├── <span class="file">SummarizeNewsInput.ts</span>
     │   ├── <span class="file">NewsArticle.ts</span>
-    │   ├── <span class="file">PressRelease.ts</span>
     │   ├── <span class="file">Filing8K.ts</span>
     │   ├── <span class="file">StockPrice.ts</span>
     │   ├── <span class="file">PriceMovement.ts</span>
@@ -468,7 +467,6 @@ export const WeeklyRecapStateAnnotation = Annotation.Root({
   startDate:     Annotation&lt;string&gt;(),
   endDate:       Annotation&lt;string&gt;(),
   news:          Annotation&lt;NewsArticle[]&gt;(),
-  pressReleases: Annotation&lt;PressRelease[]&gt;(),
   filings:       Annotation&lt;Filing8K[]&gt;(),
   prices:        Annotation&lt;StockPrice[]&gt;(),
   counts:        Annotation&lt;CountFields&gt;(),
@@ -484,9 +482,8 @@ export type WeeklyRecapState = typeof WeeklyRecapStateAnnotation.State;</code></
   <pre><code>// nodes/fetchMarketData.ts
 export function makeFetchMarketDataNode(fmp: FmpService) {
   return async (state: WeeklyRecapState): Promise&lt;Partial&lt;WeeklyRecapState&gt;&gt; =&gt; {
-    const [newsResult, prResult, filingsResult, pricesResult] = await Promise.allSettled([
+    const [newsResult, filingsResult, pricesResult] = await Promise.allSettled([
       fmp.getNews(state.ticker, state.startDate, state.endDate),
-      fmp.getPressReleases(state.ticker, state.startDate, state.endDate),
       fmp.get8Ks(state.ticker, state.startDate, state.endDate),
       fmp.getEodStockPrice(state.ticker, state.startDate, state.endDate),
     ]);
@@ -494,10 +491,9 @@ export function makeFetchMarketDataNode(fmp: FmpService) {
     // Each call is independent — a failure defaults to [] so the graph
     // continues with partial data. The LLM omits missing aspects.
     return {
-      news:          newsResult.status === 'fulfilled' ? newsResult.value : [],
-      pressReleases: prResult.status === 'fulfilled' ? prResult.value : [],
-      filings:       filingsResult.status === 'fulfilled' ? filingsResult.value : [],
-      prices:        pricesResult.status === 'fulfilled' ? pricesResult.value : [],
+      news:    newsResult.status === 'fulfilled' ? newsResult.value : [],
+      filings: filingsResult.status === 'fulfilled' ? filingsResult.value : [],
+      prices:  pricesResult.status === 'fulfilled' ? pricesResult.value : [],
     };
   };
 }</code></pre>
@@ -556,7 +552,7 @@ await graph.invoke({ ticker, companyName });</code></pre>
   <div class="table-wrap"><table>
     <tr><th>Node</th><th>Calls</th><th>Writes to state</th></tr>
     <tr><td><code>calculateWeekWindow</code></td><td>pure function</td><td><code>startDate</code>, <code>endDate</code></td></tr>
-    <tr><td><code>fetchMarketData</code></td><td><code>FmpService.*</code> (Promise.allSettled)</td><td><code>news</code>, <code>pressReleases</code>, <code>filings</code>, <code>prices</code></td></tr>
+    <tr><td><code>fetchMarketData</code></td><td><code>FmpService.*</code> (Promise.allSettled)</td><td><code>news</code>, <code>filings</code>, <code>prices</code></td></tr>
     <tr><td><code>calculateDeterministicFields</code></td><td>pure functions</td><td><code>counts</code>, <code>priceMovement</code></td></tr>
     <tr><td><code>summarizeNews</code></td><td><code>AiService.summarizeNews</code> (internally wraps <code>generateContent</code> with <code>traceCallback</code> via injected <code>EvaluationService</code>)</td><td><code>llmPartial</code></td></tr>
     <tr><td><code>validateSchema</code></td><td>pure TypeScript check</td><td>— (routes or ends)</td></tr>
@@ -570,7 +566,7 @@ await graph.invoke({ ticker, companyName });</code></pre>
   <p>Derives <code>endDate</code> (current datetime as ISO string) and <code>startDate</code> (7 days prior). Centralised here so all downstream nodes use a consistent window.</p>
 
   <h3>fetchMarketData</h3>
-  <p>Calls <code>FmpService.getNews</code>, <code>getPressReleases</code>, <code>get8Ks</code>, and <code>getEodStockPrice</code> concurrently via <code>Promise.allSettled</code>. Each call is independent — a failure after all retries logs a warning and defaults to <code>[]</code>. <code>Promise.all</code> is explicitly avoided. Text fields are truncated to token budget before being written to state.</p>
+  <p>Calls <code>FmpService.getNews</code>, <code>get8Ks</code>, and <code>getEodStockPrice</code> concurrently via <code>Promise.allSettled</code>. Each call is independent — a failure after all retries logs a warning and defaults to <code>[]</code>. <code>Promise.all</code> is explicitly avoided. Text fields are truncated to token budget before being written to state.</p>
 
   <h3>calculateDeterministicFields</h3>
   <p>Derives <code>counts</code> from array lengths and <code>priceMovement</code> (<code>startPrice</code>, <code>endPrice</code>, <code>priceChange</code>, <code>priceChangePercent</code>) from the <code>prices</code> array. Returns <code>null</code> fields if <code>prices</code> is empty. No LLM involved.</p>
@@ -608,7 +604,6 @@ await graph.invoke({ ticker, companyName });</code></pre>
   ticker: string;
   companyName: string;
   news: NewsArticle[];
-  pressReleases: PressRelease[];
   filings: Filing8K[];
   prices: StockPrice[];
   priceMovement: PriceMovement;
@@ -619,13 +614,6 @@ await graph.invoke({ ticker, companyName });</code></pre>
 
   <h2>Input Types (FMP API → Use Case)</h2>
   <pre><code>interface NewsArticle {
-  title: string;
-  text: string;
-  publishedDate: string;   // ISO 8601
-  url: string;
-}
-
-interface PressRelease {
   title: string;
   text: string;
   publishedDate: string;   // ISO 8601
@@ -663,11 +651,9 @@ interface PriceMovement {
   ticker: string;
   companyName: string;
   newArticleCount: number;       // derived deterministically from array length
-  pressReleaseCount: number;
   eightKCount: number;           // stored as "8kCount" in Firestore
   eodStockPriceCount: number;
   newsLinks: string[];           // URLs from NewsArticle[]
-  pressReleaseLinks: string[];   // URLs from PressRelease[]
   eightKLinks: string[];         // finalLink URLs from Filing8K[]
   priceMovement: PriceMovement;  // deterministically calculated, passed to LLM as context
 }</code></pre>
@@ -688,11 +674,9 @@ confidenceScore:     number      // integer 0–100
 ticker:              string
 companyName:         string
 newArticleCount:     number
-pressReleaseCount:   number
 8kCount:             number      // TypeScript uses eightKCount
 eodStockPriceCount:  number
 newsLinks:           string[]
-pressReleaseLinks:   string[]
 eightKLinks:         string[]
 priceMovement:       map         // { startPrice, endPrice, priceChange, priceChangePercent }
 createdAt:           Timestamp   // server-side timestamp added by FirestoreService</code></pre>
@@ -707,7 +691,7 @@ createdAt:           Timestamp   // server-side timestamp added by FirestoreServ
   <p>Resolved at runtime via <code>getRemoteConfig()</code> from <code>src/core/remote-config.ts</code> — accessed as <code>config.fmp.baseUrl</code>, <code>config.fmp.v3Url</code>, <code>config.fmp.v4Url</code>.</p>
   <div class="table-wrap"><table>
     <tr><th>Key</th><th>Default URL</th><th>Used by</th></tr>
-    <tr><td><code>fmp.baseUrl</code></td><td><code>https://financialmodelingprep.com/stable</code></td><td>getNews, getPressReleases, get8Ks, getEodStockPrice</td></tr>
+    <tr><td><code>fmp.baseUrl</code></td><td><code>https://financialmodelingprep.com/stable</code></td><td>getNews, get8Ks, getEodStockPrice</td></tr>
     <tr><td><code>fmp.v3Url</code></td><td><code>https://financialmodelingprep.com/api/v3</code></td><td>(reserved)</td></tr>
     <tr><td><code>fmp.v4Url</code></td><td><code>https://financialmodelingprep.com/api/v4</code></td><td>(reserved)</td></tr>
   </table></div>
@@ -717,7 +701,7 @@ createdAt:           Timestamp   // server-side timestamp added by FirestoreServ
   <div class="table-wrap"><table>
     <tr><th>Constant</th><th>Value</th><th>Purpose</th></tr>
     <tr><td><code>FMP_PAGE</code></td><td><code>0</code></td><td>First-page offset sent on all paginated requests</td></tr>
-    <tr><td><code>FMP_NEWS_LIMIT</code></td><td><code>30</code></td><td>Max items returned by <code>getNews</code> and <code>getPressReleases</code></td></tr>
+    <tr><td><code>FMP_NEWS_LIMIT</code></td><td><code>30</code></td><td>Max items returned by <code>getNews</code></td></tr>
     <tr><td><code>FMP_FILINGS_LIMIT</code></td><td><code>20</code></td><td>Max items returned by <code>get8Ks</code> (before client-side filtering)</td></tr>
   </table></div>
 
@@ -725,7 +709,7 @@ createdAt:           Timestamp   // server-side timestamp added by FirestoreServ
   <p>Internal <code>Readonly&lt;{...}&gt;</code> types that represent the shape of raw FMP API array items before mapping to domain models. Not exported outside the service file.</p>
   <div class="table-wrap"><table>
     <tr><th>Type</th><th>Fields</th><th>Used by</th></tr>
-    <tr><td><code>FmpArticleRaw</code></td><td><code>title</code>, <code>text</code>, <code>publishedDate</code>, <code>url</code></td><td><code>getNews</code>, <code>getPressReleases</code></td></tr>
+    <tr><td><code>FmpArticleRaw</code></td><td><code>title</code>, <code>text</code>, <code>publishedDate</code>, <code>url</code></td><td><code>getNews</code></td></tr>
     <tr><td><code>FmpFilingRaw</code></td><td><code>formType</code>, <code>title</code>, <code>filingDate</code>, <code>link</code>, <code>finalLink</code></td><td><code>get8Ks</code></td></tr>
     <tr><td><code>FmpPriceRaw</code></td><td><code>date</code>, <code>price</code>, <code>volume</code></td><td><code>getEodStockPrice</code></td></tr>
   </table></div>
@@ -760,10 +744,6 @@ createdAt:           Timestamp   // server-side timestamp added by FirestoreServ
   <h3>getNews(ticker, startDate, endDate): Promise&lt;NewsArticle[]&gt;</h3>
   <pre><code>GET {baseUrl}/news/stock?symbols={ticker}&from={startDate}&to={endDate}&page=0&limit=30&apikey={key}</code></pre>
   <p>Returns up to <code>FMP_NEWS_LIMIT</code> news articles. Maps <code>FmpArticleRaw</code> fields (<code>publishedDate</code>, <code>title</code>, <code>text</code>, <code>url</code>) to <code>NewsArticle</code>.</p>
-
-  <h3>getPressReleases(ticker, startDate, endDate): Promise&lt;PressRelease[]&gt;</h3>
-  <pre><code>GET {baseUrl}/news/press-releases?symbols={ticker}&from={startDate}&to={endDate}&page=0&limit=30&apikey={key}</code></pre>
-  <p>Returns up to <code>FMP_NEWS_LIMIT</code> press releases. Maps <code>FmpArticleRaw</code> fields to <code>PressRelease</code>.</p>
 
   <h3>get8Ks(ticker, startDate, endDate): Promise&lt;Filing8K[]&gt;</h3>
   <pre><code>GET {baseUrl}/sec-filings-search/symbol?symbol={ticker}&from={startDate}&to={endDate}&page=0&limit=20&apikey={key}</code></pre>
@@ -809,7 +789,7 @@ const prompt = SUMMARIZE_NEWS_PROMPT
 // prod (LangSmith): pull and invoke
 const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code></pre>
 
-  <p><strong>Template variables:</strong> <code>{ticker}</code>, <code>{companyName}</code>, <code>{startDate}</code>, <code>{endDate}</code>, <code>{startPrice}</code>, <code>{endPrice}</code>, <code>{priceChange}</code>, <code>{priceChangePercent}</code>, <code>{news}</code>, <code>{pressReleases}</code>, <code>{filings}</code>, <code>{prices}</code></p>
+  <p><strong>Template variables:</strong> <code>{ticker}</code>, <code>{companyName}</code>, <code>{startDate}</code>, <code>{endDate}</code>, <code>{startPrice}</code>, <code>{endPrice}</code>, <code>{priceChange}</code>, <code>{priceChangePercent}</code>, <code>{news}</code>, <code>{filings}</code>, <code>{prices}</code></p>
 
   <h3>Prompt Constraints</h3>
   <ul>
@@ -818,11 +798,11 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <li><code>messageLongSummary</code> — concise and catchy; written for an engaged reader, not a regulator</li>
     <li><code>confidenceScore</code> — integer between 0 and 100</li>
     <li>If any source data is missing or sparse, <strong>omit that aspect entirely</strong> — do not fabricate or speculate</li>
-    <li>Price movement and news/filings are <strong>summarized separately</strong>. The LLM must <strong>never imply or state that price changes were caused by any particular news item, press release, or filing</strong>. Causation is never stated.</li>
+    <li>Price movement and news/filings are <strong>summarized separately</strong>. The LLM must <strong>never imply or state that price changes were caused by any particular news item or filing</strong>. Causation is never stated.</li>
   </ul>
   <p>Count fields, <code>ticker</code>, <code>companyName</code>, and <code>time</code> are set by the use case — the LLM does not produce them.</p>
   <p>After parsing the model response, <code>isValidLLMPartial</code> (from <code>helpers/llm.ts</code>) is called inside the retry loop. If validation fails, a warning is logged with the raw parsed value and <code>Error('Invalid LLM response schema')</code> is thrown — triggering the retry.</p>
-  <p><strong>Confident AI tracing:</strong> Inside the <code>retry</code> closure, if <code>evaluation.isInitialized</code>, the <code>model.generateContent</code> call is wrapped with <code>traceCallback</code> from <code>@confident-ai/deepeval</code> with <code>model</code> (resolved from Remote Config) and <code>traceAttributes: { ticker, feature: FEATURE_NAME }</code>. Each retry attempt is traced independently. If <code>EvaluationService</code> is not initialized, <code>runGenerate()</code> is called directly with no overhead. <code>inputTokenCount</code> and <code>outputTokenCount</code> are intentionally omitted — the API requires them before the function runs, so actual values from <code>usageMetadata</code> are unavailable at that point; exact counts are logged separately after the call.</p>
+  <p><strong>Confident AI tracing:</strong> Inside the <code>retry</code> closure, if <code>evaluation.isInitialized</code>, the <code>model.generateContent</code> call is wrapped with <code>observe({ type: SpanType.LLM, name: 'summarizeNews', model: modelName, fn: runGenerate })</code> from <code>deepeval/tracing</code>. Each retry attempt is traced independently. If <code>EvaluationService</code> is not initialized, <code>runGenerate()</code> is called directly with no overhead. Exact token counts are logged separately from <code>usageMetadata</code> after the call.</p>
 
   <h2>postProcessLlmSummary(response): LLMResponse</h2>
   <p>Returns a new sanitized object (does not mutate). Trims whitespace from all string fields, hard-truncates <code>messageTitle</code> to 50 characters, strips stray markdown (backtick fences, extra asterisks) from summary fields.</p>
@@ -965,11 +945,10 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <div class="table-wrap"><table>
     <tr><th>Input</th><th>Limit</th><th>Rationale</th></tr>
     <tr><td>News article text</td><td>500 tokens (~375 words)</td><td>Captures headline + key facts; tail of long articles is rarely material</td></tr>
-    <tr><td>Press release text</td><td>750 tokens (~560 words)</td><td>Denser structured content; needs more room</td></tr>
     <tr><td>8-K entry</td><td>No truncation</td><td>Metadata only: title, date, two URLs — ~30 tokens per entry</td></tr>
     <tr><td>Stock price entry</td><td>No truncation</td><td>Three fields per trading day — ~15 tokens per entry</td></tr>
   </table></div>
-  <p><strong>Estimated per invocation:</strong> ~500 (prompt) + 15,000 (30 news) + 22,500 (30 PRs) + 600 (20 8-K entries) + 110 (7 price rows) ≈ <strong>38,750 input tokens</strong>. Output ≈ 500 tokens. At Gemini Flash pricing: ~$0.003 per ticker.</p>
+  <p><strong>Estimated per invocation:</strong> ~500 (prompt) + 15,000 (30 news) + 600 (20 8-K entries) + 110 (7 price rows) ≈ <strong>16,230 input tokens</strong>. Output ≈ 500 tokens. At Gemini Flash pricing: ~$0.001 per ticker.</p>
 </section>
 
 <!-- ════════════════════════════════════════════════ LOGGING -->
@@ -1087,7 +1066,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <div class="table-wrap"><table>
     <tr><th>Case</th><th>What to verify</th></tr>
     <tr><td>HTTP request construction</td><td>Correct URL, query params, and API key on every method</td></tr>
-    <tr><td>Response mapping</td><td>Raw FMP fields map correctly to <code>NewsArticle</code>, <code>PressRelease</code>, <code>Filing8K</code>, <code>StockPrice</code></td></tr>
+    <tr><td>Response mapping</td><td>Raw FMP fields map correctly to <code>NewsArticle</code>, <code>Filing8K</code>, <code>StockPrice</code></td></tr>
     <tr><td>8-K client-side filter</td><td>Only records with <code>formType === '8-K'</code> returned from <code>get8Ks</code></td></tr>
     <tr><td>Retry on transient error</td><td>Mock HTTP 429 / 503 → verify <code>retry()</code> attempts again</td></tr>
     <tr><td>No retry on permanent error</td><td>Mock HTTP 404 → verify immediate throw, no retry</td></tr>
@@ -1167,7 +1146,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <tr><th>Field</th><th>Description</th></tr>
     <tr><td><code>input</code></td><td>Full prompt string passed to <code>summarizeNews</code></td></tr>
     <tr><td><code>actual_output</code></td><td>The <code>messageLongSummary</code> produced by the LLM</td></tr>
-    <tr><td><code>context</code></td><td>Source grounding: news articles, press releases, 8-K links</td></tr>
+    <tr><td><code>context</code></td><td>Source grounding: news articles, 8-K links</td></tr>
     <tr><td><code>expected_output</code></td><td>(Optional) Reference summary for comparison metrics</td></tr>
   </table></div>
 
