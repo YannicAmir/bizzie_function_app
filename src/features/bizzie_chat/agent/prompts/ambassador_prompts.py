@@ -41,14 +41,10 @@ def build_ambassador_prompt(
     if not references_different:
         return (
             CONCISE_DIRECTIVE +
-            f"The user is asking about {company_name} ({company_ticker}) but has requested "
-            "investment advice or a price prediction that Bizzie cannot provide. Instead:\n"
-            "1. Acknowledge that Bizzie doesn't give buy/sell/hold recommendations "
-            "or predict future stock prices.\n"
-            f"2. Provide relevant factual context about {company_name} from your training "
-            "knowledge — e.g. recent earnings, key metrics, or business overview. "
-            "IMPORTANT: Do NOT say you cannot access real-time data or that financial data "
-            "is unavailable — provide factual context from your training knowledge regardless.\n"
+            f"The user is asking about {company_name} ({company_ticker}) but has requested investment advice. "
+            "Bizzie does not provide investment advice. Instead:\n"
+            "1. Acknowledge that Bizzie doesn't give buy/sell/hold recommendations.\n"
+            f"2. Provide a factual company overview of {company_name} based on your training knowledge.\n"
             "3. Suggest 3-4 specific financial questions the user could research.\n"
             "End with exactly this disclaimer: "
             '"Note: the company overview above is based on general background knowledge '
@@ -80,9 +76,7 @@ def build_ambassador_prompt(
         "The user is asking about a different company while viewing "
         f"{company_name} ({company_ticker}). Bizzie does not provide investment advice. Instead:\n"
         f"1. Briefly address the question about {ref_name} directly (2-3 sentences) "
-        "using your training knowledge. "
-        "IMPORTANT: Do NOT say you cannot access real-time data — "
-        "provide factual context from your training knowledge.\n"
+        "using your training knowledge.\n"
         f"2. Pivot: 'Since you're viewing {company_name}, here's how they compare...' "
         "using your training knowledge.\n"
         "3. Suggest financial questions covering both companies where relevant.\n"
