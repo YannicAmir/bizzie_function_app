@@ -2,6 +2,10 @@ import { FirestoreService } from '../../../../features/weekly_recap/storage/serv
 import * as admin from 'firebase-admin';
 import type { LLMResponse } from '../../../../features/weekly_recap/storage/models';
 
+jest.mock('../../../../core/retry', () => ({
+    retry: jest.fn((fn: () => unknown) => fn()),
+}));
+
 jest.mock('firebase-admin', () => {
     const mockGet = jest.fn();
     const mockSet = jest.fn();

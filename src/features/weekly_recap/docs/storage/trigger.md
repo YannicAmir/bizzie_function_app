@@ -2,7 +2,9 @@
 
 Cloud Function entry points. Instantiates service dependencies and delegates to the use case. Contains no business logic.
 
-`FirestoreService`, `FmpService`, `AiService`, `EvaluationService`, and `PubSubService` are instantiated once at module scope — the single composition root for all service singletons. `void evaluationService.init()` is called at module scope for cold-start DeepEval setup. `buildGraph` is called at module scope with the service instances, compiling the LangGraph graph once at cold-start. `TOPIC_NAME` is imported from `constants/index.ts` — no string literals in this file. `CONFIDENT_API_KEY` is declared using `defineSecret('CONFIDENT_API_KEY')` from `firebase-functions/params` and bound to `weeklyRecapProcessor` via `secrets: [confidentApiKey]` — Firebase injects it as `process.env.CONFIDENT_API_KEY` at runtime (locally from `.secret.local`, deployed from GCP Secret Manager).
+`FirestoreService`, `FmpService`, `AiService`, `EvaluationService`, and `PubSubService` are instantiated once at module scope — the single composition root for all service singletons. `buildGraph` is called at module scope with the service instances, compiling the LangGraph graph once at cold-start. `TOPIC_NAME` is imported from `constants/index.ts` — no string literals in this file.
+
+`CONFIDENT_API_KEY` and `LANGSMITH_API_KEY` are declared using `defineSecret` from `firebase-functions/params` and bound to `weeklyRecapProcessor` via `secrets: [confidentApiKey, langsmithApiKey]` — Firebase injects them as `process.env` at runtime (locally from `.secret.local`, deployed from GCP Secret Manager). `await evaluationService.init()` is called inside the handler (not at module scope) so the secret is available.
 
 ---
 
@@ -17,8 +19,7 @@ Cloud Function entry points. Instantiates service dependencies and delegates to 
 | Timeout | `60s` |
 
 **Steps:**
-1. Calls `FirestoreService.retrieveCompaniesFromDb()` via `retry()` (`src/core/retry.ts`) — 3 attempts, 1s initial delay, backoff factor 2 (1s → 2s → throw). Per-attempt warn logs are emitted by the retry utility. On final failure, logs an error and re-throws.
-2. Calls `PubSubService.queueCompanies(companies)` once with the full array, which publishes one message per `Company` to the `weekly-recap` topic. Each message payload is `{ ticker: string, companyName: string }`. No dates are included — the week window is calculated by the processor at execution time.
+1. Calls `runScheduler(firestoreService, pubSubService)` from `usecase.ts` — see [usecase.md](usecase.md) for the orchestration detail. On failure, logs an error and re-throws.
 
 ---
 
@@ -30,7 +31,7 @@ Cloud Function entry points. Instantiates service dependencies and delegates to 
 | Topic | `weekly-recap` |
 | Memory | `512MiB` |
 | Timeout | `300s` |
-| Secrets | `CONFIDENT_API_KEY` (via `defineSecret`) |
+| Secrets | `CONFIDENT_API_KEY`, `LANGSMITH_API_KEY` (via `defineSecret`) |
 
 **Steps:**
 1. Reads `event.data.message.messageId` and includes it in all log entries for this invocation so scheduler → processor failures can be correlated.

@@ -74,20 +74,48 @@ weekly_recap/{ticker}/weeks/{weekEndDate}
 
 Each processed ticker should have a document containing `messageTitle`, `messageShortSummary`, `messageLongSummary`, `confidenceScore`, link arrays, count fields, `priceMovement`, and `time`.
 
+**Step 6 — Verify LangSmith traces:**
+
+Open [smith.langchain.com](https://smith.langchain.com) → project `bizzie_dev`. Traces named `LangGraph` should appear for each ticker within a few seconds of the invocation completing.
+
+**Step 7 — Verify Confident AI traces:**
+
+Open [app.confident-ai.com](https://app.confident-ai.com) → project `bizzie-dev` → Tracing. `weeklyRecap-{ticker}` AGENT spans containing `summarizeNews` LLM spans should appear.
+
 ---
 
 ## Option B — Shell Only (No Deploy)
 
 Use this when you want to test the graph logic locally for a single ticker without deploying. The processor is never triggered via Pub/Sub — you invoke it directly with a manually constructed message.
 
-**Step 1 — Start the shell:**
+**Step 1 — Confirm env vars are set in `.env.local`:**
+
+Ensure the following are present:
+```
+LANGCHAIN_CALLBACKS_BACKGROUND=false
+LANGSMITH_API_KEY=<your key for bizzie_dev workspace>
+LANGSMITH_PROJECT=bizzie_dev
+CONFIDENT_API_KEY=<your Confident AI key>
+```
+
+`LANGCHAIN_CALLBACKS_BACKGROUND=false` is required — without it, the LangSmith `patchRun` is dropped in the background p-queue before `awaitAllCallbacks()` flushes, and traces never appear.
+
+Add `LANGSMITH_DEBUG=true` to see HTTP request/response logs (`→ POST .../runs/multipart`, `← 202 Accepted`) confirming traces are being sent.
+
+> **Testing hub prompt pulling locally:** Because `LANGSMITH_API_KEY` is present in `.env.local`, the shell will automatically attempt to pull prompts from LangSmith hub before falling back to the local templates. This means once you have synced prompts to LangSmith (see [Adding Prompts to LangSmith](#adding-prompts-to-langsmith) below), the shell will use the hub version — the same prompt the deployed function uses. To force local templates regardless, temporarily remove or comment out `LANGSMITH_API_KEY` from `.env.local` before starting the shell.
+
+**Step 2 — Start the shell:**
 ```bash
 npm run shell
 ```
 
-**Step 2 — Invoke the processor for one ticker** (paste as a single line):
+**Step 3 — Invoke the processor for one ticker** (paste as a single line):
 ```js
-weeklyRecapProcessor({ data: Buffer.from(JSON.stringify({ ticker: 'AAPL', companyName: 'Apple Inc.' })).toString('base64'), attributes: {} })
+weeklyRecapProcessor({ data: Buffer.from(JSON.stringify({ ticker: 'NVDA', companyName: 'NVIDIA Corporation' })).toString('base64'), attributes: {} })
+
+weeklyRecapProcessor({ data: Buffer.from(JSON.stringify({ ticker: 'FTNT', companyName: 'Fortinet, Inc' })).toString('base64'), attributes: {} })
+
+weeklyRecapProcessor({ data: Buffer.from(JSON.stringify({ ticker: 'INTU', companyName: 'Intuit Inc' })).toString('base64'), attributes: {} })
 ```
 
 > Note: for `onMessagePublished` v2, the shell expects the raw Pub/Sub message fields directly — it wraps them into the CloudEvent envelope itself. Do not nest inside `data.message`.
@@ -95,9 +123,17 @@ weeklyRecapProcessor({ data: Buffer.from(JSON.stringify({ ticker: 'AAPL', compan
 
 Pick any ticker from the dev watchlist (e.g. `AAPL`, `MSFT`, `GOOG`). The processor only needs `ticker` and `companyName` as seed inputs.
 
-**Step 3 — Verify the result in Firestore:**
+**Step 4 — Verify the result in Firestore:**
 
 Same as Option A — check `weekly_recap/{ticker}/weeks/{weekEndDate}` in `bizzie-dev-7199b`.
+
+**Step 5 — Verify LangSmith trace:**
+
+Open [smith.langchain.com](https://smith.langchain.com) → project `bizzie_dev`. A new trace named `LangGraph` should appear within a few seconds of the invocation completing. The trace shows the LLM call duration, token counts, inputs, and outputs.
+
+**Step 6 — Verify Confident AI trace:**
+
+Open [app.confident-ai.com](https://app.confident-ai.com) and navigate to the `bizzie-dev` project → Tracing. A new `weeklyRecap-{ticker}` AGENT span containing a `summarizeNews` LLM span should appear. This confirms DeepEval observation is wired correctly.
 
 ---
 
@@ -134,3 +170,21 @@ A successful run produces this sequence per ticker:
 If schema validation fails, you will see per-field `[ERROR]` lines instead of `"Schema valid"`. The graph routes to END and the message is acknowledged without retry.
 
 If the Firestore write fails transiently, the retry utility logs `[WARN]` for each attempt before the node logs `[ERROR]` on final exhaustion and re-throws to Pub/Sub.
+
+---
+
+## Adding Prompts to LangSmith
+
+LangSmith Prompt Hub is a version-controlled store for your LLM prompts. Once a prompt is synced there, the deployed function pulls the latest version at runtime — you can edit a prompt and see the change live without redeploying. This section walks through syncing from scratch.
+
+### What "syncing" means
+
+The prompts live as TypeScript string constants in `src/features/weekly_recap/storage/prompts/storage_prompts.ts`. Syncing reads those constants and pushes them to LangSmith hub under a derived name:
+
+| Constant | Hub name |
+|---|---|
+| `SUMMARIZE_NEWS_SYSTEM_PROMPT` | `summarize-news-system-prompt` |
+| `SUMMARIZE_NEWS_USER_TEMPLATE` | `summarize-news-user-template` |
+
+After syncing, every deployed environment that has `LANGSMITH_API_KEY` set will pull from the hub instead of using the local file. The local file always remains the fallback — it is never deleted.
+

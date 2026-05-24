@@ -39,7 +39,7 @@ weeklyRecapProcessor  [trigger.ts]
   [calculateWeekWindow]      ── [usecase.ts]         → { startDate, endDate }
   [fetchMarketData]          ── [fmp_service.ts]     → news, filings, prices (Promise.allSettled)
   [calculateDeterministicFields]                     → counts, priceMovement
-  [summarizeNews]            ── [ai_service.ts]      → llmPartial (Vertex AI / Gemini, traceCallback inline)
+  [summarizeNews]            ── [ai_service.ts]      → llmPartial (ChatVertexAI + LangChainTracer + DeepEval observe)
   [validateSchema]           ── pure TypeScript      → valid? continue : END
   [assembleResponse]                                 → llmResponse
   [postProcessResponse]      ── [ai_service.ts]      → sanitized llmResponse
@@ -77,6 +77,8 @@ src/features/weekly_recap/
     │   ├── assembleResponse.ts
     │   ├── postProcessResponse.ts
     │   └── storeSummary.ts
+    ├── prompts/
+    │   └── storage_prompts.ts              # SUMMARIZE_NEWS_SYSTEM_PROMPT + SUMMARIZE_NEWS_USER_TEMPLATE
     └── services/
         ├── ai_service.ts
         ├── evaluation_service.ts
@@ -99,6 +101,7 @@ src/features/weekly_recap/
 | [fmp-service.md](fmp-service.md) | `storage/services/fmp_service.ts` | FMP API calls |
 | [ai-service.md](ai-service.md) | `storage/services/ai_service.ts` | LLM summarization and post-processing |
 | [evaluation-service.md](evaluation-service.md) | `storage/services/evaluation_service.ts` | Confident AI / DeepEval tracing |
+| [evaluation.md](evaluation.md) | — | LangSmith + Confident AI observability overview; platform metric collection setup |
 | [langgraph.md](langgraph.md) | `storage/usecase.ts` + `storage/nodes/` | LangGraph state, node pattern, graph construction, conditional routing |
 | [tech-stack.md](tech-stack.md) | — | Technologies, retry strategy, token budget, environment pattern |
 | [logging.md](logging.md) | all files | Logging spec: what to log, where, and at what level |

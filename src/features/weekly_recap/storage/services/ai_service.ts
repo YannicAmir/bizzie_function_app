@@ -1,153 +1,174 @@
-import { observe, SpanType } from 'deepeval/tracing';
-import { getGeminiModel } from '../../../../core/vertex-ai';
+import { observe, SpanType, updateCurrentSpan } from 'deepeval/tracing';
+import { ChatVertexAI } from '@langchain/google-vertexai';
+import type { BaseMessage } from '@langchain/core/messages';
+import { LangChainTracer } from '@langchain/core/tracers/tracer_langchain';
 import { getRemoteConfig } from '../../../../core/remote-config';
 import { Logger } from '../../../../core/logger';
 import { retry } from '../../../../core/retry';
+import { loadChatPrompt } from '../../../../core/prompts';
 import type { LLMResponse, SummarizeNewsInput } from '../models';
-import { isRetryableLlmError, truncateToTokens, stripMarkdown, isValidLLMPartial } from '../helpers/llm';
+import { isRetryableLlmError, stripMarkdown, isValidLLMPartial } from '../helpers/llm';
 import type { EvaluationService } from './evaluation_service';
+import { SUMMARIZE_NEWS_SYSTEM_PROMPT, SUMMARIZE_NEWS_USER_TEMPLATE } from '../prompts/storage_prompts';
 
 const logger = new Logger('WeeklyRecap/Storage/AiService');
+const MAX_PUSH_TITLE_LENGTH = 50;
+const MAX_LOG_PREVIEW_LENGTH = 200;
+const LLM_RETRY_MAX_ATTEMPTS = 3;
+const LLM_RETRY_INITIAL_DELAY_MS = 2000;
+const LLM_RETRY_BACKOFF_FACTOR = 2;
+const LLM_RETRY_MAX_DELAY_MS = 30_000;
 
-export const SUMMARIZE_NEWS_PROMPT = `You are a financial analyst writing a concise weekly market summary for retail investors.
+const RESPONSE_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    messageTitle:        { type: 'string' as const },
+    messageShortSummary: { type: 'string' as const },
+    messageLongSummary:  { type: 'string' as const },
+    confidenceScore:     { type: 'integer' as const },
+    newsLinks:           { type: 'array' as const, items: { type: 'string' as const } },
+    eightKLinks:         { type: 'array' as const, items: { type: 'string' as const } },
+  },
+  required: ['messageTitle', 'messageShortSummary', 'messageLongSummary', 'confidenceScore', 'newsLinks', 'eightKLinks'],
+};
 
-Ticker: {ticker}
-Company: {companyName}
-Week: {startDate} to {endDate}
+function buildContextTexts(input: SummarizeNewsInput): { newsText: string; filingsText: string; pricesText: string } {
+  const newsText =
+    input.news
+      .map((n) => `Title: ${n.title}\nDate: ${n.publishedDate}\nURL: ${n.url}\n${n.text}`)
+      .join('\n\n') || '(none)';
 
-## Price Movement
-Start price: {startPrice}
-End price: {endPrice}
-Price change: {priceChange}
-Price change %: {priceChangePercent}
+  const filingsText =
+    input.filings
+      .map((f) => `Title: ${f.title}\nDate: ${f.filingDate}\nForm: ${f.formType}\nLink: ${f.link}\nFinalLink: ${f.finalLink}`)
+      .join('\n\n') || '(none)';
 
-## News Articles
-{news}
+  const pricesText =
+    input.prices.map((p) => `Date: ${p.date}, Price: ${p.price}, Volume: ${p.volume}`).join('\n') || '(none)';
 
-## SEC 8-K Filings
-{filings}
+  return { newsText, filingsText, pricesText };
+}
 
-## Historical Prices (EOD)
-{prices}
+async function invokeModel(
+  model: ChatVertexAI,
+  messages: BaseMessage[],
+  ticker: string,
+  context: { newsText: string; filingsText: string },
+  evaluation: EvaluationService | undefined,
+): Promise<Partial<LLMResponse>> {
+  const runGenerate = async (msgs: BaseMessage[]) => {
+    const response = await model.invoke(msgs, { callbacks: [new LangChainTracer()] });
+    const text = typeof response.content === 'string' ? response.content : '';
+    if (evaluation?.isInitialized) {
+      updateCurrentSpan({
+        retrievalContext: [context.newsText, context.filingsText].filter((s) => s !== '(none)'),
+        output: text,
+      });
+    }
+    const usage = response.usage_metadata as { input_tokens?: number; output_tokens?: number; total_tokens?: number } | undefined;
+    if (usage) {
+      logger.info('Token usage', {
+        promptTokenCount: usage.input_tokens,
+        candidatesTokenCount: usage.output_tokens,
+        totalTokenCount: usage.total_tokens,
+      });
+    }
+    return text;
+  };
 
-## Instructions
-Return a JSON object with ONLY the following fields:
-- messageTitle: string — headline ≤ 50 characters, must fit an Apple push notification title
-- messageShortSummary: string — 2–3 sentences, ≤ 150 characters, must be fully visible in an Apple push notification body
-- messageLongSummary: string — concise and catchy narrative for an engaged reader; no hard character limit but keep it tight
-- confidenceScore: integer — your self-assessed confidence score from 0 to 100
-- newsLinks: string[] — URLs from the news articles provided
-- eightKLinks: string[] — finalLink URLs from the 8-K filings provided
+  const text = await (evaluation?.isInitialized
+    ? observe({ type: SpanType.LLM, name: 'summarizeNews', model: model.modelName, metricCollection: 'weekly-recap-summary', fn: runGenerate })(messages)
+    : runGenerate(messages));
 
-CRITICAL RULES:
-1. NEVER imply or state that price changes were caused by any particular news item or filing. Causation is never stated.
-2. If any source data is missing or sparse, omit that aspect entirely — do not fabricate or speculate.
-3. Price movement and news/filings are summarized separately within the same output.
-4. messageTitle MUST be ≤ 50 characters.
-5. messageShortSummary MUST be ≤ 150 characters.
+  if (!text) {
+    logger.warn(`LLM returned empty response for ${ticker}`);
+    throw new Error('Empty LLM response');
+  }
 
-Return ONLY valid JSON. No markdown fences. No explanatory text.`;
+  logger.debug('Raw LLM response', { text });
+
+  let parsed: Partial<LLMResponse>;
+  try {
+    parsed = JSON.parse(text) as Partial<LLMResponse>;
+  } catch {
+    logger.warn(`LLM returned invalid JSON for ${ticker}`, { preview: text.slice(0, MAX_LOG_PREVIEW_LENGTH) });
+    throw new Error('Invalid LLM JSON response');
+  }
+
+  if (!isValidLLMPartial(parsed)) {
+    logger.warn(`LLM returned invalid schema for ${ticker}`, { parsed });
+    throw new Error('Invalid LLM response schema');
+  }
+
+  return parsed;
+}
 
 export class AiService {
+  private cachedModel?: ChatVertexAI;
+
   constructor(private readonly evaluation?: EvaluationService) {}
 
+  private async getModel(): Promise<ChatVertexAI> {
+    if (!this.cachedModel) {
+      const appConfig = await getRemoteConfig();
+      this.cachedModel = new ChatVertexAI({
+        model: appConfig.weekly_recap.model,
+        responseMimeType: 'application/json',
+        responseSchema: RESPONSE_SCHEMA,
+        endpoint: 'aiplatform.googleapis.com',
+      });
+    }
+    return this.cachedModel;
+  }
+
   async summarizeNews(input: SummarizeNewsInput): Promise<Partial<LLMResponse>> {
-    const { ticker, companyName, news, filings, prices, priceMovement, startDate, endDate } = input;
-
-    const appConfig = await getRemoteConfig();
-    const modelName = appConfig.weekly_recap.model;
-
-    const newsText =
-      news
-        .map((n) => `Title: ${n.title}\nDate: ${n.publishedDate}\nURL: ${n.url}\n${truncateToTokens(n.text, 500)}`)
-        .join('\n\n') || '(none)';
-
-    const filingsText =
-      filings
-        .map((f) => `Title: ${f.title}\nDate: ${f.filingDate}\nForm: ${f.formType}\nLink: ${f.link}\nFinalLink: ${f.finalLink}`)
-        .join('\n\n') || '(none)';
-
-    const pricesText =
-      prices.map((p) => `Date: ${p.date}, Price: ${p.price}, Volume: ${p.volume}`).join('\n') || '(none)';
-
-    const prompt = SUMMARIZE_NEWS_PROMPT
-      .replace('{ticker}', ticker)
-      .replace('{companyName}', companyName)
-      .replace('{startDate}', startDate)
-      .replace('{endDate}', endDate)
-      .replace('{startPrice}', priceMovement.startPrice !== null ? String(priceMovement.startPrice) : 'N/A')
-      .replace('{endPrice}', priceMovement.endPrice !== null ? String(priceMovement.endPrice) : 'N/A')
-      .replace('{priceChange}', priceMovement.priceChange !== null ? String(priceMovement.priceChange) : 'N/A')
-      .replace('{priceChangePercent}', priceMovement.priceChangePercent !== null ? String(priceMovement.priceChangePercent) : 'N/A')
-      .replace('{news}', newsText)
-      .replace('{filings}', filingsText)
-      .replace('{prices}', pricesText);
-
-    logger.debug('Sending prompt to LLM', { prompt });
-
-    const model = getGeminiModel(modelName);
+    const { ticker, companyName, startDate, endDate, priceMovement } = input;
+    const model = await this.getModel();
+    const { newsText, filingsText, pricesText } = buildContextTexts(input);
     const evaluation = this.evaluation;
 
-    const startTime = Date.now();
+    const runSummarize = async () => {
+      const messages = await loadChatPrompt(
+        'summarize-news-prompt',
+        SUMMARIZE_NEWS_SYSTEM_PROMPT,
+        SUMMARIZE_NEWS_USER_TEMPLATE,
+        {
+          ticker, companyName, startDate, endDate,
+          startPrice: priceMovement.startPrice !== null ? String(priceMovement.startPrice) : 'N/A',
+          endPrice: priceMovement.endPrice !== null ? String(priceMovement.endPrice) : 'N/A',
+          priceChange: priceMovement.priceChange !== null ? String(priceMovement.priceChange) : 'N/A',
+          priceChangePercent: priceMovement.priceChangePercent !== null ? String(priceMovement.priceChangePercent) : 'N/A',
+          news: newsText, filings: filingsText, prices: pricesText,
+        },
+      );
+      logger.debug('Sending prompt to LLM', { messages });
+      const startTime = Date.now();
+      const result = await retry(
+        () => invokeModel(model, messages, ticker, { newsText, filingsText }, evaluation),
+        {
+          maxAttempts: LLM_RETRY_MAX_ATTEMPTS,
+          initialDelayMs: LLM_RETRY_INITIAL_DELAY_MS,
+          backoffFactor: LLM_RETRY_BACKOFF_FACTOR,
+          maxDelayMs: LLM_RETRY_MAX_DELAY_MS,
+          shouldRetry: isRetryableLlmError,
+        },
+      );
+      const durationMs = Date.now() - startTime;
+      logger.info(`LLM summary generated for ${ticker} in ${durationMs}ms`, { modelName: model.modelName });
+      return result;
+    };
 
-    const result = await retry(
-      async () => {
-        const runGenerate = () =>
-          model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json' },
-          });
-
-        const response = await (evaluation?.isInitialized
-          ? observe({ type: SpanType.LLM, name: 'summarizeNews', model: modelName, fn: runGenerate })()
-          : runGenerate());
-
-        const text = response.response.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) {
-          logger.warn(`LLM returned empty response for ${ticker}`);
-          throw new Error('Empty LLM response');
-        }
-
-        logger.debug('Raw LLM response', { text });
-
-        const usage = response.response.usageMetadata;
-        if (usage) {
-          logger.info('Token usage', {
-            promptTokenCount: usage.promptTokenCount,
-            candidatesTokenCount: usage.candidatesTokenCount,
-            totalTokenCount: usage.totalTokenCount,
-          });
-        }
-
-        const parsed = JSON.parse(text) as Partial<LLMResponse>;
-        if (!isValidLLMPartial(parsed)) {
-          logger.warn(`LLM returned invalid schema for ${ticker}`, { parsed });
-          throw new Error('Invalid LLM response schema');
-        }
-
-        return parsed;
-      },
-      {
-        maxAttempts: 3,
-        initialDelayMs: 2000,
-        backoffFactor: 2,
-        maxDelayMs: 30000,
-        shouldRetry: isRetryableLlmError,
-      },
-    );
-
-    const durationMs = Date.now() - startTime;
-    logger.info(`LLM summary generated for ${ticker} in ${durationMs}ms`, { modelName });
-
-    return result;
+    return evaluation?.isInitialized
+      ? observe({ type: SpanType.AGENT, name: `weeklyRecap-${ticker}`, fn: runSummarize })()
+      : runSummarize();
   }
 
   postProcessLlmSummary(response: LLMResponse): LLMResponse {
     const originalTitleLength = response.messageTitle.length;
-    const truncatedTitle = response.messageTitle.slice(0, 50);
+    const truncatedTitle = response.messageTitle.slice(0, MAX_PUSH_TITLE_LENGTH);
 
-    if (originalTitleLength > 50) {
-      logger.info(`messageTitle truncated for ${response.ticker}: ${originalTitleLength} → 50 chars`);
+    if (originalTitleLength > MAX_PUSH_TITLE_LENGTH) {
+      logger.info(`messageTitle truncated for ${response.ticker}: ${originalTitleLength} → ${MAX_PUSH_TITLE_LENGTH} chars`);
     }
 
     const shortSummary = stripMarkdown(response.messageShortSummary.trim());

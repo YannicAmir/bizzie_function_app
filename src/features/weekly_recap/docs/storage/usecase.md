@@ -1,6 +1,16 @@
 # usecase.ts
 
-Orchestrates the per-ticker processing pipeline using a **LangGraph** state graph. Exports `buildGraph(fmp, ai, db)` — called once at cold-start by `trigger.ts`, which owns all service instantiation. `EvaluationService` is injected directly into `AiService` at construction time, so it does not appear as a `buildGraph` parameter. Model types are sourced directly from `models/` by each consumer.
+Orchestrates both pipeline paths. Exports `buildGraph(fmp, ai, db)` — called once at cold-start by `trigger.ts` for the per-ticker processor path — and `runScheduler(db, pubSub)` — called by `weeklyRecapScheduler` for the fan-out path. `trigger.ts` owns all service instantiation; `usecase.ts` owns orchestration logic only. `EvaluationService` is injected directly into `AiService` at construction time, so it does not appear as a `buildGraph` parameter. Model types are sourced directly from `models/` by each consumer.
+
+---
+
+## runScheduler(db, pubSub)
+
+Fan-out orchestrator for `weeklyRecapScheduler`. Called directly by the trigger — no LangGraph involved.
+
+1. Calls `FirestoreService.retrieveCompaniesFromDb()` — internally retried up to 3 times (1s → 2s → throw).
+2. Calls `PubSubService.queueCompanies(companies)` — publishes one message per `Company` to the `weekly-recap` topic. Each payload is `{ ticker: string, companyName: string }`. No dates — the week window is calculated by the processor at execution time. Per-company publish failures are caught and skipped inside `queueCompanies`.
+3. Returns `{ companiesCount, published }` — the trigger logs these counts.
 
 ---
 

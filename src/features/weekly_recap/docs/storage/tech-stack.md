@@ -11,17 +11,21 @@
 | Scheduling | Google Cloud Scheduler |
 | Message queue | Google Cloud Pub/Sub — topic: `weekly-recap` |
 | Database | Google Cloud Firestore |
-| LLM | Google Vertex AI — Gemini (model resolved from Firebase Remote Config) |
+| LLM | Google Vertex AI — Gemini via `ChatVertexAI` from `@langchain/google-vertexai` (model from Firebase Remote Config) |
+| LLM client | `@langchain/google-vertexai` — `ChatVertexAI` with `responseMimeType: 'application/json'`, `responseSchema` (enforces JSON output shape at the Vertex AI level), and `endpoint: 'aiplatform.googleapis.com'` |
+| Prompt management | LangSmith Prompt Hub — `summarize-news-prompt` stored as a `ChatPromptTemplate` (system + human). Pulled at runtime via `loadChatPrompt()` in `src/core/prompts.ts`; falls back to local constants in `prompts/storage_prompts.ts` if the hub is unavailable. Enables prompt iteration without a redeploy. |
+| Prompt loading utility | `src/core/prompts.ts` — `loadPrompt()` (string prompts) and `loadChatPrompt()` (chat prompt pairs). Uses `pullPromptCommit` from the LangSmith SDK and parses `manifest.kwargs` directly to extract templates, bypassing LangChain `load()` deserialization. |
 | Orchestration | LangGraph — state graph per ticker invocation, typed `WeeklyRecapState` |
-| Market data | Financial Modeling Prep (FMP) REST API — v3, v4, stable endpoints |
-| LLM evaluation | Confident AI / DeepEval — LLM-as-Judge tracing via `deepeval` |
-| Prompt versioning | LangSmith — prompts versioned in Confident AI; local interpolation during dev |
-| Secrets | GCP Secret Manager — `CONFIDENT_API_KEY`, `FMP_API_KEY`, `LANGSMITH_API_KEY` etc. |
+| Market data | Financial Modeling Prep (FMP) REST API — stable endpoint |
+| LLM tracing | LangSmith — runtime tracing via `LangChainTracer` callback; traces appear in `bizzie_dev` project at `smith.langchain.com` |
+| LLM evaluation | Confident AI / DeepEval — LLM-as-Judge evaluation in CI/CD; runtime observability via `traceManager.configure` from `deepeval/tracing` |
+| Secrets | GCP Secret Manager — `CONFIDENT_API_KEY`, `FMP_API_KEY`, `LANGSMITH_API_KEY` |
 | Retry / backoff | `src/core/retry.ts` — exponential backoff, configurable per call site |
 | Logging | `src/core/logger.ts` — structured wrapper over `firebase-functions/logger` |
 | Config | `src/core/remote-config.ts` — Firebase Remote Config (model names, FMP URLs) |
 | Env vars | `src/core/config.ts` — `GCLOUD_PROJECT`, `LOCATION` |
 | Error types | `src/core/errors.ts` — `AppError` with `code`, `status`, `retryAfterSeconds` |
+| LangSmith env | `LANGCHAIN_TRACING_V2=true`, `LANGCHAIN_CALLBACKS_BACKGROUND=false` — both required in `.env` (prod) and `.env.local` (dev); without `LANGCHAIN_CALLBACKS_BACKGROUND=false`, `patchRun` is dropped in the background p-queue before `awaitAllCallbacks()` can flush it, causing traces to never appear in LangSmith |
 
 ---
 
@@ -61,28 +65,32 @@ Bizzie runs three fully isolated environments — **dev**, **qa**, and **prod** 
 | Secrets fetched at cold-start | Each secret is fetched once per function instance via `@google-cloud/secret-manager` and cached for the lifetime of the instance |
 | API keys are never in Remote Config or env vars | Remote Config holds non-sensitive config (URLs, model names, feature flags); Secret Manager holds all credentials |
 
-**Accessing a secret (standard pattern across all features):**
+**Accessing a secret in Firebase Functions (pattern used in this feature):**
 ```typescript
-import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
-const client = new SecretManagerServiceClient();
+// trigger.ts — declare at module scope
+const confidentApiKey = defineSecret('CONFIDENT_API_KEY');
+const langsmithApiKey = defineSecret('LANGSMITH_API_KEY');
 
-async function getSecret(name: string): Promise<string> {
-  const [version] = await client.accessSecretVersion({
-    name: `projects/${config.projectId}/secrets/${name}/versions/latest`,
-  });
-  return version.payload!.data!.toString();
-}
+// bind to the function that needs the secrets
+export const weeklyRecapProcessor = onMessagePublished({
+  secrets: [confidentApiKey, langsmithApiKey],
+  // ...
+}, async (event) => {
+  // secrets available as process.env inside the handler
+  process.env.CONFIDENT_API_KEY  // injected by Firebase
+  process.env.LANGSMITH_API_KEY  // injected by Firebase
+});
 ```
 
 ---
 
 ## Token Budget
 
-Text content from FMP (news `text`, press release `text`) is truncated per item before the prompt is assembled. 8-K data is metadata only (no full document fetched). Stock prices are a handful of rows and need no truncation.
+News text is truncated per item in the `summarizeNews` LangGraph node (`truncateToTokens(n.text, 500)` from `helpers/llm.ts`) before `AiService.summarizeNews` is called. The `truncateToTokens` helper still exists in `helpers/llm.ts` but is no longer called inside `ai_service.ts` — truncation happens exclusively in `nodes/summarizeNews.ts` upstream. 8-K data is metadata only. Stock prices are a handful of rows and need no truncation.
 
-| Input | Limit | Rationale |
+| Input | Limit | Where truncation happens |
 |---|---|---|
-| News article text | 500 tokens (~375 words) | Captures headline + key facts; tail of long articles is rarely material |
+| News article text | 500 tokens (~375 words) | `nodes/summarizeNews.ts` — `truncateToTokens` applied before `AiService.summarizeNews` |
 | 8-K entry | No truncation | Metadata only: title, date, two URLs — ~30 tokens per entry |
 | Stock price entry | No truncation | Three fields per trading day — ~15 tokens per entry |
 
@@ -94,7 +102,11 @@ Text content from FMP (news `text`, press release `text`) is truncated per item 
 
 | Decision | Resolution |
 |---|---|
-| DeepEval tracing placement | Tracing is inline inside the `summarizeNews` node via `EvaluationService.wrapCall`, which wraps the live `AiService.summarizeNews` call with `traceCallback`. No separate `evaluateSummary` node. Confident AI receives traces automatically — no separate queue needed. |
+| LLM client | Switched from `@google-cloud/vertexai` native SDK (`getGeminiModel`) to `@langchain/google-vertexai` (`ChatVertexAI`). Enables `LangChainTracer` callback for automatic LangSmith tracing without a separate tracing layer. |
+| LangSmith tracing | `LangChainTracer` is passed as a callback on every `model.invoke(...)` call. Traces appear in `smith.langchain.com` under `bizzie_dev`. `LANGSMITH_API_KEY` stored in GCP Secret Manager, injected via `defineSecret('LANGSMITH_API_KEY')`. `LANGCHAIN_TRACING_V2=true` must be set in `.env` and `.env.local`. |
+| `LANGCHAIN_TRACING_V2=true` | Must be exactly the string `"true"` in `.env` (deployed) and `.env.local` (local dev) to enable LangSmith tracing via `@langchain/core`. |
+| `LANGCHAIN_CALLBACKS_BACKGROUND=false` | Required in `.env` (deployed) and `.env.local` (local dev) to prevent LangSmith's `patchRun` from being dropped in the serverless p-queue. Without this, traces are created but never updated with outputs. |
+| DeepEval tracing placement | `observe` spans are placed in `AiService`: AGENT-level wraps `runSummarize` (full retry loop), LLM-level wraps each `runGenerate` call. No separate `evaluateSummary` node. Confident AI receives traces automatically. |
 | LLM evaluation metrics | Configured in the Confident AI dashboard per project, not in code. DeepEval SDK sends trace data; metric definition, scoring, and LLM-as-Judge are managed on the Confident AI platform. See [evaluation.md](evaluation.md). |
 | Remote Config model key | `weekly_recap_model` (dedicated key, already added to dev/qa/prod Remote Config). Default: `gemini-3-flash-preview`. |
 | Dead-letter topic setup | Required before going to production. See [dead-letter-setup.md](dead-letter-setup.md) for step-by-step instructions. |

@@ -1,8 +1,8 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onMessagePublished } from 'firebase-functions/v2/pubsub';
 import { defineSecret } from 'firebase-functions/params';
+import { awaitAllCallbacks } from '@langchain/core/callbacks/promises';
 import { Logger } from '../../../core/logger';
-import { retry } from '../../../core/retry';
 import { FirestoreService } from './services/firestore_service';
 import { FmpService } from './services/fmp_service';
 import { AiService } from './services/ai_service';
@@ -10,9 +10,12 @@ import { EvaluationService } from './services/evaluation_service';
 import { PubSubService } from './services/pubsub_service';
 import type { Company } from './models';
 import { TOPIC_NAME } from './constants';
-import { buildGraph } from './usecase';
+import { buildGraph, runScheduler } from './usecase';
+
+const WEEKLY_RECAP_SCHEDULE = '0 16 * * 5'; // Every Friday at 4 PM ET
 
 const confidentApiKey = defineSecret('CONFIDENT_API_KEY');
+const langsmithApiKey = defineSecret('LANGSMITH_API_KEY');
 
 const logger = new Logger('WeeklyRecap/Storage/Trigger');
 const firestoreService = new FirestoreService();
@@ -25,7 +28,7 @@ const graph = buildGraph(fmpService, aiService, firestoreService);
 
 export const weeklyRecapScheduler = onSchedule(
   {
-    schedule: '0 16 * * 5',
+    schedule: WEEKLY_RECAP_SCHEDULE,
     timeZone: 'America/New_York',
     memory: '256MiB',
     timeoutSeconds: 60,
@@ -33,30 +36,21 @@ export const weeklyRecapScheduler = onSchedule(
   async () => {
     logger.info('Scheduler started');
 
-    let companies: Company[];
+    let companiesCount: number;
+    let published: number;
     try {
-      companies = await retry(() => firestoreService.retrieveCompaniesFromDb(), {
-        maxAttempts: 3,
-        initialDelayMs: 1000,
-        backoffFactor: 2,
-      });
+      ({ companiesCount, published } = await runScheduler(firestoreService, pubSubService));
     } catch (err) {
-      logger.error('Watchlist fetch exhausted retries — aborting', { err });
+      logger.error('Scheduler failed — aborting', { err });
       throw err;
     }
 
-    logger.info(`Loaded ${companies.length} companies from watchlist`);
-
-    if (companies.length === 0) {
+    if (companiesCount === 0) {
       logger.warn('Watchlist is empty — nothing to process');
       return;
     }
 
-    const startMs = Date.now();
-    const published = await pubSubService.queueCompanies(companies);
-    const durationMs = Date.now() - startMs;
-
-    logger.info(`Queued ${published}/${companies.length} Pub/Sub messages in ${durationMs}ms`);
+    logger.info(`Queued ${published}/${companiesCount} Pub/Sub messages`);
   },
 );
 
@@ -66,7 +60,7 @@ export const weeklyRecapProcessor = onMessagePublished(
     retry: true,
     memory: '512MiB',
     timeoutSeconds: 300,
-    secrets: [confidentApiKey],
+    secrets: [confidentApiKey, langsmithApiKey],
   },
   async (event) => {
     const messageId = event.data.message.messageId;
@@ -94,6 +88,8 @@ export const weeklyRecapProcessor = onMessagePublished(
     } catch (err) {
       logger.error(`Graph execution failed for ${ticker} (${companyName})`, { messageId, err });
       throw err;
+    } finally {
+      await awaitAllCallbacks();
     }
   },
 );

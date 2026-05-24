@@ -20,13 +20,13 @@ describe('calculateWeekWindowNode', () => {
         const result = await node({} as never);
 
         // Assert
-        expect(result.endDate).toBe(FIXED_NOW.toISOString());
+        expect(result.endDate).toBe('2026-05-15');
     });
 
     it('calculateWeekWindowNode_called_returnsStartDateSevenDaysBeforeNow', async () => {
         // Arrange
         const node = makeCalculateWeekWindowNode();
-        const expectedStart = new Date('2026-05-08T12:00:00.000Z').toISOString();
+        const expectedStart = '2026-05-08';
 
         // Act
         const result = await node({} as never);

@@ -2,7 +2,7 @@
 
 ## Why LangGraph
 
-Each Pub/Sub message triggers one `weeklyRecapProcessor` invocation. The pipeline has 9 discrete steps with typed data flowing between them, a conditional branch on schema validation, and a fire-and-forget terminal node. LangGraph models this as a compiled state graph — steps are explicit nodes, routing is declared, and state is typed end-to-end. This makes the execution path inspectable, individually testable, and straightforward to extend.
+Each Pub/Sub message triggers one `weeklyRecapProcessor` invocation. The pipeline has 8 discrete steps with typed data flowing between them and a conditional branch on schema validation. LangGraph models this as a compiled state graph — steps are explicit nodes, routing is declared, and state is typed end-to-end. This makes the execution path inspectable, individually testable, and straightforward to extend.
 
 ---
 

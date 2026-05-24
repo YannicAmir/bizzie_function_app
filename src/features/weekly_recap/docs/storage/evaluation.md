@@ -1,96 +1,85 @@
 # Evaluation
 
-LLM output quality is evaluated via **Confident AI / DeepEval** using a dataset-based approach. Evaluation runs in the CI/CD pipeline — it is completely outside the runtime request path.
+LLM output quality is evaluated via **Confident AI / DeepEval**. Metrics are configured in the Confident AI platform dashboard and scored automatically whenever DeepEval runtime spans are sent from the application. Runtime LLM call tracing (latency, tokens, I/O) is handled separately by **LangSmith** via a `LangChainTracer` callback.
 
 ---
 
-## Approach
+## Observability Overview
 
-Test cases and golden datasets are maintained in the Confident AI dashboard. `deepeval run` executes evaluations in CI/CD after each deployment, pulling datasets from Confident AI, scoring outputs, and reporting results back to the dashboard.
-
-| Concern | Where it lives |
-|---|---|
-| Per-ticker processing | Runtime — `weeklyRecapProcessor` writes summaries to Firestore |
-| LLM output quality | CI/CD — `deepeval run` against Confident AI datasets |
-| Schema correctness | Runtime — `validateSchema` LangGraph node (pure TypeScript) |
-| Service correctness | CI/CD — Jest unit tests (see [testing.md](testing.md)) |
-
----
-
-## Dataset Management
-
-Datasets are created and maintained in the **Confident AI dashboard** under the `weekly-recap` project (one project per environment: dev / qa / prod).
-
-Each test case contains:
-
-| Field | Description |
-|---|---|
-| `input` | Full prompt string passed to `summarizeNews` |
-| `actual_output` | The `messageLongSummary` produced by the LLM |
-| `context` | Source grounding: news articles, 8-K links |
-| `expected_output` | (Optional) Reference summary for comparison metrics |
-
-Datasets are versioned in Confident AI (e.g. `weekly-recap-v1`). Create a new dataset version when the prompt template changes, new source data types are added, or evaluation criteria are revised.
-
----
-
-## Metrics Evaluated
-
-| Metric | DeepEval class | What it checks |
+| Concern | Tool | Where |
 |---|---|---|
-| Answer relevancy | `AnswerRelevancyMetric` | Summary content is germane to the ticker and week window |
-| Faithfulness | `FaithfulnessMetric` | Claims are grounded in the provided source documents |
-| Hallucination | `HallucinationMetric` | No fabricated names, events, dates, or figures |
-
-Thresholds and LLM-as-Judge model are configured per dataset in the Confident AI dashboard — not hardcoded in test files.
-
----
-
-## Test Files
-
-Evaluation tests live in `tests/evaluation/` and use the Python `deepeval` framework — separate from the TypeScript Jest unit tests:
-
-```
-tests/
-└── evaluation/
-    ├── conftest.py
-    └── test_weekly_recap_summary.py
-```
-
-Example test structure:
-
-```python
-import pytest
-from deepeval import assert_test
-from deepeval.dataset import EvaluationDataset
-from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, HallucinationMetric
-
-dataset = EvaluationDataset()
-dataset.pull(alias="weekly-recap-v1")  # pulls from Confident AI
-
-@pytest.mark.parametrize("test_case", dataset.test_cases)
-def test_weekly_recap_summary(test_case):
-    assert_test(test_case, [
-        AnswerRelevancyMetric(threshold=0.7),
-        FaithfulnessMetric(threshold=0.8),
-        HallucinationMetric(threshold=0.5),
-    ])
-```
+| Per-ticker processing | — | Runtime — `weeklyRecapProcessor` writes summaries to Firestore |
+| LLM call tracing (latency, tokens, I/O) | **LangSmith** | Runtime — `LangChainTracer` callback on every `model.invoke()` |
+| LLM quality evaluation (faithfulness, relevancy, summarization) | **Confident AI / DeepEval** | Runtime — `observe` spans sent from `AiService`; metrics scored on Confident AI platform |
+| Schema correctness | — | Runtime — `validateSchema` LangGraph node (pure TypeScript) |
+| Service correctness | — | CI/CD — Jest unit tests (see [testing.md](testing.md)) |
 
 ---
 
-## CI/CD Integration
+## LangSmith Runtime Tracing
 
-`deepeval run` executes after a successful deployment to each environment:
+Every `model.invoke()` call in `AiService.invokeModel` passes `new LangChainTracer()` as an explicit callback:
 
-```yaml
-- name: Run LLM evaluation
-  run: deepeval run tests/evaluation/
-  env:
-    CONFIDENT_API_KEY: ${{ secrets.CONFIDENT_API_KEY }}
+```typescript
+const response = await model.invoke([new HumanMessage(p)], {
+  callbacks: [new LangChainTracer()],
+});
 ```
 
-Results are streamed to the Confident AI dashboard under the project for the target environment. If scores fall below configured thresholds, the step fails and the deployment is flagged.
+`ChatVertexAI` goes through `@langchain/core`'s callback system, so passing `LangChainTracer` ensures every inference creates a run in LangSmith. This traces: input prompt, output text, token counts, model name, and latency. Graph-level LangGraph nodes are plain functions and do not appear as separate LangSmith traces.
+
+**Required env vars:**
+
+| Variable | Value | Where |
+|---|---|---|
+| `LANGCHAIN_TRACING_V2` | `true` (must be exactly the string `"true"`) | `.env` (deployed) and `.env.local` (local) |
+| `LANGSMITH_API_KEY` | Key for `bizzie_dev` workspace | GCP Secret Manager (`defineSecret`) in prod; `.env.local` locally |
+| `LANGSMITH_PROJECT` | `bizzie_dev` | `.env` (deployed) and `.env.local` (local) |
+| `LANGCHAIN_CALLBACKS_BACKGROUND` | `false` | `.env` (deployed) and `.env.local` (local) |
+| `LANGSMITH_ENDPOINT` | `https://api.smith.langchain.com` | Optional — defaults to this value if not set |
+
+**Why `LANGCHAIN_CALLBACKS_BACKGROUND=false` is critical:** By default, LangChain callbacks are dispatched into a background p-queue. In serverless environments (Firebase Functions), the function instance exits before the background queue drains. `awaitAllCallbacks()` calls `awaitPendingTraceBatches()` in parallel with `queue.onIdle()` — but `patchRun` (which carries `end_time` and `outputs`) hasn't been queued yet when the snapshot is taken. Setting `LANGCHAIN_CALLBACKS_BACKGROUND=false` makes all callbacks synchronous, so both `createRun` and `patchRun` are queued before the snapshot. Both `.env` and `.env.local` must have this set.
+
+**Why the previous approach did not work:** The prior implementation used `@google-cloud/vertexai` directly (`model.generateContent()`), which bypasses LangChain's callback system entirely. LangSmith never saw those calls.
+
+---
+
+## Confident AI / DeepEval Runtime Spans
+
+`AiService` uses `observe` from `deepeval/tracing` at two levels when `EvaluationService.isInitialized` is true:
+
+- **AGENT span** (`weeklyRecap-{ticker}`): wraps the full `runSummarize` function including retries — names the trace in Confident AI
+- **LLM span** (`summarizeNews`): wraps each individual `runGenerate` call; `retrievalContext` and `output` set via `updateCurrentSpan` **inside `runGenerate`** (while the span is still open)
+
+`EvaluationService.init()` is called at the start of each `weeklyRecapProcessor` invocation. It calls `traceManager.configure({ confidentApiKey, tracingEnabled: true })` from `deepeval/tracing`.
+
+**Retrieval context:** `updateCurrentSpan` receives `[newsText, filingsText]` filtered to exclude `'(none)'` strings. EOD prices are not included (quantitative, not textual source documents). The full prompt is not included (that is the LLM `input`, not the retrieval context).
+
+**Why `updateCurrentSpan` must be called inside `runGenerate`:** The `observe` span closes when `runGenerate` returns. Calling `updateCurrentSpan` after `observe(...)()` returns means the span is already closed and the update has no effect.
+
+---
+
+## Metric Collection — Platform Setup
+
+Metrics are configured in the **Confident AI dashboard** (`app.confident-ai.com`), not in code. The metric collection name is `weekly-recap-summary` — this must match the `metricCollection` value in the LLM span.
+
+### Creating the metric collection
+
+1. Log in to `app.confident-ai.com` and select the project for the target environment (dev / qa / prod).
+2. Navigate to **Metric Collections** and click **Create**.
+3. Name: `weekly-recap-summary`. Save.
+
+### Adding the three metrics
+
+In the `weekly-recap-summary` metric collection, add the following three metrics:
+
+| Metric | Threshold | Required fields |
+|---|---|---|
+| **Faithfulness** | 0.8 | Input + Actual Output + Retrieval Context |
+| **Answer Relevancy** | 0.8 | Input + Actual Output |
+| **Summarization** | 0.58 | Input + Actual Output |
+
+For each metric, the LLM-as-Judge model and detailed settings are configured on the platform — no code changes are needed to adjust thresholds.
 
 ---
 
@@ -98,6 +87,6 @@ Results are streamed to the Confident AI dashboard under the project for the tar
 
 | Rule | Detail |
 |---|---|
-| Identical secret name across environments | `CONFIDENT_API_KEY` is the same string in dev, qa, and prod CI secrets and GCP Secret Manager |
+| Identical secret name across environments | `CONFIDENT_API_KEY` is the same string in dev, qa, and prod GCP Secret Manager and CI secrets |
 | One Confident AI project per environment | Dev, qa, and prod datasets and results are isolated by project |
-| No env conditionals in code | The CI/CD job targets a specific environment's API key via its secret |
+| No env conditionals in code | The GCP project boundary and the injected `CONFIDENT_API_KEY` resolve the correct project |

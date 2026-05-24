@@ -67,7 +67,8 @@ LLM calls require the most detailed logging to diagnose why the model produced a
 | Before call | `debug` | Full prompt string sent to the model |
 | After call | `debug` | Full raw response text from the model |
 | Generation duration | `info` | `"LLM summary generated for {ticker} in {ms}ms"` |
-| Token usage | `info` | `promptTokenCount`, `candidatesTokenCount`, `totalTokenCount` from `result.response.usageMetadata` |
+| Token usage | `info` | `promptTokenCount` (`input_tokens`), `candidatesTokenCount` (`output_tokens`), `totalTokenCount` (`total_tokens`) from `response.usage_metadata` |
+| Invalid JSON | `warn` | `"LLM returned invalid JSON for {ticker}"` + preview of raw text (first 200 chars) |
 | Model used | `info` | Model name resolved from Remote Config |
 | Empty response | `warn` | `"LLM returned empty response for {ticker}"` |
 | Invalid schema | `warn` | `"LLM returned invalid schema for {ticker}"` + raw parsed value |

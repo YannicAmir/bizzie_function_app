@@ -269,7 +269,7 @@
 <body>
 
 <nav>
-  <div class="brand">Weekly Recap<span>Storage Pipeline — Spec v1.0</span></div>
+  <div class="brand">Weekly Recap<span>Storage Pipeline — Spec v1.1</span></div>
   <ul>
     <li class="nav-section">Overview</li>
     <li><a href="#overview">Pipeline Overview</a></li>
@@ -306,7 +306,7 @@
 <!-- ════════════════════════════════════════════════════════ OVERVIEW -->
 <section id="overview">
   <div class="page-title">Weekly Recap — Storage Pipeline</div>
-  <div class="page-subtitle">Pre-implementation specification · Feature: <code>weekly_recap/storage</code></div>
+  <div class="page-subtitle">Feature: <code>weekly_recap/storage</code></div>
 
   <h2>Purpose</h2>
   <p>Every Friday at 4pm EST this pipeline generates an AI-written market summary for every ticker on the global watchlist and persists it to Firestore. Those stored summaries are later consumed by the <code>retrieval_and_messaging</code> pipeline.</p>
@@ -340,7 +340,7 @@ weeklyRecapProcessor  [trigger.ts]
   [calculateWeekWindow]      ── [usecase.ts]         → { startDate, endDate }
   [fetchMarketData]          ── [fmp_service.ts]     → news, filings, prices (Promise.allSettled)
   [calculateDeterministicFields]                     → counts, priceMovement
-  [summarizeNews]            ── [ai_service.ts]      → llmPartial (Vertex AI / Gemini, traceCallback inline)
+  [summarizeNews]            ── [ai_service.ts]      → llmPartial (ChatVertexAI + LangChainTracer + DeepEval observe)
   [validateSchema]           ── pure TypeScript      → valid? continue : END
   [assembleResponse]                                 → llmResponse
   [postProcessResponse]      ── [ai_service.ts]      → sanitized llmResponse
@@ -360,7 +360,7 @@ flowchart TD
         PROC --> N1[calculateWeekWindow\nstartDate · endDate]
         N1 --> N2[fetchMarketData\nnews · filings · prices · Promise.allSettled]
         N2 --> N3[calculateDeterministicFields\ncounts · priceMovement]
-        N3 --> N4[summarizeNews\nVertex AI / Gemini + traceCallback]
+        N3 --> N4[summarizeNews\nChatVertexAI + LangChainTracer + DeepEval observe]
         N4 --> N5{validateSchema}
         N5 -- invalid --> DL[END\ndead-letter topic]
         N5 -- valid --> N6[assembleResponse\nllmResponse]
@@ -403,6 +403,8 @@ flowchart TD
     │   ├── <span class="file">assembleResponse.ts</span>
     │   ├── <span class="file">postProcessResponse.ts</span>
     │   └── <span class="file">storeSummary.ts</span>
+    ├── <span class="dir">prompts/</span>
+    │   └── <span class="file">storage_prompts.ts</span>   <span class="cmt"># SUMMARIZE_NEWS_SYSTEM_PROMPT + SUMMARIZE_NEWS_USER_TEMPLATE</span>
     └── <span class="dir">services/</span>
         ├── <span class="file">ai_service.ts</span>
         ├── <span class="file">evaluation_service.ts</span>
@@ -414,7 +416,7 @@ flowchart TD
 <!-- ════════════════════════════════════════════════════════ TRIGGER -->
 <section id="trigger">
   <div class="page-title">trigger.ts</div>
-  <div class="page-subtitle">Cloud Function entry points. Contains no business logic. <code>EvaluationService</code> is instantiated first, then injected into <code>AiService</code> via constructor — <code>AiService</code> owns the <code>traceCallback</code> integration. <code>FmpService</code>, <code>FirestoreService</code>, and <code>PubSubService</code> are also instantiated at module scope. <code>void evaluationService.init()</code> is called at module scope for cold-start DeepEval setup. <code>buildGraph(fmpService, aiService, firestoreService)</code> is called at module scope, compiling the LangGraph graph once at cold-start. <code>TOPIC_NAME</code> is imported from <code>constants/index.ts</code> — no string literals in this file. <code>CONFIDENT_API_KEY</code> and <code>CONFIDENT_PROJECT_NAME</code> are declared using <code>defineSecret</code> from <code>firebase-functions/params</code> and bound to <code>weeklyRecapProcessor</code> — Firebase injects them as <code>process.env</code> at runtime (locally from <code>.secret.local</code>, deployed from GCP Secret Manager).</div>
+  <div class="page-subtitle">Cloud Function entry points. Contains no business logic. All services are instantiated once at module scope. <code>buildGraph(fmpService, aiService, firestoreService)</code> is called at module scope, compiling the LangGraph graph once at cold-start. <code>TOPIC_NAME</code> is imported from <code>constants/index.ts</code> — no string literals in this file. <code>CONFIDENT_API_KEY</code> and <code>LANGSMITH_API_KEY</code> are declared using <code>defineSecret</code> from <code>firebase-functions/params</code> and bound to <code>weeklyRecapProcessor</code> via <code>secrets: [confidentApiKey, langsmithApiKey]</code> — Firebase injects them as <code>process.env</code> at runtime (locally from <code>.secret.local</code>, deployed from GCP Secret Manager). <code>await evaluationService.init()</code> is called inside the handler (secrets are only available there, not at module scope).</div>
 
   <h2>weeklyRecapScheduler</h2>
   <div class="table-wrap"><table>
@@ -427,8 +429,7 @@ flowchart TD
   </table></div>
   <p><strong>Steps:</strong></p>
   <ol>
-    <li>Calls <code>FirestoreService.retrieveCompaniesFromDb()</code> via <code>retry()</code> (<code>src/core/retry.ts</code>) — 3 attempts, 1s initial delay, backoff factor 2 (1s → 2s → throw). Per-attempt warn logs are emitted by the retry utility. On final failure, logs an error and re-throws.</li>
-    <li>Calls <code>PubSubService.queueCompanies(companies)</code> once with the full array. Per-company error isolation happens inside <code>queueCompanies</code> — a single publish failure is caught, logged, and skipped; remaining companies continue to publish. Returns the count of successfully published messages. Each message payload is <code>{ ticker: string, companyName: string }</code>. No dates are included — the week window is calculated by the processor at execution time.</li>
+    <li>Calls <code>runScheduler(firestoreService, pubSubService)</code> from <code>usecase.ts</code>. <code>runScheduler</code> fetches the watchlist (retry inside <code>FirestoreService.retrieveCompaniesFromDb()</code>) then queues one Pub/Sub message per company (retry inside <code>PubSubService.queueCompanies()</code>). Returns <code>{ companiesCount, published }</code>. On failure, trigger logs an error and re-throws.</li>
   </ol>
 
   <h2>weeklyRecapProcessor</h2>
@@ -438,7 +439,7 @@ flowchart TD
     <tr><td>Topic</td><td><code>weekly-recap</code></td></tr>
     <tr><td>Memory</td><td><code>512MiB</code></td></tr>
     <tr><td>Timeout</td><td><code>300s</code></td></tr>
-    <tr><td>Secrets</td><td><code>CONFIDENT_API_KEY</code>, <code>CONFIDENT_PROJECT_NAME</code> (via <code>defineSecret</code>)</td></tr>
+    <tr><td>Secrets</td><td><code>CONFIDENT_API_KEY</code>, <code>LANGSMITH_API_KEY</code> (via <code>defineSecret</code>)</td></tr>
   </table></div>
   <p><strong>Steps:</strong></p>
   <ol>
@@ -554,7 +555,7 @@ await graph.invoke({ ticker, companyName });</code></pre>
     <tr><td><code>calculateWeekWindow</code></td><td>pure function</td><td><code>startDate</code>, <code>endDate</code></td></tr>
     <tr><td><code>fetchMarketData</code></td><td><code>FmpService.*</code> (Promise.allSettled)</td><td><code>news</code>, <code>filings</code>, <code>prices</code></td></tr>
     <tr><td><code>calculateDeterministicFields</code></td><td>pure functions</td><td><code>counts</code>, <code>priceMovement</code></td></tr>
-    <tr><td><code>summarizeNews</code></td><td><code>AiService.summarizeNews</code> (internally wraps <code>generateContent</code> with <code>traceCallback</code> via injected <code>EvaluationService</code>)</td><td><code>llmPartial</code></td></tr>
+    <tr><td><code>summarizeNews</code></td><td><code>AiService.summarizeNews</code> (truncates news text first via <code>truncateToTokens</code>; internally uses <code>ChatVertexAI</code> + <code>LangChainTracer</code> for LangSmith + DeepEval <code>observe</code> spans via <code>EvaluationService</code>)</td><td><code>llmPartial</code></td></tr>
     <tr><td><code>validateSchema</code></td><td>pure TypeScript check</td><td>— (routes or ends)</td></tr>
     <tr><td><code>assembleResponse</code></td><td>pure function</td><td><code>llmResponse</code></td></tr>
     <tr><td><code>postProcessResponse</code></td><td><code>AiService.postProcessLlmSummary</code></td><td><code>llmResponse</code></td></tr>
@@ -572,7 +573,7 @@ await graph.invoke({ ticker, companyName });</code></pre>
   <p>Derives <code>counts</code> from array lengths and <code>priceMovement</code> (<code>startPrice</code>, <code>endPrice</code>, <code>priceChange</code>, <code>priceChangePercent</code>) from the <code>prices</code> array. Returns <code>null</code> fields if <code>prices</code> is empty. No LLM involved.</p>
 
   <h3>summarizeNews</h3>
-  <p>Calls <code>AiService.summarizeNews</code> with the full state context. Tracing is handled inside <code>AiService</code> — <code>traceCallback</code> wraps the <code>model.generateContent</code> call with <code>model</code> and trace attributes. Returns LLM content fields only — deterministic fields are not produced by the LLM. Node-level failures (after all internal retries) are logged before re-throwing to Pub/Sub.</p>
+  <p>Truncates news text via <code>truncateToTokens(n.text, 500)</code> from <code>helpers/llm.ts</code>, then calls <code>AiService.summarizeNews</code>. LangSmith and DeepEval tracing are handled inside <code>AiService</code> — see <a href="#ai-service">AI Service</a>. Returns LLM content fields only — deterministic fields are not produced by the LLM. Node-level failures (after all internal retries) are logged before re-throwing to Pub/Sub.</p>
 
   <h3>validateSchema</h3>
   <p>Pure TypeScript check — no LLM. Confirms all required fields exist with correct types and <code>confidenceScore</code> is an integer in <code>[0, 100]</code>. On failure: logs each invalid field individually and returns <code>{}</code> — does NOT throw. <code>routeAfterValidation</code> detects the invalid <code>llmPartial</code> and routes to END, acknowledging the message without a Pub/Sub retry. Throwing would bypass conditional routing and cause unwanted retries — the LLM has already been retried 3× internally.</p>
@@ -757,16 +758,16 @@ createdAt:           Timestamp   // server-side timestamp added by FirestoreServ
 <!-- ════════════════════════════════════════════════ AI SERVICE -->
 <section id="ai-service">
   <div class="page-title">services/ai_service.ts</div>
-  <div class="page-subtitle">LLM summarization and post-processing. Owns the <code>traceCallback</code> integration — <code>EvaluationService</code> injected via constructor, consulted at call time. Logger: <code>WeeklyRecap/Storage/AiService</code></div>
+  <div class="page-subtitle">LLM summarization and post-processing. Owns LangSmith tracing via <code>LangChainTracer</code> and Confident AI evaluation tracing via <code>EvaluationService</code> (injected via constructor). Logger: <code>WeeklyRecap/Storage/AiService</code></div>
 
-  <div class="callout">Model instances via <code>getGeminiModel(modelName)</code> from <code>src/core/vertex-ai.ts</code>. Model name resolved via <code>getRemoteConfig().weekly_recap.model</code> from <code>src/core/remote-config.ts</code>. All calls use <code>responseMimeType: 'application/json'</code>. Helper functions (<code>isValidLLMPartial</code>, <code>isRetryableLlmError</code>, <code>truncateToTokens</code>, <code>stripMarkdown</code>) live in <code>helpers/llm.ts</code>.</div>
+  <div class="callout">Model lazily instantiated and cached as a private <code>cachedModel</code> field via <code>getModel()</code> — <code>getRemoteConfig()</code> is called once on the first <code>summarizeNews</code> invocation; subsequent warm calls reuse the cached <code>ChatVertexAI</code> instance. Config: <code>{ responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, endpoint: 'aiplatform.googleapis.com' }</code>. <code>responseSchema</code> enforces the JSON output shape at the Vertex AI level — the model is constrained to return only valid JSON matching the schema. Helper functions (<code>isValidLLMPartial</code>, <code>isRetryableLlmError</code>, <code>stripMarkdown</code>) live in <code>helpers/llm.ts</code>. News truncation (<code>truncateToTokens</code>) is applied by the <code>summarizeNews</code> node upstream — not here.</div>
 
   <h2>Model</h2>
   <div class="table-wrap"><table>
     <tr><th>Task</th><th>AppConfig key</th><th>Remote Config parameter</th><th>Default</th></tr>
     <tr><td><code>summarizeNews</code></td><td><code>config.weekly_recap.model</code></td><td><code>weekly_recap_model</code></td><td><code>gemini-3-flash-preview</code></td></tr>
   </table></div>
-  <p><code>getRemoteConfig()</code> is called at invocation time — model is hot-swappable without a redeploy.</p>
+  <p>Model is lazily initialized on first call via <code>getModel()</code> — <code>getRemoteConfig()</code> is called once per process lifetime and the resulting <code>ChatVertexAI</code> instance is cached. Hot-swapping a model name in Remote Config takes effect on the next cold-start.</p>
 
   <h2>Retry Config</h2>
   <pre><code>retry(fn, {
@@ -776,19 +777,42 @@ createdAt:           Timestamp   // server-side timestamp added by FirestoreServ
   maxDelayMs: 30000,
 })</code></pre>
 
+  <h2>Private Functions</h2>
+  <h3>buildContextTexts / invokeModel</h3>
+  <p>Two module-level private functions:</p>
+  <ul>
+    <li><strong>buildContextTexts</strong> — maps <code>news</code>, <code>filings</code>, and <code>prices</code> arrays into formatted text blocks (or <code>'(none)'</code>). News text is already truncated by the upstream <code>summarizeNews</code> node.</li>
+    <li><strong>invokeModel</strong> — accepts a pre-built <code>messages: BaseMessage[]</code> array (constructed upstream by <code>loadChatPrompt</code>). Calls <code>model.invoke(msgs, { callbacks: [new LangChainTracer()] })</code>. The <code>LangChainTracer</code> callback sends every inference to LangSmith automatically. When evaluation is initialized, also wraps with <code>observe({ type: SpanType.LLM, metricCollection: 'weekly-recap-summary', ... })</code> and calls <code>updateCurrentSpan({ retrievalContext, output })</code>. Token counts read from <code>response.usage_metadata.input_tokens / output_tokens / total_tokens</code>.</li>
+  </ul>
+
   <h2>summarizeNews(input: SummarizeNewsInput): Promise&lt;Partial&lt;LLMResponse&gt;&gt;</h2>
-  <p>Core LLM call. Interpolates inputs into a prompt template and calls the model.</p>
+  <p>Core LLM call. Builds context text and prompt, then delegates to <code>invokeModel</code> inside a retry wrapper.</p>
 
-  <h3>Prompt Architecture — LangSmith-ready from day one</h3>
-  <p>The prompt is defined as a single exported constant <code>SUMMARIZE_NEWS_PROMPT</code> using LangSmith <code>{variable}</code> placeholder syntax. During development it is interpolated locally; when moving to production it is uploaded to LangSmith Prompts and pulled at runtime via <code>client.pullPrompt('weekly-recap-summarize')</code> — no rewriting required.</p>
-  <pre><code>// dev: interpolate locally
-const prompt = SUMMARIZE_NEWS_PROMPT
-  .replace('{ticker}', ticker)
-  .replace('{companyName}', companyName) ...
+  <h3>Dual-layer tracing</h3>
+  <pre><code>// AGENT span wraps the full retry loop (Confident AI / DeepEval)
+return evaluation?.isInitialized
+  ? observe({ type: SpanType.AGENT, name: `weeklyRecap-${ticker}`, fn: runSummarize })()
+  : runSummarize();
 
-// prod (LangSmith): pull and invoke
-const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code></pre>
+// Inside runSummarize → invokeModel:
+// LLM span wraps each individual inference attempt (Confident AI / DeepEval)
+const text = await (evaluation?.isInitialized
+  ? observe({ type: SpanType.LLM, name: 'summarizeNews', model: model.modelName,
+               metricCollection: 'weekly-recap-summary', fn: runGenerate })(messages)
+  : runGenerate(messages));
 
+// LangChainTracer fires on every invoke call regardless of evaluation state
+const response = await model.invoke(msgs, { callbacks: [new LangChainTracer()] });</code></pre>
+
+  <div class="callout">LangSmith traces appear in <code>bizzie_dev</code> at <code>smith.langchain.com</code> for every invocation. <code>LANGCHAIN_TRACING_V2=true</code> and <code>LANGCHAIN_CALLBACKS_BACKGROUND=false</code> must be set in both <code>.env</code> and <code>.env.local</code>. Without <code>LANGCHAIN_CALLBACKS_BACKGROUND=false</code>, <code>patchRun</code> is dropped in the background p-queue before <code>awaitAllCallbacks()</code> can flush it — traces are created but never updated with outputs.</div>
+
+  <h3>Prompt Architecture</h3>
+  <p>The prompt is split into two exported constants in <code>prompts/storage_prompts.ts</code>:</p>
+  <ul>
+    <li><strong>SUMMARIZE_NEWS_SYSTEM_PROMPT</strong> — the system role: financial analyst instructions and JSON output rules</li>
+    <li><strong>SUMMARIZE_NEWS_USER_TEMPLATE</strong> — the user role: all <code>{variable}</code> placeholders for market data</li>
+  </ul>
+  <p>Inside <code>runSummarize</code>, <code>loadChatPrompt('summarize-news-prompt', SUMMARIZE_NEWS_SYSTEM_PROMPT, SUMMARIZE_NEWS_USER_TEMPLATE, variables)</code> from <code>src/core/prompts.ts</code> builds the <code>BaseMessage[]</code> array. If <code>LANGSMITH_API_KEY</code> is set, it pulls the latest version from the LangSmith Prompt Hub — enabling prompt iteration without a redeploy. Falls back to local constants automatically on any hub failure.</p>
   <p><strong>Template variables:</strong> <code>{ticker}</code>, <code>{companyName}</code>, <code>{startDate}</code>, <code>{endDate}</code>, <code>{startPrice}</code>, <code>{endPrice}</code>, <code>{priceChange}</code>, <code>{priceChangePercent}</code>, <code>{news}</code>, <code>{filings}</code>, <code>{prices}</code></p>
 
   <h3>Prompt Constraints</h3>
@@ -802,7 +826,6 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   </ul>
   <p>Count fields, <code>ticker</code>, <code>companyName</code>, and <code>time</code> are set by the use case — the LLM does not produce them.</p>
   <p>After parsing the model response, <code>isValidLLMPartial</code> (from <code>helpers/llm.ts</code>) is called inside the retry loop. If validation fails, a warning is logged with the raw parsed value and <code>Error('Invalid LLM response schema')</code> is thrown — triggering the retry.</p>
-  <p><strong>Confident AI tracing:</strong> Inside the <code>retry</code> closure, if <code>evaluation.isInitialized</code>, the <code>model.generateContent</code> call is wrapped with <code>observe({ type: SpanType.LLM, name: 'summarizeNews', model: modelName, fn: runGenerate })</code> from <code>deepeval/tracing</code>. Each retry attempt is traced independently. If <code>EvaluationService</code> is not initialized, <code>runGenerate()</code> is called directly with no overhead. Exact token counts are logged separately from <code>usageMetadata</code> after the call.</p>
 
   <h2>postProcessLlmSummary(response): LLMResponse</h2>
   <p>Returns a new sanitized object (does not mutate). Trims whitespace from all string fields, hard-truncates <code>messageTitle</code> to 50 characters, strips stray markdown (backtick fences, extra asterisks) from summary fields.</p>
@@ -824,8 +847,9 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   </table></div>
 
   <h2>retrieveCompaniesFromDb(): Promise&lt;Company[]&gt;</h2>
-  <p>Called by <code>weeklyRecapScheduler</code> before publishing to Pub/Sub.</p>
+  <p>Called by <code>runScheduler</code> in <code>usecase.ts</code>.</p>
   <ul>
+    <li>Wraps the Firestore <code>.get()</code> in <code>retry()</code> (<code>FIRESTORE_RETRY_OPTIONS</code>: 3 attempts, 1s initial delay, ×2 backoff). Transient failures are retried internally before throwing.</li>
     <li>Fetches all documents from the <code>watchlist</code> collection.</li>
     <li>Returns an array of <code>Company</code> (<code>{ ticker, companyName }</code>) for every document.</li>
     <li>Returns an empty array (no throw) if the collection is empty — scheduler logs a warning and exits cleanly.</li>
@@ -837,7 +861,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <li>Writes to <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code> where <code>{weekEndDate}</code> is the date portion extracted from <code>response.time</code> (e.g. <code>"2026-05-15T16:00:00.000Z"</code> → <code>"2026-05-15"</code>).</li>
     <li>Merges <code>createdAt: FieldValue.serverTimestamp()</code> into the payload before writing.</li>
     <li>Uses <code>set()</code> without <code>merge</code> — each <code>weekEndDate</code> is a distinct document, preserving historical summaries. Re-running the same week overwrites only that week's document.</li>
-    <li>Throws on Firestore error (caught and logged by the use case).</li>
+    <li>Wraps <code>set()</code> in <code>retry()</code> (<code>FIRESTORE_RETRY_OPTIONS</code>: 3 attempts, 1s initial delay, ×2 backoff). Transient Firestore errors are retried locally; on final exhaustion the error is logged and re-thrown.</li>
   </ul>
 </section>
 
@@ -903,17 +927,20 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <tr><td>Scheduling</td><td>Google Cloud Scheduler</td></tr>
     <tr><td>Message queue</td><td>Google Cloud Pub/Sub — topic: <code>weekly-recap</code></td></tr>
     <tr><td>Database</td><td>Google Cloud Firestore</td></tr>
-    <tr><td>LLM</td><td>Google Vertex AI — Gemini (model from Firebase Remote Config)</td></tr>
+    <tr><td>LLM</td><td>Google Vertex AI — Gemini via <code>ChatVertexAI</code> from <code>@langchain/google-vertexai</code> (model from Firebase Remote Config)</td></tr>
     <tr><td>Orchestration</td><td>LangGraph — state graph per ticker invocation, typed <code>WeeklyRecapState</code></td></tr>
     <tr><td>Market data</td><td>Financial Modeling Prep (FMP) REST API — stable endpoint</td></tr>
-    <tr><td>LLM evaluation</td><td>Confident AI / DeepEval — LLM-as-Judge tracing via <code>@confident-ai/deepeval</code></td></tr>
-    <tr><td>Prompt versioning</td><td>LangSmith — local interpolation during dev, pulled at runtime in prod</td></tr>
-    <tr><td>Secrets</td><td>GCP Secret Manager — <code>CONFIDENT_API_KEY</code>, <code>CONFIDENT_PROJECT_NAME</code>, <code>FMP_API_KEY</code>, <code>LANGSMITH_API_KEY</code></td></tr>
+    <tr><td>LLM tracing</td><td>LangSmith — runtime tracing via <code>LangChainTracer</code> callback; traces in <code>bizzie_dev</code> at <code>smith.langchain.com</code></td></tr>
+    <tr><td>LLM evaluation</td><td>Confident AI / DeepEval — runtime <code>observe</code> spans + CI/CD dataset evaluation</td></tr>
+    <tr><td>Secrets</td><td>GCP Secret Manager — <code>CONFIDENT_API_KEY</code>, <code>FMP_API_KEY</code>, <code>LANGSMITH_API_KEY</code></td></tr>
     <tr><td>Retry / backoff</td><td><code>src/core/retry.ts</code></td></tr>
     <tr><td>Logging</td><td><code>src/core/logger.ts</code> — structured wrapper over <code>firebase-functions/logger</code></td></tr>
     <tr><td>Config</td><td><code>src/core/remote-config.ts</code> — Firebase Remote Config</td></tr>
     <tr><td>Firebase init</td><td><code>src/core/firebase.ts</code> — <code>getFirebaseAdmin()</code></td></tr>
-    <tr><td>Vertex AI init</td><td><code>src/core/vertex-ai.ts</code> — <code>getGeminiModel()</code></td></tr>
+    <tr><td>LLM client</td><td><code>@langchain/google-vertexai</code> — <code>ChatVertexAI</code> with <code>responseMimeType: 'application/json'</code>, <code>responseSchema</code> (enforces JSON output shape at Vertex AI level), and <code>endpoint: 'aiplatform.googleapis.com'</code></td></tr>
+    <tr><td>Prompt management</td><td>LangSmith Prompt Hub — <code>summarize-news-prompt</code> stored as <code>ChatPromptTemplate</code> (system + human). Pulled at runtime via <code>loadChatPrompt()</code> in <code>src/core/prompts.ts</code>; falls back to local constants in <code>prompts/storage_prompts.ts</code> if hub unavailable. Enables prompt iteration without a redeploy.</td></tr>
+    <tr><td>Prompt loading utility</td><td><code>src/core/prompts.ts</code> — <code>loadPrompt()</code> and <code>loadChatPrompt()</code>. Uses <code>pullPromptCommit</code> from LangSmith SDK and parses <code>manifest.kwargs</code> directly, bypassing LangChain <code>load()</code> deserialization.</td></tr>
+    <tr><td>LangSmith env</td><td><code>LANGCHAIN_TRACING_V2=true</code> and <code>LANGCHAIN_CALLBACKS_BACKGROUND=false</code> required in <code>.env</code> and <code>.env.local</code> — prevents <code>patchRun</code> from being dropped in serverless p-queue</td></tr>
   </table></div>
 
   <h2>Retry Strategy</h2>
@@ -928,23 +955,29 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <p>Bizzie runs three fully isolated environments — <strong>dev</strong>, <strong>qa</strong>, <strong>prod</strong> — each backed by its own Firebase project and GCP project.</p>
   <div class="table-wrap"><table>
     <tr><th>Rule</th><th>Detail</th></tr>
-    <tr><td>Secret names are identical across environments</td><td><code>CONFIDENT_API_KEY</code>, <code>FMP_API_KEY</code>, etc. are the same string in dev, qa, and prod</td></tr>
+    <tr><td>Secret names are identical across environments</td><td><code>CONFIDENT_API_KEY</code>, <code>FMP_API_KEY</code>, <code>LANGSMITH_API_KEY</code> are the same string in dev, qa, and prod</td></tr>
     <tr><td>GCP project context resolves the correct value</td><td>Functions run inside their environment's GCP project — Secret Manager returns that project's secret</td></tr>
     <tr><td>No environment conditionals in code</td><td>Never branch on <code>process.env.ENV</code> to pick a secret value</td></tr>
-    <tr><td>Secrets fetched at cold-start</td><td>Fetched once via <code>@google-cloud/secret-manager</code> and cached for the instance lifetime</td></tr>
-    <tr><td>API keys are never in Remote Config or env vars</td><td>Remote Config holds non-sensitive config only</td></tr>
+    <tr><td>Secrets injected via <code>defineSecret</code></td><td><code>defineSecret('LANGSMITH_API_KEY')</code> declared at module scope in <code>trigger.ts</code>, bound to <code>weeklyRecapProcessor</code> via <code>secrets: [...]</code> — Firebase injects as <code>process.env</code> inside the handler</td></tr>
+    <tr><td>API keys are never in Remote Config or plain env vars</td><td>Remote Config holds non-sensitive config only; API keys only in GCP Secret Manager</td></tr>
   </table></div>
-  <pre><code>async function getSecret(name: string): Promise&lt;string&gt; {
-  const [version] = await client.accessSecretVersion({
-    name: `projects/${config.projectId}/secrets/${name}/versions/latest`,
-  });
-  return version.payload!.data!.toString();
-}</code></pre>
+  <pre><code>// trigger.ts — declare at module scope
+const confidentApiKey = defineSecret('CONFIDENT_API_KEY');
+const langsmithApiKey = defineSecret('LANGSMITH_API_KEY');
+
+// bind to the function handler
+export const weeklyRecapProcessor = onMessagePublished({
+  secrets: [confidentApiKey, langsmithApiKey],
+  ...
+}, async (event) => {
+  // process.env.CONFIDENT_API_KEY and process.env.LANGSMITH_API_KEY injected here
+});</code></pre>
 
   <h2>Token Budget</h2>
+  <p>News text is truncated in the <code>summarizeNews</code> LangGraph node (<code>truncateToTokens(n.text, 500)</code> from <code>helpers/llm.ts</code>) before <code>AiService.summarizeNews</code> is called.</p>
   <div class="table-wrap"><table>
-    <tr><th>Input</th><th>Limit</th><th>Rationale</th></tr>
-    <tr><td>News article text</td><td>500 tokens (~375 words)</td><td>Captures headline + key facts; tail of long articles is rarely material</td></tr>
+    <tr><th>Input</th><th>Limit</th><th>Where truncation happens</th></tr>
+    <tr><td>News article text</td><td>500 tokens (~375 words)</td><td><code>nodes/summarizeNews.ts</code> — applied before passing to <code>AiService</code></td></tr>
     <tr><td>8-K entry</td><td>No truncation</td><td>Metadata only: title, date, two URLs — ~30 tokens per entry</td></tr>
     <tr><td>Stock price entry</td><td>No truncation</td><td>Three fields per trading day — ~15 tokens per entry</td></tr>
   </table></div>
@@ -992,7 +1025,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <h2>storage/services/evaluation_service.ts — WeeklyRecap/Storage/EvaluationService</h2>
   <div class="table-wrap"><table>
     <tr><th>Event</th><th>Level</th><th>Message</th></tr>
-    <tr><td>Key or project name absent</td><td><span class="badge badge-warn">warn</span></td><td><code>"CONFIDENT_API_KEY or CONFIDENT_PROJECT_NAME not set — DeepEval tracing disabled"</code></td></tr>
+    <tr><td>Key absent</td><td><span class="badge badge-warn">warn</span></td><td><code>"CONFIDENT_API_KEY not set — DeepEval tracing disabled"</code></td></tr>
     <tr><td>Init failed</td><td><span class="badge badge-warn">warn</span></td><td><code>"DeepEval initialization failed — tracing disabled"</code> + error</td></tr>
   </table></div>
 
@@ -1003,7 +1036,8 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <tr><td>Before call</td><td><span class="badge badge-debug">debug</span></td><td>Full prompt string sent to the model</td></tr>
     <tr><td>After call</td><td><span class="badge badge-debug">debug</span></td><td>Full raw response text from the model</td></tr>
     <tr><td>Generation duration</td><td><span class="badge badge-info">info</span></td><td><code>"LLM summary generated for {ticker} in {ms}ms"</code></td></tr>
-    <tr><td>Token usage</td><td><span class="badge badge-info">info</span></td><td><code>promptTokenCount</code>, <code>candidatesTokenCount</code>, <code>totalTokenCount</code></td></tr>
+    <tr><td>Token usage</td><td><span class="badge badge-info">info</span></td><td><code>promptTokenCount</code> (<code>input_tokens</code>), <code>candidatesTokenCount</code> (<code>output_tokens</code>), <code>totalTokenCount</code> (<code>total_tokens</code>) from <code>response.usage_metadata</code></td></tr>
+    <tr><td>Invalid JSON</td><td><span class="badge badge-warn">warn</span></td><td><code>"LLM returned invalid JSON for {ticker}"</code> + preview of raw text (first 200 chars)</td></tr>
     <tr><td>Model used</td><td><span class="badge badge-info">info</span></td><td>Model name resolved from Remote Config</td></tr>
     <tr><td>Empty response</td><td><span class="badge badge-warn">warn</span></td><td><code>"LLM returned empty response for {ticker}"</code></td></tr>
     <tr><td>Invalid schema</td><td><span class="badge badge-warn">warn</span></td><td><code>"LLM returned invalid schema for {ticker}"</code> + raw parsed value</td></tr>
@@ -1118,7 +1152,7 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
   <div class="table-wrap"><table>
     <tr><th>Dependency</th><th>How to mock</th></tr>
     <tr><td>FMP HTTP calls</td><td>Mock <code>axios</code> or <code>fetch</code> at the module boundary — never call real FMP in tests</td></tr>
-    <tr><td>Vertex AI / Gemini</td><td>Mock <code>getGeminiModel()</code> from <code>src/core/vertex-ai.ts</code> — return a canned JSON response</td></tr>
+    <tr><td>Vertex AI / Gemini</td><td>Mock <code>ChatVertexAI</code> from <code>@langchain/google-vertexai</code> — return a canned JSON response via <code>invoke()</code></td></tr>
     <tr><td>Firestore</td><td>Mock <code>getFirebaseAdmin().firestore()</code> — verify calls and arguments</td></tr>
     <tr><td>Remote Config</td><td>Mock <code>getRemoteConfig()</code> to return a fixed <code>AppConfig</code></td></tr>
     <tr><td>Logger</td><td>Suppress or spy; never assert on log output</td></tr>
@@ -1128,17 +1162,40 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
 <!-- ════════════════════════════════════════════ EVALUATION -->
 <section id="evaluation">
   <div class="page-title">Evaluation</div>
-  <div class="page-subtitle">LLM output quality via Confident AI / DeepEval — dataset-based, runs in CI/CD, entirely outside the runtime request path.</div>
+  <div class="page-subtitle">Runtime LLM call tracing via LangSmith + Confident AI / DeepEval dataset evaluation in CI/CD.</div>
+
+  <h2>Observability Overview</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Concern</th><th>Tool</th><th>Where</th></tr>
+    <tr><td>LLM call tracing (latency, tokens, I/O)</td><td>LangSmith</td><td>Runtime — <code>LangChainTracer</code> callback on every <code>model.invoke()</code></td></tr>
+    <tr><td>LLM quality evaluation</td><td>Confident AI / DeepEval</td><td>CI/CD — <code>deepeval run</code> against Confident AI datasets</td></tr>
+    <tr><td>DeepEval runtime spans</td><td>Confident AI</td><td>Runtime — <code>traceManager.configure</code> + <code>observe</code> in <code>AiService</code></td></tr>
+    <tr><td>Schema correctness</td><td>—</td><td>Runtime — <code>validateSchema</code> LangGraph node</td></tr>
+    <tr><td>Service correctness</td><td>—</td><td>CI/CD — Jest unit tests (see <a href="#testing">Testing</a>)</td></tr>
+  </table></div>
+
+  <h2>LangSmith Runtime Tracing</h2>
+  <p>Every <code>model.invoke()</code> call in <code>AiService.invokeModel</code> passes <code>new LangChainTracer()</code> as an explicit callback. <code>ChatVertexAI</code> routes through <code>@langchain/core</code>'s callback system, so this tracer fires for every inference and records the input prompt, output text, token counts, model name, and latency in LangSmith. LangGraph nodes are plain functions and do not appear as separate LangSmith traces. Traces appear in the <code>bizzie_dev</code> project at <code>smith.langchain.com</code>.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Variable</th><th>Value</th><th>Where</th></tr>
+    <tr><td><code>LANGCHAIN_TRACING_V2</code></td><td><code>true</code> (must be exactly the string <code>"true"</code>)</td><td><code>.env</code> and <code>.env.local</code></td></tr>
+    <tr><td><code>LANGSMITH_API_KEY</code></td><td>Key for <code>bizzie_dev</code> workspace</td><td>GCP Secret Manager (<code>defineSecret</code>) in prod; <code>.env.local</code> locally</td></tr>
+    <tr><td><code>LANGSMITH_PROJECT</code></td><td><code>bizzie_dev</code></td><td><code>.env</code> and <code>.env.local</code></td></tr>
+    <tr><td><code>LANGCHAIN_CALLBACKS_BACKGROUND</code></td><td><code>false</code></td><td><code>.env</code> and <code>.env.local</code> — critical for serverless</td></tr>
+    <tr><td><code>LANGSMITH_ENDPOINT</code></td><td><code>https://api.smith.langchain.com</code></td><td>Optional — defaults to this value if not set</td></tr>
+  </table></div>
+  <div class="callout amber"><strong>LANGCHAIN_CALLBACKS_BACKGROUND=false is required.</strong> By default, LangChain callbacks are dispatched into a background p-queue. In Firebase Functions, the instance exits before the queue drains. <code>awaitAllCallbacks()</code> snapshots <code>autoBatchQueue.items</code> before <code>patchRun</code> (which carries <code>end_time</code> and <code>outputs</code>) is queued — traces are created but never completed. Setting this to <code>false</code> makes callbacks synchronous, so both <code>createRun</code> and <code>patchRun</code> are queued before the snapshot. Both <code>.env</code> (deployed) and <code>.env.local</code> (local dev) must have this set.</div>
+
+  <h2>Confident AI / DeepEval Runtime Spans</h2>
+  <p><code>EvaluationService.init()</code> is called inside <code>weeklyRecapProcessor</code> with <code>await</code> (not at module scope — secrets are only available in the handler). It calls <code>traceManager.configure({ confidentApiKey, tracingEnabled: true })</code> from <code>deepeval/tracing</code>. When initialized, <code>AiService</code> wraps LLM calls at two levels:</p>
+  <ul>
+    <li><strong>AGENT span</strong> (<code>weeklyRecap-{ticker}</code>): wraps the full <code>runSummarize</code> function including retries — names the trace in Confident AI</li>
+    <li><strong>LLM span</strong> (<code>summarizeNews</code>): wraps each individual <code>runGenerate</code> call; <code>retrievalContext</code> and <code>output</code> set via <code>updateCurrentSpan</code> <strong>inside <code>runGenerate</code></strong> (while the span is still open)</li>
+  </ul>
+  <div class="callout amber"><strong>updateCurrentSpan must be called inside runGenerate.</strong> The <code>observe</code> span closes when <code>runGenerate</code> returns. Calling <code>updateCurrentSpan</code> after <code>observe(...)() </code>returns means the span is already closed and the update has no effect. Retrieval context is <code>[newsText, filingsText]</code> filtered to exclude <code>'(none)'</code> strings — EOD prices and the full prompt are not included.</div>
 
   <h2>Approach</h2>
   <p>Test cases and golden datasets are maintained in the Confident AI dashboard. <code>deepeval run</code> executes evaluations in CI/CD after each deployment, pulling datasets from Confident AI, scoring outputs, and reporting results back to the dashboard.</p>
-  <div class="table-wrap"><table>
-    <tr><th>Concern</th><th>Where it lives</th></tr>
-    <tr><td>Per-ticker processing</td><td>Runtime — <code>weeklyRecapProcessor</code> writes summaries to Firestore</td></tr>
-    <tr><td>LLM output quality</td><td>CI/CD — <code>deepeval run</code> against Confident AI datasets</td></tr>
-    <tr><td>Schema correctness</td><td>Runtime — <code>validateSchema</code> LangGraph node (pure TypeScript)</td></tr>
-    <tr><td>Service correctness</td><td>CI/CD — Jest unit tests (see <a href="#testing">Testing</a>)</td></tr>
-  </table></div>
 
   <h2>Dataset Management</h2>
   <p>Datasets are created and maintained in the <strong>Confident AI dashboard</strong> under the <code>weekly-recap</code> project (one project per environment: dev / qa / prod). Datasets are versioned — create a new version when the prompt template changes or evaluation criteria are revised.</p>
@@ -1150,43 +1207,24 @@ const promptTemplate = await client.pullPrompt('weekly-recap-summarize');</code>
     <tr><td><code>expected_output</code></td><td>(Optional) Reference summary for comparison metrics</td></tr>
   </table></div>
 
-  <h2>Metrics Evaluated</h2>
+  <h2>Metric Collection — Platform Setup</h2>
+  <p>Metrics are configured in the <strong>Confident AI dashboard</strong> (<code>app.confident-ai.com</code>), not in code. The metric collection name is <code>weekly-recap-summary</code> — this must match the <code>metricCollection</code> value in the LLM <code>observe</code> span.</p>
+
+  <h3>Creating the metric collection</h3>
+  <ol>
+    <li>Log in to <code>app.confident-ai.com</code> and select the project for the target environment (dev / qa / prod).</li>
+    <li>Navigate to <strong>Metric Collections</strong> and click <strong>Create</strong>.</li>
+    <li>Name: <code>weekly-recap-summary</code>. Save.</li>
+  </ol>
+
+  <h3>Metrics to add</h3>
   <div class="table-wrap"><table>
-    <tr><th>Metric</th><th>DeepEval class</th><th>What it checks</th></tr>
-    <tr><td>Answer relevancy</td><td><code>AnswerRelevancyMetric</code></td><td>Summary content is germane to the ticker and week window</td></tr>
-    <tr><td>Faithfulness</td><td><code>FaithfulnessMetric</code></td><td>Claims are grounded in the provided source documents</td></tr>
-    <tr><td>Hallucination</td><td><code>HallucinationMetric</code></td><td>No fabricated names, events, dates, or figures</td></tr>
+    <tr><th>Metric</th><th>Threshold</th><th>Required fields</th></tr>
+    <tr><td>Faithfulness</td><td>0.8</td><td>Input + Actual Output + Retrieval Context</td></tr>
+    <tr><td>Answer Relevancy</td><td>0.8</td><td>Input + Actual Output</td></tr>
+    <tr><td>Summarization</td><td>0.58</td><td>Input + Actual Output</td></tr>
   </table></div>
-  <p>Thresholds and LLM-as-Judge model are configured per dataset in the Confident AI dashboard — not hardcoded in test files.</p>
-
-  <h2>Test Files</h2>
-  <p>Evaluation tests live in <code>tests/evaluation/</code> using the Python <code>deepeval</code> framework — separate from the TypeScript Jest unit tests.</p>
-  <pre><code>tests/
-└── evaluation/
-    ├── conftest.py
-    └── test_weekly_recap_summary.py</code></pre>
-  <pre><code>import pytest
-from deepeval import assert_test
-from deepeval.dataset import EvaluationDataset
-from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, HallucinationMetric
-
-dataset = EvaluationDataset()
-dataset.pull(alias="weekly-recap-v1")  # pulls from Confident AI
-
-@pytest.mark.parametrize("test_case", dataset.test_cases)
-def test_weekly_recap_summary(test_case):
-    assert_test(test_case, [
-        AnswerRelevancyMetric(threshold=0.7),
-        FaithfulnessMetric(threshold=0.8),
-        HallucinationMetric(threshold=0.5),
-    ])</code></pre>
-
-  <h2>CI/CD Integration</h2>
-  <p><code>deepeval run</code> executes after a successful deployment to each environment. If scores fall below configured thresholds, the step fails and the deployment is flagged.</p>
-  <pre><code>- name: Run LLM evaluation
-  run: deepeval run tests/evaluation/
-  env:
-    CONFIDENT_API_KEY: ${{ secrets.CONFIDENT_API_KEY }}</code></pre>
+  <p>LLM-as-Judge model and detailed settings are configured on the Confident AI platform — no code changes are needed to adjust thresholds.</p>
 
   <h2>Authentication &amp; Multi-Environment Pattern</h2>
   <div class="table-wrap"><table>
