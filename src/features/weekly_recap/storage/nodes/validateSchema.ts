@@ -20,21 +20,21 @@ export function makeValidateSchemaNode() {
       }
     };
 
-    assertField('messageTitle',        llmPartial?.messageTitle,        typeof llmPartial?.messageTitle === 'string' && llmPartial.messageTitle.length > 0);
+    assertField('messageTitle', llmPartial?.messageTitle, typeof llmPartial?.messageTitle === 'string' && llmPartial.messageTitle.length > 0);
     assertField('messageShortSummary', llmPartial?.messageShortSummary, typeof llmPartial?.messageShortSummary === 'string' && llmPartial.messageShortSummary.length > 0);
-    assertField('messageLongSummary',  llmPartial?.messageLongSummary,  typeof llmPartial?.messageLongSummary === 'string' && llmPartial.messageLongSummary.length > 0);
+    assertField('messageLongSummary', llmPartial?.messageLongSummary, typeof llmPartial?.messageLongSummary === 'string' && llmPartial.messageLongSummary.length > 0);
     assertField(
       'confidenceScore',
       llmPartial?.confidenceScore,
       typeof llmPartial?.confidenceScore === 'number' &&
-        Number.isInteger(llmPartial.confidenceScore) &&
-        llmPartial.confidenceScore >= 0 &&
-        llmPartial.confidenceScore <= 100,
+      Number.isInteger(llmPartial.confidenceScore) &&
+      llmPartial.confidenceScore >= 0 &&
+      llmPartial.confidenceScore <= 100,
     );
-    assertField('newsLinks',   llmPartial?.newsLinks,   Array.isArray(llmPartial?.newsLinks));
+    assertField('newsLinks', llmPartial?.newsLinks, Array.isArray(llmPartial?.newsLinks));
     assertField('eightKLinks', llmPartial?.eightKLinks, Array.isArray(llmPartial?.eightKLinks));
 
-    if (!valid) return {};  // routeAfterValidation routes to END
+    if (!valid) return {};
 
     logger.info(`Schema valid for ${ticker}`);
     return {};
