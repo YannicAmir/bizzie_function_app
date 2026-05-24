@@ -57,6 +57,7 @@ export const weeklyRecapScheduler = onSchedule(
 export const weeklyRecapProcessor = onMessagePublished(
   {
     topic: TOPIC_NAME,
+    region: 'us-central1',
     retry: true,
     memory: '512MiB',
     timeoutSeconds: 300,
