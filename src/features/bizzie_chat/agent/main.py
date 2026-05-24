@@ -33,7 +33,15 @@ async def lifespan(app: FastAPI):
         logger.info("Redis CA cert written to /tmp/redis-ca.pem")
     checkpointer = make_checkpointer()
     if hasattr(checkpointer, "asetup"):
-        await checkpointer.asetup()  # type: ignore[union-attr]
+        try:
+            await checkpointer.asetup()  # type: ignore[union-attr]
+        except Exception as exc:
+            logger.warning(
+                "Checkpointer asetup failed, falling back to MemorySaver",
+                extra={"json_fields": {"error": str(exc)}},
+            )
+            from langgraph.checkpoint.memory import MemorySaver
+            checkpointer = MemorySaver()
     app.state.graph = build_graph(checkpointer)
     logger.info("Graph initialized", extra={"json_fields": {"checkpointer": type(checkpointer).__name__}})
     yield
