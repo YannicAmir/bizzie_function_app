@@ -248,15 +248,14 @@ jobs:
           # resolves to the correct SA email at deploy time — never hardcoded in source.
           echo "BIZZIE_CHAT_SERVICE_ACCOUNT=${SA_EMAIL}" > .env.${{ env.FIREBASE_ALIAS }}
 
-      - name: Grant Cloud Functions service agent Pub/Sub access
+      - name: Grant Firebase deployer Pub/Sub access
         run: |
           PROJECT_ID=$(gcloud config get-value project)
-          PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
-          CF_AGENT="service-${PROJECT_NUMBER}@gcf-admin-robot.iam.gserviceaccount.com"
-          echo "Granting roles/pubsub.admin to Cloud Functions service agent ${CF_AGENT}..."
+          DEPLOYER_EMAIL=$(gcloud config get-value account)
+          echo "Granting roles/pubsub.editor to deployer: ${DEPLOYER_EMAIL}"
           gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-            --member="serviceAccount:${CF_AGENT}" \
-            --role="roles/pubsub.admin" \
+            --member="serviceAccount:${DEPLOYER_EMAIL}" \
+            --role="roles/pubsub.editor" \
             --condition=None \
             --quiet
 
