@@ -18,6 +18,7 @@ const confidentApiKey = defineSecret('CONFIDENT_API_KEY');
 const langsmithApiKey = defineSecret('LANGSMITH_API_KEY');
 const langsmithProject = defineSecret('LANGSMITH_PROJECT');
 const langsmithEndpoint = defineSecret('LANGSMITH_ENDPOINT');
+const fmpApiKey = defineSecret('FMP_API_KEY');
 
 const logger = new Logger('WeeklyRecap/Storage/Trigger');
 const firestoreService = new FirestoreService();
@@ -63,7 +64,7 @@ export const weeklyRecapProcessor = onMessagePublished(
     retry: true,
     memory: '512MiB',
     timeoutSeconds: 300,
-    secrets: [confidentApiKey, langsmithApiKey, langsmithProject, langsmithEndpoint],
+    secrets: [confidentApiKey, langsmithApiKey, langsmithProject, langsmithEndpoint, fmpApiKey],
   },
   async (event) => {
     const messageId = event.data.message.messageId;
