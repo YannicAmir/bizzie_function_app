@@ -16,6 +16,8 @@ const WEEKLY_RECAP_SCHEDULE = '0 16 * * 5'; // Every Friday at 4 PM ET
 
 const confidentApiKey = defineSecret('CONFIDENT_API_KEY');
 const langsmithApiKey = defineSecret('LANGSMITH_API_KEY');
+const langsmithProject = defineSecret('LANGSMITH_PROJECT');
+const langsmithEndpoint = defineSecret('LANGSMITH_ENDPOINT');
 
 const logger = new Logger('WeeklyRecap/Storage/Trigger');
 const firestoreService = new FirestoreService();
@@ -61,7 +63,7 @@ export const weeklyRecapProcessor = onMessagePublished(
     retry: true,
     memory: '512MiB',
     timeoutSeconds: 300,
-    secrets: [confidentApiKey, langsmithApiKey],
+    secrets: [confidentApiKey, langsmithApiKey, langsmithProject, langsmithEndpoint],
   },
   async (event) => {
     const messageId = event.data.message.messageId;

@@ -29,6 +29,7 @@ Cloud Function entry points. Instantiates service dependencies and delegates to 
 |---|---|
 | Type | `onMessagePublished` (Pub/Sub) |
 | Topic | `weekly-recap` |
+| Region | `us-central1` |
 | Memory | `512MiB` |
 | Timeout | `300s` |
 | Secrets | `CONFIDENT_API_KEY`, `LANGSMITH_API_KEY` (via `defineSecret`) |
