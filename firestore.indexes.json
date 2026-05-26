@@ -25,6 +25,13 @@
                 { "fieldPath": "subscriptionExpiryDate", "order": "ASCENDING" },
                 { "fieldPath": "__name__", "order": "ASCENDING" }
             ]
+        },
+        {
+            "collectionGroup": "weeks",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "time", "order": "ASCENDING" }
+            ]
         }
     ],
     "fieldOverrides": []
