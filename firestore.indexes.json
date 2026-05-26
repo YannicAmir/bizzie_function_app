@@ -26,13 +26,17 @@
                 { "fieldPath": "__name__", "order": "ASCENDING" }
             ]
         },
+    ],
+    "fieldOverrides": [
         {
             "collectionGroup": "weeks",
-            "queryScope": "COLLECTION_GROUP",
-            "fields": [
-                { "fieldPath": "time", "order": "ASCENDING" }
+            "fieldPath": "time",
+            "indexes": [
+                { "order": "ASCENDING", "queryScope": "COLLECTION" },
+                { "order": "DESCENDING", "queryScope": "COLLECTION" },
+                { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" },
+                { "order": "DESCENDING", "queryScope": "COLLECTION_GROUP" }
             ]
         }
-    ],
-    "fieldOverrides": []
+    ]
 }
