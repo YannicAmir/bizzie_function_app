@@ -12,7 +12,15 @@ import type { WeeklySummary } from './models';
 import { DELIVERY_TOPIC } from './constants/pubsub';
 
 const redisUrl = defineSecret('REDIS_URL');
+// redisCA is only mounted on prod — dev/qa Redis does not use TLS
 const redisCA = defineSecret('REDIS_CA_CERT');
+
+const isProd = process.env.ENV === 'prod';
+const functionSecrets = isProd ? [redisUrl, redisCA] : [redisUrl];
+
+function initRedis(): void {
+  redisService.init(redisUrl.value(), isProd ? redisCA.value() || undefined : undefined);
+}
 
 const RETRIEVAL_SCHEDULE = '30 16 * * 5'; // Every Friday at 4:30 PM ET
 const TIMEZONE = 'America/New_York';
@@ -42,10 +50,10 @@ export const weeklyRecapRetrievalScheduler = onSchedule(
     region: config.location,
     memory: '512MiB',
     timeoutSeconds: 300,
-    secrets: [redisUrl, redisCA],
+    secrets: functionSecrets,
   },
   async () => {
-    redisService.init(redisUrl.value(), redisCA.value() || undefined);
+    initRedis();
     logger.info('Retrieval scheduler started');
 
     try {
@@ -63,10 +71,10 @@ export const weeklyRecapDeliveryProcessor = onMessagePublished(
     memory: '256MiB',
     timeoutSeconds: 60,
     retry: true,
-    secrets: [redisUrl, redisCA],
+    secrets: functionSecrets,
   },
   async (event) => {
-    redisService.init(redisUrl.value(), redisCA.value() || undefined);
+    initRedis();
     const message = event.data.message;
 
     let summary: WeeklySummary;
