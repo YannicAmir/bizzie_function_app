@@ -12,3 +12,4 @@ export * from './features/watchlist_aggregator/trigger';
 export * from './features/subscription_cleanup/trigger';
 export * from './features/bizzie_chat/trigger';
 export * from './features/weekly_recap/storage/trigger';
+export * from './features/weekly_recap/retrieval_and_messaging/trigger';

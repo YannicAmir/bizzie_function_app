@@ -33,6 +33,7 @@ retry<T>(fn, { maxAttempts, initialDelayMs, backoffFactor, maxDelayMs, shouldRet
 |---|---|---|---|---|
 | Firestore reads (`firestore_service.ts`) | 3 | 1000ms | 2 | 1s → 2s → throw |
 | Redis operations (`redis_service.ts`) | 3 | 500ms | 2 | 0.5s → 1s → throw |
+| Pub/Sub publish (`pubsub_service.ts`) | 3 | 1000ms | 2 | 1s → 2s → throw |
 | FCM send (`fcm_service.ts`) | 2 | 1000ms | 2 | 1s → throw |
 
 **Transient errors (retried):** HTTP 429, 500, 503 · `UNAVAILABLE` · `DEADLINE_EXCEEDED` · network failures.

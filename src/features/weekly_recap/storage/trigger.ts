@@ -84,7 +84,7 @@ export const weeklyRecapProcessor = onMessagePublished(
     const { ticker, companyName } = company;
     logger.info(`Processing ${ticker} (${companyName})`, { messageId });
 
-    await evaluationService.init();
+    await evaluationService.init(confidentApiKey.value());
 
     try {
       await graph.invoke({ ticker, companyName });

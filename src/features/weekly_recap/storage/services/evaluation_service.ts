@@ -10,10 +10,9 @@ export class EvaluationService {
     return this._initialized;
   }
 
-  async init(): Promise<void> {
+  async init(apiKey: string): Promise<void> {
     if (this._initialized) return;
     try {
-      const apiKey = process.env.CONFIDENT_API_KEY ?? '';
       if (apiKey) {
         traceManager.configure({ confidentApiKey: apiKey, tracingEnabled: true });
         this._initialized = true;

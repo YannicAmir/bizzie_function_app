@@ -2,7 +2,7 @@
 
 Handles all Pub/Sub interactions for the retrieval & message pipeline: publishing per-ticker summary messages from the scheduler and deserializing them in the processor. No business logic — pure message transport.
 
-Uses the `@google-cloud/pubsub` client. Topic and project resolved from `config.projectId` (`src/core/config.ts`). Logger instantiated as `new Logger('WeeklyRecap/Retrieval/PubSubService')` from `src/core/logger.ts`.
+Uses the `@google-cloud/pubsub` client. Project resolved via ADC (`GOOGLE_CLOUD_PROJECT` env var, automatically set in Cloud Functions). Logger instantiated as `new Logger('WeeklyRecap/Retrieval/PubSubService')` from `src/core/logger.ts`.
 
 ---
 

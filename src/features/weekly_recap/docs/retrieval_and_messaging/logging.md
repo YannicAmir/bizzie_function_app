@@ -17,15 +17,22 @@ Each file uses `new Logger(context)` from `src/core/logger.ts`. Context naming c
 | Event | Level | Message |
 |---|---|---|
 | Scheduler started | `info` | `"Retrieval scheduler started"` |
-| Users loaded | `info` | `"Loaded {n} subscribed users with {t} unique tickers"` |
-| No subscribed users | `warn` | `"No subscribed users found — nothing to deliver"` |
-| Users stored in Redis | `info` | `"Stored {n} users and {t} ticker sets in Redis"` |
-| Summary not found for ticker | `warn` | `"No summary found for {ticker} ({weekEndDate}) — skipping"` |
-| Summaries queued | `info` | `"Queued {n} Pub/Sub messages in {ms}ms"` |
 | Processor message received | `info` | `"Processing delivery for {ticker} ({companyName})"` |
+| Processor unrecoverable error | `error` | `"Delivery failed for {ticker} — message acknowledged"` + error |
+| Malformed Pub/Sub payload | `error` | `"Delivery failed — malformed Pub/Sub payload, message acknowledged"` + `rawData` + error |
+
+---
+
+## `retrieval_and_messaging/usecase.ts` — `WeeklyRecap/Retrieval/Usecase`
+
+| Event | Level | Message |
+|---|---|---|
+| Users loaded | `info` | `"Loaded {n} users with {t} unique tickers"` |
+| No eligible users | `warn` | `"No users with notifications enabled — nothing to deliver"` |
+| Users stored in Redis | `info` | `"Stored {n} users and {t} ticker sets in Redis"` |
+| Summaries queued | `info` | `"Queued {n} Pub/Sub messages in {ms}ms"` |
 | No eligible users for ticker | `info` | `"No eligible users for {ticker} — all already notified or none subscribed"` |
 | Processor completed | `info` | `"Delivery complete for {ticker}: {sent} tokens notified"` |
-| Processor unrecoverable error | `error` | `"Delivery failed for {ticker} — message acknowledged"` + error |
 
 ---
 

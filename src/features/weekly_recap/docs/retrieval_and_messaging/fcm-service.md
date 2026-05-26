@@ -6,15 +6,14 @@ Uses `getFirebaseAdmin().messaging()` from `src/core/firebase.ts`. Logger instan
 
 ---
 
-## APNS Payload Schema
+## FCM Message Payload
 
 | Field | Value | Source |
 |---|---|---|
 | `notification.title` | `messageTitle` | `WeeklySummary` (≤ 50 chars) |
 | `notification.body` | `messageShortSummary` | `WeeklySummary` (≤ 150 chars) |
-| `data.type` | `"weekly_summary"` | static |
+| `data.type` | `"weekly_summary"` | static — drives deep-link routing in the app |
 | `data.ticker` | ticker symbol | `WeeklySummary` |
-| `topic` | ticker symbol | `WeeklySummary` — routes to APNS topic in the app |
 
 The `data` block enables deep-link routing in the app when the user taps the notification. The app reads the full summary from Firestore (`weekly_recap/{ticker}/weeks/{weekEndDate}`) on open — the notification carries only enough to render the alert and route correctly.
 

@@ -328,7 +328,7 @@
          │
          ▼
 weeklyRecapRetrievalScheduler  [trigger.ts]
-  FirestoreService.retrieveSubscribedUsers()  ── reads users/{uid} + users/{uid}/watchlist
+  FirestoreService.retrieveEligibleUsers()  ── reads users/{uid} + users/{uid}/watchlist
   RedisService.storeUsers(users)              ── writes user:{uid} keys + ticker:{ticker} sets (TTL 24h)
          │  (must complete before step 3)
   FirestoreService.retrieveSummariesForWeek() ── reads weekly_recap/{ticker}/weeks/{weekEndDate}
@@ -354,7 +354,7 @@ sequenceDiagram
     participant FCM as Firebase FCM
 
     CS->>SCH: Fri 4:30pm EST
-    SCH->>FS: retrieveSubscribedUsers()
+    SCH->>FS: retrieveEligibleUsers()
     FS-->>SCH: UserRecord[]
     SCH->>R: storeUsers() via pipeline
     Note over R: user keys + ticker sets · TTL 24h
@@ -381,7 +381,7 @@ sequenceDiagram
   <div class="mermaid-wrap"><div class="mermaid">
 flowchart TD
     CS([Cloud Scheduler\nFri 4:30pm EST]) --> SCH[weeklyRecapRetrievalScheduler]
-    SCH -- compound query\nisSubscribed + notificationsEnabled --> FS1[(Firestore\nusers + watchlists)]
+    SCH -- query notificationsEnabled --> FS1[(Firestore\nusers + watchlists)]
     FS1 -- UserRecord[] --> SCH
     SCH -- pipeline write\nTTL 24h --> R[(Redis Cloud\nuser keys + ticker sets)]
     SCH -- reads summaries --> FS2[(Firestore\nweekly_recap)]
@@ -424,7 +424,7 @@ flowchart TD
   <h2>Collections Read</h2>
   <div class="table-wrap"><table>
     <tr><th>Collection</th><th>Access</th><th>Description</th></tr>
-    <tr><td><code>users/{uid}</code></td><td>read</td><td>User profile — <code>fcmTokens</code>, <code>isSubscribed</code>, <code>notificationsEnabled</code></td></tr>
+    <tr><td><code>users/{uid}</code></td><td>read</td><td>User profile — <code>fcmTokens</code>, <code>notificationsEnabled</code></td></tr>
     <tr><td><code>users/{uid}/watchlist/{ticker}</code></td><td>read</td><td>Per-user ticker subscriptions; document IDs are ticker symbols</td></tr>
     <tr><td><code>weekly_recap/{ticker}/weeks/{weekEndDate}</code></td><td>read</td><td>LLM summaries written by the storage pipeline</td></tr>
   </table></div>
@@ -463,7 +463,7 @@ flowchart TD
 
   <p>Delegates to <code>RetrievalSchedulerUsecase.execute()</code>. Catches and logs any thrown error at <code>error</code> level.</p>
 
-  <div class="callout amber"><strong>On-error behaviour.</strong> If no subscribed users are found after step 1, logs <code>warn</code> and exits cleanly — no Redis writes, no Pub/Sub messages published.</div>
+  <div class="callout amber"><strong>On-error behaviour.</strong> If no users with notifications enabled are found after step 1, logs <code>warn</code> and exits cleanly — no Redis writes, no Pub/Sub messages published.</div>
 
   <h2>weeklyRecapDeliveryProcessor</h2>
   <div class="table-wrap"><table>
@@ -489,13 +489,13 @@ flowchart TD
   <h3>execute(): Promise&lt;void&gt;</h3>
   <p>Called by <code>weeklyRecapRetrievalScheduler</code>. Steps are sequential — order is mandatory.</p>
   <ol>
-    <li>Calls <code>FirestoreService.retrieveSubscribedUsers()</code> to query eligible users server-side (<code>isSubscribed: true</code> AND <code>notificationsEnabled: true</code>) and concurrently fetch each user's watchlist via <code>Promise.allSettled()</code>. Users whose watchlist read fails are excluded with a <code>warn</code> log — one failure does not abort the batch.</li>
+    <li>Calls <code>FirestoreService.retrieveEligibleUsers()</code> to query eligible users server-side (<code>isSubscribed: true</code> AND <code>notificationsEnabled: true</code>) and concurrently fetch each user's watchlist via <code>Promise.allSettled()</code>. Users whose watchlist read fails are excluded with a <code>warn</code> log — one failure does not abort the batch.</li>
     <li>Calls <code>RedisService.storeUsers(users)</code> to write <code>user:{uid}</code> keys and <code>ticker:{ticker}</code> sets to Redis. <strong>Must complete before step 3</strong> — processors must not start running until Redis is fully populated.</li>
-    <li>Calls <code>FirestoreService.retrieveSummariesForWeek(weekEndDate)</code> to read <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code> for all tickers across all user watchlists. Tickers without a document are skipped with a <code>warn</code> log.</li>
+    <li>Calls <code>FirestoreService.retrieveSummariesForWeek(weekEndDate)</code> — a single Firestore collection group query on <code>weeks</code> filtered by the <code>time</code> field returns all summaries written this week across all tickers in one round-trip. No ticker list is needed as input. Documents missing a <code>ticker</code> field are skipped with a <code>warn</code> log.</li>
     <li>Calls <code>PubSubService.queueSummaries(summaries)</code> to publish one Pub/Sub message per ticker to <code>weekly-recap-delivery</code>. Each message payload is the full <code>WeeklySummary</code> (<code>ticker</code>, <code>companyName</code>, <code>weekEndDate</code>, <code>messageTitle</code>, <code>messageShortSummary</code>).</li>
   </ol>
 
-  <div class="callout amber"><strong>On-error.</strong> If no subscribed users are found after step 1, logs <code>warn</code> and exits cleanly — no Redis writes, no Pub/Sub messages.</div>
+  <div class="callout amber"><strong>On-error.</strong> If no users with notifications enabled are found after step 1, logs <code>warn</code> and exits cleanly — no Redis writes, no Pub/Sub messages.</div>
 
   <hr>
 
@@ -523,23 +523,21 @@ flowchart TD
   <pre><code>interface UserProfile {
   uid: string;                       // document ID
   fcmTokens: Record&lt;string, string&gt;; // { [deviceId]: fcmToken }
-  isSubscribed: boolean;
   notificationsEnabled: boolean;
   name: string;
 }</code></pre>
-  <p>Only users where <code>isSubscribed === true</code> AND <code>notificationsEnabled === true</code> are eligible for notifications.</p>
+  <p>Only users where <code>notificationsEnabled === true</code> are eligible. Weekly recap is delivered regardless of subscription status.</p>
 
   <div class="table-wrap"><table>
     <tr><th>Field</th><th>Type</th><th>Description</th></tr>
     <tr><td><code>fcmTokens</code></td><td><code>map&lt;string, string&gt;</code></td><td>Device ID → FCM registration token</td></tr>
-    <tr><td><code>isSubscribed</code></td><td><code>boolean</code></td><td>User has an active subscription</td></tr>
     <tr><td><code>notificationsEnabled</code></td><td><code>boolean</code></td><td>User has enabled push notifications</td></tr>
     <tr><td><code>name</code></td><td><code>string</code></td><td>Display name</td></tr>
   </table></div>
 
   <p><strong>users/{uid}/watchlist/{ticker}</strong> — document IDs are ticker symbols (e.g. <code>"AAPL"</code>). Document content is not read — only the document IDs are needed to build the ticker list.</p>
 
-  <h3>UserRecord — assembled by FirestoreService.retrieveSubscribedUsers()</h3>
+  <h3>UserRecord — assembled by FirestoreService.retrieveEligibleUsers()</h3>
   <p>Combines the user profile with their watchlist. Passed to <code>RedisService.storeUsers()</code>.</p>
   <pre><code>interface UserRecord {
   uid: string;
@@ -581,7 +579,6 @@ flowchart TD
     type: 'weekly_summary';
     ticker: string;
   };
-  topic: string;     // ticker symbol — routes to APNS topic in the app
 }</code></pre>
 
   <h3>EligibleUser — returned by RedisService.claimUsersForTicker()</h3>
@@ -601,33 +598,33 @@ flowchart TD
   <h2>Collections</h2>
   <div class="table-wrap"><table>
     <tr><th>Collection</th><th>Access</th><th>Description</th></tr>
-    <tr><td><code>users/{uid}</code></td><td>read</td><td>User profile — FCM tokens, subscription status, notification preferences</td></tr>
+    <tr><td><code>users/{uid}</code></td><td>read</td><td>User profile — FCM tokens, notification preferences</td></tr>
     <tr><td><code>users/{uid}/watchlist/{ticker}</code></td><td>read</td><td>Per-user ticker subscriptions; document IDs are the ticker symbols</td></tr>
     <tr><td><code>weekly_recap/{ticker}/weeks/{weekEndDate}</code></td><td>read</td><td>LLM summaries written by the storage pipeline</td></tr>
   </table></div>
 
-  <h2>retrieveSubscribedUsers(): Promise&lt;UserRecord[]&gt;</h2>
+  <h2>retrieveEligibleUsers(): Promise&lt;UserRecord[]&gt;</h2>
   <p>Called by <code>weeklyRecapRetrievalScheduler</code> as the first step.</p>
   <ul>
-    <li>Queries the <code>users</code> collection server-side using a compound filter: <code>where('isSubscribed', '==', true).where('notificationsEnabled', '==', true)</code>. Only qualifying documents cross the wire — inactive users are never read. Requires the composite index defined in <code>firestore.indexes.json</code> (fields: <code>isSubscribed ASC</code>, <code>notificationsEnabled ASC</code>).</li>
+    <li>Queries the <code>users</code> collection server-side with a single filter: <code>where('notificationsEnabled', '==', true)</code>. Weekly recap is delivered to all users regardless of subscription status — only users who have explicitly disabled notifications are excluded.</li>
     <li>For each qualifying user, fires all <code>users/{uid}/watchlist</code> subcollection reads concurrently using <code>Promise.allSettled()</code>. Each document ID in the subcollection is a ticker symbol. Document content is not needed.</li>
     <li><strong>Failed watchlist reads:</strong> if a subcollection read rejects, logs <code>warn</code> with the UID and error, and excludes that user from the result. One failed read does not abort the batch — remaining users proceed normally.</li>
-    <li>Converts <code>UserProfile.fcmTokens</code> (map of <code>{ [deviceId]: token }</code>) to a plain <code>string[]</code> of token values — device IDs are not used downstream.</li>
+    <li>Converts <code>UserProfile.fcmTokens</code> (map of <code>{ [deviceId]: token }</code>) to a deduplicated <code>string[]</code> of token values — device IDs are not used downstream. Deduplication removes duplicate token values that arise when a device re-registers under a new device ID without the old entry being cleaned up.</li>
     <li>Returns an array of <code>UserRecord</code> (<code>{ uid, fcmTokens, tickers }</code>) for all users whose watchlist was successfully read.</li>
-    <li>Returns an empty array (no throw) if no subscribed users exist — usecase logs a warning and exits cleanly.</li>
+    <li>Returns an empty array (no throw) if no eligible users exist — usecase logs a warning and exits cleanly.</li>
   </ul>
 
   <h2>retrieveSummariesForWeek(weekEndDate: string): Promise&lt;WeeklySummary[]&gt;</h2>
   <p>Called by <code>weeklyRecapRetrievalScheduler</code> after <code>RedisService.storeUsers()</code> completes.</p>
   <ul>
-    <li><code>weekEndDate</code> is the Friday date in <code>YYYY-MM-DD</code> format, matching the document ID written by the storage pipeline (e.g. <code>"2026-05-16"</code>).</li>
-    <li>Derives the set of tickers to query from the <code>ticker:{ticker}</code> keys already stored in Redis — avoids a redundant Firestore read to enumerate tickers.</li>
-    <li>Reads <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code> for each ticker individually (Firestore does not support cross-collection queries across the <code>weekly_recap</code> top-level).</li>
-    <li>For each ticker document that exists: maps to <code>WeeklySummary</code> (<code>ticker</code>, <code>companyName</code>, <code>weekEndDate</code>, <code>messageTitle</code>, <code>messageShortSummary</code>).</li>
-    <li>For each ticker document that does not exist: logs <code>warn</code> and skips — storage pipeline did not generate a summary for that ticker this week.</li>
-    <li>Returns the array of <code>WeeklySummary</code> for tickers that have summaries.</li>
+    <li><code>weekEndDate</code> is the Friday date in <code>YYYY-MM-DD</code> format (e.g. <code>"2026-05-16"</code>).</li>
+    <li>Uses a <strong>Firestore collection group query</strong> on the <code>weeks</code> subcollection, filtering by the <code>time</code> field: <code>time &gt;= "${weekEndDate}T00:00:00.000Z"</code> AND <code>time &lt; "${nextDay}T00:00:00.000Z"</code>. Returns all <code>weekly_recap/{ticker}/weeks/{weekEndDate}</code> documents written on that Friday in a <strong>single round-trip</strong> — replaces N individual per-ticker reads with one query. The <code>time</code> field is stored as an ISO 8601 string by the storage pipeline, so string range comparison is correct.</li>
+    <li>Documents missing a <code>ticker</code> field are skipped with a <code>warn</code> log.</li>
+    <li>Maps each result to <code>WeeklySummary</code> (<code>ticker</code>, <code>companyName</code>, <code>weekEndDate</code>, <code>messageTitle</code>, <code>messageShortSummary</code>).</li>
+    <li>Returns the array of <code>WeeklySummary</code> for all tickers with summaries this week.</li>
     <li>Throws on Firestore error (caught and logged by the scheduler).</li>
   </ul>
+  <div class="callout amber"><strong>Index required.</strong> This query requires a composite index on <code>collectionGroup: weeks</code> with field <code>time ASC</code>. Firestore will prompt with a console link to create it on first run.</div>
 </section>
 
 <!-- ════════════════════════════════════════ REDIS SERVICE -->
@@ -635,12 +632,14 @@ flowchart TD
   <div class="page-title">services/redis_service.ts</div>
   <div class="page-subtitle">Ephemeral claim store that enforces the one-notification-per-user-per-week deduplication guarantee. Logger: <code>WeeklyRecap/Retrieval/RedisService</code></div>
 
-  <div class="callout">Uses the <code>ioredis</code> client. <code>REDIS_URL</code> fetched from GCP Secret Manager at cold-start and cached for the lifetime of the function instance.</div>
+  <div class="callout">Uses the <code>ioredis</code> client. <code>REDIS_URL</code> and <code>REDIS_CA_CERT</code> fetched from GCP Secret Manager at cold-start and cached for the lifetime of the function instance.</div>
 
   <h2>Connection</h2>
+  <p>Connection uses TLS (<code>rediss://</code> scheme). Both <code>REDIS_URL</code> and <code>REDIS_CA_CERT</code> are fetched from Secret Manager at cold-start following the mandatory secret pattern — identical secret names across dev, qa, and prod.</p>
   <pre><code>import Redis from 'ioredis';
-const redis = new Redis(process.env.REDIS_URL);</code></pre>
-  <p><code>REDIS_URL</code> follows the mandatory secret pattern — identical secret name across dev, qa, and prod; GCP project context resolves the correct value.</p>
+const redis = new Redis(REDIS_URL, {
+  tls: { ca: Buffer.from(REDIS_CA_CERT) },
+});</code></pre>
 
   <h2>Key Schema</h2>
   <div class="table-wrap"><table>
@@ -650,10 +649,10 @@ const redis = new Redis(process.env.REDIS_URL);</code></pre>
   </table></div>
 
   <h2>storeUsers(users: UserRecord[]): Promise&lt;void&gt;</h2>
-  <p>Called by <code>weeklyRecapRetrievalScheduler</code> after <code>retrieveSubscribedUsers()</code>. <strong>Must complete before <code>queueSummaries()</code> is called.</strong></p>
+  <p>Called by <code>weeklyRecapRetrievalScheduler</code> after <code>retrieveEligibleUsers()</code>. <strong>Must complete before <code>queueSummaries()</code> is called.</strong></p>
   <ul>
     <li>Uses a single Redis pipeline (batched commands) to minimise round-trips.</li>
-    <li>For each <code>UserRecord</code>: <code>SET user:{uid} &lt;JSON&gt; EX 86400</code> — stores FCM tokens with 48-hour TTL.</li>
+    <li>For each <code>UserRecord</code>: <code>SET user:{uid} &lt;JSON&gt; EX 86400</code> — stores FCM tokens with 24-hour TTL.</li>
     <li>For each ticker in <code>UserRecord.tickers</code>: <code>SADD ticker:{ticker} {uid}</code> — adds the UID to the ticker's subscriber set.</li>
     <li>After all <code>SADD</code> commands: sets TTL on each <code>ticker:{ticker}</code> key with <code>EXPIRE ticker:{ticker} 86400</code>.</li>
     <li>Logs the total number of users and unique tickers stored on completion.</li>
@@ -664,6 +663,7 @@ const redis = new Redis(process.env.REDIS_URL);</code></pre>
   <p>Called by <code>weeklyRecapDeliveryProcessor</code> as the second step. Implements the deduplication pattern.</p>
   <ul>
     <li><code>SMEMBERS ticker:{ticker}</code> — retrieves the full set of UIDs subscribed to this ticker.</li>
+    <li><code>DEL ticker:{ticker}</code> — deletes the ticker set immediately after reading to free memory before TTL expiry. A <code>DEL</code> failure is non-fatal — the key expires via TTL and delivery still completes correctly.</li>
     <li>For each UID: <code>GETDEL user:{uid}</code> — atomically retrieves the user's FCM tokens <strong>and deletes the key in a single operation</strong>.</li>
     <li>If <code>GETDEL</code> returns a value: the user has not yet been notified — include in the result set.</li>
     <li>If <code>GETDEL</code> returns <code>null</code>: the user was already claimed by an earlier ticker's processor — skip.</li>
@@ -680,7 +680,7 @@ const redis = new Redis(process.env.REDIS_URL);</code></pre>
   <div class="page-title">services/pubsub_service.ts</div>
   <div class="page-subtitle">Pub/Sub publish and deserialisation for the retrieval &amp; message pipeline. No business logic — pure message transport. Logger: <code>WeeklyRecap/Retrieval/PubSubService</code></div>
 
-  <div class="callout">Uses <code>@google-cloud/pubsub</code> client. Topic and project resolved from <code>config.projectId</code> (<code>src/core/config.ts</code>). This is a separate topic from the storage pipeline's <code>weekly-recap</code> topic.</div>
+  <div class="callout">Uses <code>@google-cloud/pubsub</code> client. Project resolved via ADC (<code>GOOGLE_CLOUD_PROJECT</code> env var, automatically set in Cloud Functions). This is a separate topic from the storage pipeline's <code>weekly-recap</code> topic.</div>
 
   <h2>Topic</h2>
   <div class="table-wrap"><table>
@@ -713,33 +713,31 @@ const redis = new Redis(process.env.REDIS_URL);</code></pre>
 <!-- ════════════════════════════════════════ FCM SERVICE -->
 <section id="fcm-service">
   <div class="page-title">services/fcm_service.ts</div>
-  <div class="page-subtitle">Sends APNS push notifications via Firebase Cloud Messaging to all eligible users for a given ticker. Logger: <code>WeeklyRecap/Retrieval/FcmService</code></div>
+  <div class="page-subtitle">Sends push notifications via Firebase Cloud Messaging to all eligible users for a given ticker. Logger: <code>WeeklyRecap/Retrieval/FcmService</code></div>
 
   <div class="callout">Uses <code>getFirebaseAdmin().messaging()</code> from <code>src/core/firebase.ts</code>.</div>
 
-  <h2>APNS Payload Schema</h2>
+  <h2>FCM Message Payload</h2>
   <div class="table-wrap"><table>
     <tr><th>Field</th><th>Value</th><th>Source</th></tr>
     <tr><td><code>notification.title</code></td><td><code>messageTitle</code></td><td><code>WeeklySummary</code> (≤ 50 chars)</td></tr>
     <tr><td><code>notification.body</code></td><td><code>messageShortSummary</code></td><td><code>WeeklySummary</code> (≤ 150 chars)</td></tr>
-    <tr><td><code>data.type</code></td><td><code>"weekly_summary"</code></td><td>static</td></tr>
+    <tr><td><code>data.type</code></td><td><code>"weekly_summary"</code></td><td>static — drives deep-link routing in the app</td></tr>
     <tr><td><code>data.ticker</code></td><td>ticker symbol</td><td><code>WeeklySummary</code></td></tr>
-    <tr><td><code>topic</code></td><td>ticker symbol</td><td><code>WeeklySummary</code> — routes to APNS topic in the app</td></tr>
   </table></div>
 
   <div class="callout"><strong>Why the data block matters.</strong> The <code>data</code> block drives deep-link routing in the app when the user taps the notification. The app reads the full summary from Firestore (<code>weekly_recap/{ticker}/weeks/{weekEndDate}</code>) on open — the notification carries only enough to render the alert and route correctly.</div>
 
-  <pre><code>// APNS payload structure
+  <pre><code>// FCM message structure
 {
   notification: {
-    title: "&lt;messageTitle&gt;",   // ≤ 50 chars — push notification title
-    body:  "&lt;messageShortSummary&gt;"  // ≤ 150 chars — push notification body
+    title: "&lt;messageTitle&gt;",        // ≤ 50 chars
+    body:  "&lt;messageShortSummary&gt;"  // ≤ 150 chars
   },
   data: {
     type:   "weekly_summary",
     ticker: "&lt;ticker&gt;"
-  },
-  topic: "&lt;ticker&gt;"            // APNS topic routing
+  }
 }</code></pre>
 
   <h2>sendNotifications(users: EligibleUser[], summary: WeeklySummary): Promise&lt;void&gt;</h2>
@@ -788,6 +786,7 @@ const redis = new Redis(process.env.REDIS_URL);</code></pre>
     <tr><th>Call site</th><th>maxAttempts</th><th>initialDelayMs</th><th>backoffFactor</th><th>Delay series</th></tr>
     <tr><td><code>firestore_service.ts</code></td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
     <tr><td><code>redis_service.ts</code></td><td>3</td><td>500ms</td><td>2</td><td>0.5s → 1s → throw</td></tr>
+    <tr><td><code>pubsub_service.ts</code></td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
     <tr><td><code>fcm_service.ts</code></td><td>2</td><td>1000ms</td><td>2</td><td>1s → throw</td></tr>
   </table></div>
   <p><strong>Transient errors (retried):</strong> HTTP 429, 500, 503 · <code>UNAVAILABLE</code> · <code>DEADLINE_EXCEEDED</code> · network failures.</p>
@@ -831,15 +830,20 @@ const redis = new Redis(process.env.REDIS_URL);</code></pre>
   <div class="table-wrap"><table>
     <tr><th>Event</th><th>Level</th><th>Message</th></tr>
     <tr><td>Scheduler started</td><td><span class="badge badge-info">info</span></td><td><code>"Retrieval scheduler started"</code></td></tr>
+    <tr><td>Processor message received</td><td><span class="badge badge-info">info</span></td><td><code>"Processing delivery for {ticker} ({companyName})"</code></td></tr>
+    <tr><td>Processor unrecoverable error</td><td><span class="badge badge-error">error</span></td><td><code>"Delivery failed for {ticker} — message acknowledged"</code> + error</td></tr>
+    <tr><td>Malformed Pub/Sub payload</td><td><span class="badge badge-error">error</span></td><td><code>"Delivery failed — malformed Pub/Sub payload, message acknowledged"</code> + <code>rawData</code> + error</td></tr>
+  </table></div>
+
+  <h2>retrieval_and_messaging/usecase.ts — WeeklyRecap/Retrieval/Usecase</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Event</th><th>Level</th><th>Message</th></tr>
     <tr><td>Users loaded</td><td><span class="badge badge-info">info</span></td><td><code>"Loaded {n} subscribed users with {t} unique tickers"</code></td></tr>
     <tr><td>No subscribed users</td><td><span class="badge badge-warn">warn</span></td><td><code>"No subscribed users found — nothing to deliver"</code></td></tr>
     <tr><td>Users stored in Redis</td><td><span class="badge badge-info">info</span></td><td><code>"Stored {n} users and {t} ticker sets in Redis"</code></td></tr>
-    <tr><td>Summary not found for ticker</td><td><span class="badge badge-warn">warn</span></td><td><code>"No summary found for {ticker} ({weekEndDate}) — skipping"</code></td></tr>
     <tr><td>Summaries queued</td><td><span class="badge badge-info">info</span></td><td><code>"Queued {n} Pub/Sub messages in {ms}ms"</code></td></tr>
-    <tr><td>Processor message received</td><td><span class="badge badge-info">info</span></td><td><code>"Processing delivery for {ticker} ({companyName})"</code></td></tr>
     <tr><td>No eligible users for ticker</td><td><span class="badge badge-info">info</span></td><td><code>"No eligible users for {ticker} — all already notified or none subscribed"</code></td></tr>
     <tr><td>Processor completed</td><td><span class="badge badge-info">info</span></td><td><code>"Delivery complete for {ticker}: {sent} tokens notified"</code></td></tr>
-    <tr><td>Processor unrecoverable error</td><td><span class="badge badge-error">error</span></td><td><code>"Delivery failed for {ticker} — message acknowledged"</code> + error</td></tr>
   </table></div>
 
   <h2>retrieval_and_messaging/services/firestore_service.ts — WeeklyRecap/Retrieval/FirestoreService</h2>

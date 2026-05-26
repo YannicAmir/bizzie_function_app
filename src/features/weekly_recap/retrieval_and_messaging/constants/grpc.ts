@@ -1,0 +1,6 @@
+export const TRANSIENT_GRPC_CODES: number[] = [
+  4,  // DEADLINE_EXCEEDED
+  8,  // RESOURCE_EXHAUSTED
+  13, // INTERNAL
+  14, // UNAVAILABLE
+];

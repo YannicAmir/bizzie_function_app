@@ -10,7 +10,7 @@ Uses `getFirebaseAdmin().firestore()` from `src/core/firebase.ts`. Logger instan
 
 | Collection | Access | Description |
 |---|---|---|
-| `users/{uid}` | read | User profile — FCM tokens, subscription status, notification preferences |
+| `users/{uid}` | read | User profile — FCM tokens, notification preferences |
 | `users/{uid}/watchlist/{ticker}` | read | Per-user ticker subscriptions; document IDs are the ticker symbols |
 | `weekly_recap/{ticker}/weeks/{weekEndDate}` | read | LLM summaries written by the storage pipeline |
 
@@ -18,16 +18,16 @@ Uses `getFirebaseAdmin().firestore()` from `src/core/firebase.ts`. Logger instan
 
 ## Functions
 
-### `retrieveSubscribedUsers(): Promise<UserRecord[]>`
+### `retrieveEligibleUsers(): Promise<UserRecord[]>`
 
 Called by `weeklyRecapRetrievalScheduler` as the first step.
 
-- Queries the `users` collection server-side using a compound filter: `where('isSubscribed', '==', true).where('notificationsEnabled', '==', true)`. Only qualifying documents cross the wire — inactive users are never read. Requires the composite index defined in `firestore.indexes.json` (fields: `isSubscribed ASC`, `notificationsEnabled ASC`).
+- Queries the `users` collection server-side with a single filter: `where('notificationsEnabled', '==', true)`. Weekly recap is delivered to all users regardless of subscription status — only users who have explicitly disabled notifications are excluded.
 - For each qualifying user, fires all `users/{uid}/watchlist` subcollection reads concurrently using `Promise.allSettled()`. Each document ID in the subcollection is a ticker symbol. Document content is not needed.
 - **Failed watchlist reads:** if a subcollection read rejects, logs `warn` with the UID and error, and excludes that user from the result. One failed read does not abort the batch — remaining users proceed normally.
-- Converts `UserProfile.fcmTokens` (map of `{ [deviceId]: token }`) to a plain `string[]` of token values — device IDs are not used downstream.
+- Converts `UserProfile.fcmTokens` (map of `{ [deviceId]: token }`) to a deduplicated `string[]` of token values — device IDs are not used downstream. Deduplication removes duplicate token values that arise when a device re-registers under a new device ID without the old entry being cleaned up.
 - Returns an array of `UserRecord` (`{ uid, fcmTokens, tickers }`) for all users whose watchlist was successfully read.
-- Returns an empty array (no throw) if no subscribed users exist — usecase logs a warning and exits cleanly.
+- Returns an empty array (no throw) if no eligible users exist — usecase logs a warning and exits cleanly.
 
 ---
 
@@ -35,10 +35,14 @@ Called by `weeklyRecapRetrievalScheduler` as the first step.
 
 Called by `weeklyRecapRetrievalScheduler` after `RedisService.storeUsers()` completes.
 
-- `weekEndDate` is the Friday date in `YYYY-MM-DD` format, matching the document ID written by the storage pipeline (e.g. `"2026-05-16"`).
-- Derives the set of tickers to query from the `ticker:{ticker}` keys already stored in Redis. This avoids a redundant Firestore read to enumerate tickers — the user watchlists already define the full ticker set.
-- Reads `weekly_recap/{ticker}/weeks/{weekEndDate}` for each ticker individually (Firestore does not support cross-collection queries across the `weekly_recap` top-level).
-- For each ticker document that exists: maps to `WeeklySummary` (`ticker`, `companyName`, `weekEndDate`, `messageTitle`, `messageShortSummary`).
-- For each ticker document that does not exist: logs `warn` and skips. This means the storage pipeline did not generate a summary for that ticker this week.
-- Returns the array of `WeeklySummary` for tickers that have summaries.
+- `weekEndDate` is the Friday date in `YYYY-MM-DD` format (e.g. `"2026-05-16"`).
+- Uses a **Firestore collection group query** on the `weeks` subcollection, filtering by the `time` field:
+  - `time >= "${weekEndDate}T00:00:00.000Z"` AND `time < "${nextDay}T00:00:00.000Z"`
+  - Returns all `weekly_recap/{ticker}/weeks/{weekEndDate}` documents written on that Friday in a **single round-trip**, regardless of how many tickers exist.
+  - This replaces N individual per-ticker reads with one query. The `time` field is stored as an ISO 8601 string by the storage pipeline, so string range comparison is correct.
+- Documents missing a `ticker` field are skipped with a `warn` log.
+- Maps each result document to `WeeklySummary` (`ticker`, `companyName`, `weekEndDate`, `messageTitle`, `messageShortSummary`).
+- Returns the array of `WeeklySummary` for all tickers that have summaries this week.
 - Throws on Firestore error (caught and logged by the scheduler).
+
+**Note:** This query requires a composite index on `collectionGroup: weeks` with fields `time ASC`. Firestore will prompt for it on first run with a console link to create it.
