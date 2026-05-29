@@ -121,6 +121,11 @@ jobs:
               echo "Updating REDIS_URL to latest for $SVC..."
               gcloud run services update $SVC --region=us-central1 --update-secrets=REDIS_URL=REDIS_URL:latest --quiet || true
             fi
+
+            if echo "$ENV_VARS" | grep -q "CONFIDENT_PROJECT_NAME"; then
+              echo "Updating CONFIDENT_PROJECT_NAME to latest for $SVC..."
+              gcloud run services update $SVC --region=us-central1 --update-secrets=CONFIDENT_PROJECT_NAME=CONFIDENT_PROJECT_NAME:latest --quiet || true
+            fi
           done
 
       - name: Deploy LangGraph Services to Cloud Run
@@ -242,6 +247,20 @@ jobs:
           # Write the Firebase param env file so defineString('BIZZIE_CHAT_SERVICE_ACCOUNT')
           # resolves to the correct SA email at deploy time — never hardcoded in source.
           echo "BIZZIE_CHAT_SERVICE_ACCOUNT=${SA_EMAIL}" > .env.${{ env.FIREBASE_ALIAS }}
+          echo "LANGCHAIN_TRACING_V2=true" >> .env.${{ env.FIREBASE_ALIAS }}
+          echo "LANGCHAIN_CALLBACKS_BACKGROUND=false" >> .env.${{ env.FIREBASE_ALIAS }}
+          echo "ENV=${{ inputs.target_env }}" >> .env.${{ env.FIREBASE_ALIAS }}
+
+      - name: Grant Firebase deployer Pub/Sub access
+        run: |
+          PROJECT_ID=$(gcloud config get-value project)
+          DEPLOYER_EMAIL=$(gcloud config get-value account)
+          echo "Granting roles/pubsub.editor to deployer: ${DEPLOYER_EMAIL}"
+          gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="serviceAccount:${DEPLOYER_EMAIL}" \
+            --role="roles/pubsub.editor" \
+            --condition=None \
+            --quiet
 
       - name: Deploy to Firebase
         run: firebase deploy --only functions,firestore:indexes --project ${{ env.FIREBASE_ALIAS }} --force

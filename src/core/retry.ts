@@ -8,6 +8,7 @@ export interface RetryOptions {
     backoffFactor?: number;
     maxDelayMs?: number;
     shouldRetry?: (error: unknown) => boolean;
+    onRetry?: (attempt: number, error: unknown) => void;
 }
 
 /**
@@ -27,6 +28,7 @@ export async function retry<T>(
     const backoffFactor = options.backoffFactor ?? 2;
     const maxDelayMs = options.maxDelayMs ?? 30000;
     const shouldRetry = options.shouldRetry ?? (() => true);
+    const onRetry = options.onRetry;
 
     let attempt = 1;
 
@@ -44,6 +46,7 @@ export async function retry<T>(
 
             const delay = Math.min(initialDelayMs * Math.pow(backoffFactor, attempt - 1), maxDelayMs);
             _logger.warn(`Operation failed (Attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms...`, { error: error instanceof Error ? error.message : String(error) });
+            onRetry?.(attempt + 1, error);
 
             await new Promise(resolve => setTimeout(resolve, delay));
 

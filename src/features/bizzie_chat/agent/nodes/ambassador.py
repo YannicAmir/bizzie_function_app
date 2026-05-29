@@ -151,6 +151,31 @@ async def ambassador_llm_node(state: BizzieState) -> dict[str, Any]:
 
         raw_response = extract_text_content(response)
 
+        if not raw_response:
+            finish_reason = ""
+            if hasattr(response, "response_metadata"):
+                finish_reason = response.response_metadata.get("finish_reason", "")
+            logger.warning(
+                "ambassador_llm_node: empty LLM response, using static fallback",
+                extra={"json_fields": {
+                    "node": "ambassador_llm_node",
+                    "thread_id": thread_id,
+                    "finish_reason": finish_reason,
+                }},
+            )
+            co = state["company_name"]
+            tick = state["company_ticker"]
+            raw_response = (
+                f"Bizzie doesn't provide buy, sell, or hold recommendations "
+                f"for {co}. To evaluate {co} ({tick}) yourself, key areas to "
+                "research include: revenue and earnings growth, gross and "
+                "operating margins, free cash flow generation, return on "
+                "invested capital (ROIC), debt levels, and valuation ratios "
+                "such as forward P/E and EV/EBITDA.\n\n"
+                "Note: the overview above is based on general background "
+                "knowledge and may not reflect the most current information."
+            )
+
         logger.info(
             "ambassador_llm_node: complete",
             extra={"json_fields": {"node": "ambassador_llm_node", "thread_id": thread_id}},
