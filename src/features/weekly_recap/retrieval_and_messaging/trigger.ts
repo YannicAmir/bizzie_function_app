@@ -22,7 +22,7 @@ function initRedis(): void {
   redisService.init(redisUrl.value(), isProd ? redisCA.value() || undefined : undefined);
 }
 
-const RETRIEVAL_SCHEDULE = '30 16 * * 5'; // Every Friday at 4:30 PM ET
+const RETRIEVAL_SCHEDULE = '50 16 * * 5'; // Every Friday at 4:50 PM ET
 const TIMEZONE = 'America/New_York';
 
 const logger = new Logger('WeeklyRecap/Retrieval/Trigger');

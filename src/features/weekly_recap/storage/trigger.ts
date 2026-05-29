@@ -12,7 +12,7 @@ import type { Company } from './models';
 import { TOPIC_NAME } from './constants';
 import { buildGraph, runScheduler } from './usecase';
 
-const WEEKLY_RECAP_SCHEDULE = '0 16 * * 5'; // Every Friday at 4 PM ET
+const WEEKLY_RECAP_SCHEDULE = '20 16 * * 5'; // Every Friday at 4:20 PM ET
 
 const confidentApiKey = defineSecret('CONFIDENT_API_KEY');
 const langsmithApiKey = defineSecret('LANGSMITH_API_KEY');
