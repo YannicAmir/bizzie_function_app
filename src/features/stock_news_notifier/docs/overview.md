@@ -42,7 +42,8 @@ Written to `stock_news/{newsId}` where `newsId = sha256("{symbol}|{url}")`. The 
 |---|---|---|
 | `newsId` | string | sha256 of `"{symbol}\|{url}"` — also the document ID |
 | `symbol` | string | Ticker, uppercase (FCM topic name) |
-| `publishedDate` | string | FMP publish time, `"YYYY-MM-DD HH:mm:ss"` (US/Eastern) |
+| `publishedDate` | string | Raw FMP publish time, `"YYYY-MM-DD HH:mm:ss"` (US/Eastern) |
+| `publishedAt` | Timestamp | `publishedDate` parsed as `America/New_York` — the client sort/filter field |
 | `publisher` | string | e.g. `"Proactive Investors"` |
 | `title` | string | Article headline |
 | `text` | string | Article body/summary from FMP |
@@ -50,4 +51,4 @@ Written to `stock_news/{newsId}` where `newsId = sha256("{symbol}|{url}")`. The 
 | `site` | string | Source domain |
 | `url` | string | Canonical article URL |
 | `createdAt` | Timestamp | Server timestamp at write |
-| `expireAt` | Timestamp | `createdAt + 72h` — Firestore TTL field (see [ttl-setup.md](ingestion_and_messaging/ttl-setup.md)) |
+| `expireAt` | Timestamp | `createdAt + 72h` — TTL field only, never queried (see [ttl-setup.md](ingestion_and_messaging/ttl-setup.md)) |

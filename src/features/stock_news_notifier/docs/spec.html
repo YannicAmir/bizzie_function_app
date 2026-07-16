@@ -64,7 +64,7 @@ tr:nth-child(even) td { background: #f9fafb; }
     <li><a href="#architecture">Architecture</a></li>
     <li><a href="#datamodel">Shared Data Model</a></li>
     <li class="nav-section">Sub-features</li>
-    <li><a href="docs/ingestion_and_messaging/spec.html">ingestion_and_messaging →</a></li>
+    <li><a href="ingestion_and_messaging/spec.html">ingestion_and_messaging →</a></li>
   </ul>
 </nav>
 <main>
@@ -76,7 +76,7 @@ tr:nth-child(even) td { background: #f9fafb; }
   <div class="table-wrap"><table>
     <tr><th>Sub-feature</th><th>Trigger</th><th>Responsibility</th></tr>
     <tr>
-      <td><a href="docs/ingestion_and_messaging/spec.html">ingestion_and_messaging</a></td>
+      <td><a href="ingestion_and_messaging/spec.html">ingestion_and_messaging</a></td>
       <td>Cloud Scheduler <code>* 4-23 * * *</code> (every minute, 4am–midnight EST)</td>
       <td>Cursor-based FMP fetch · watchlist filter · idempotent Firestore write (TTL 3d) · FCM topic notify with per-ticker cooldown</td>
     </tr>
@@ -107,7 +107,8 @@ StockNewsNotifierUseCase  [usecase.ts]
     <tr><th>Field</th><th>Type</th><th>Description</th></tr>
     <tr><td><code>newsId</code></td><td>string</td><td>sha256 of <code>"{symbol}|{url}"</code> — also the document ID</td></tr>
     <tr><td><code>symbol</code></td><td>string</td><td>Ticker, uppercase (FCM topic name)</td></tr>
-    <tr><td><code>publishedDate</code></td><td>string</td><td>FMP publish time, <code>"YYYY-MM-DD HH:mm:ss"</code> (US/Eastern)</td></tr>
+    <tr><td><code>publishedDate</code></td><td>string</td><td>Raw FMP publish time, <code>"YYYY-MM-DD HH:mm:ss"</code> (US/Eastern)</td></tr>
+    <tr><td><code>publishedAt</code></td><td>Timestamp</td><td><code>publishedDate</code> parsed as <code>America/New_York</code> — the client sort/filter field</td></tr>
     <tr><td><code>publisher</code></td><td>string</td><td>e.g. <code>"Proactive Investors"</code></td></tr>
     <tr><td><code>title</code></td><td>string</td><td>Article headline</td></tr>
     <tr><td><code>text</code></td><td>string</td><td>Article body/summary from FMP</td></tr>
@@ -115,9 +116,9 @@ StockNewsNotifierUseCase  [usecase.ts]
     <tr><td><code>site</code></td><td>string</td><td>Source domain</td></tr>
     <tr><td><code>url</code></td><td>string</td><td>Canonical article URL</td></tr>
     <tr><td><code>createdAt</code></td><td>Timestamp</td><td>Server timestamp at write</td></tr>
-    <tr><td><code>expireAt</code></td><td>Timestamp</td><td><code>createdAt + 72h</code> — Firestore TTL field</td></tr>
+    <tr><td><code>expireAt</code></td><td>Timestamp</td><td><code>createdAt + 72h</code> — TTL field only, never queried</td></tr>
   </table></div>
-  <div class="callout">Full implementation detail — triggers, cursor algorithm, services, retry strategy, design decisions, and TTL setup — lives in the <a href="docs/ingestion_and_messaging/spec.html">ingestion_and_messaging spec</a>.</div>
+  <div class="callout">Full implementation detail — triggers, cursor algorithm, services, retry strategy, design decisions, and TTL setup — lives in the <a href="ingestion_and_messaging/spec.html">ingestion_and_messaging spec</a>.</div>
 </section>
 
 </main>

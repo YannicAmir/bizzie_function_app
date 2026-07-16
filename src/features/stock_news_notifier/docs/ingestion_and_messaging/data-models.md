@@ -57,7 +57,8 @@ lastAddedAt: Timestamp
 ```
 newsId:        string      // duplicated from doc ID for client queries
 symbol:        string
-publishedDate: string      // "YYYY-MM-DD HH:mm:ss"
+publishedDate: string      // "YYYY-MM-DD HH:mm:ss" — raw FMP value, kept for traceability
+publishedAt:   Timestamp   // publishedDate parsed as America/New_York — the client sort/filter field
 publisher:     string
 title:         string
 text:          string
@@ -65,8 +66,24 @@ image:         string|null
 site:          string
 url:           string
 createdAt:     Timestamp   // server timestamp
-expireAt:      Timestamp   // createdAt + 72h — TTL field; clients must also filter expireAt > now
-                           // because Firestore TTL deletes up to 24h late
+expireAt:      Timestamp   // createdAt + 72h — TTL field only; clients never query it
+```
+
+**Front-end read pattern.** One query per chunk of ≤ 30 tickers (Firestore `in` limit), merged client-side:
+
+```typescript
+db.collection('stock_news')
+  .where('symbol', 'in', tickerChunk)          // equality — composes with orderBy
+  .where('publishedAt', '>=', threeDaysAgo)    // freshness; also excludes TTL-lagged docs
+  .orderBy('publishedAt', 'desc')
+  .limit(50);
+```
+
+Requires one composite index in `firestore.indexes.json` — it also serves the single-ticker detail query (`symbol == X` + same orderBy):
+
+```json
+{ "collectionGroup": "stock_news", "queryScope": "COLLECTION",
+  "fields": [ { "fieldPath": "symbol", "order": "ASCENDING" }, { "fieldPath": "publishedAt", "order": "DESCENDING" } ] }
 ```
 
 ### `stock_news_notifier_state/ingestion` — read/written by this pipeline

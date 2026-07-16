@@ -42,26 +42,27 @@ StockNewsNotifierUseCase.execute()  [usecase.ts]
 
 ## Source Code Structure
 
+Code lives at the feature root (single sub-feature, so no `ingestion_and_messaging/` code folder — only the docs are nested):
+
 ```
 src/features/stock_news_notifier/
-└── ingestion_and_messaging/
-    ├── trigger.ts                    # Cloud Function entry point
-    ├── usecase.ts                    # StockNewsNotifierUseCase orchestration
-    ├── constants/
-    │   └── index.ts                  # FEATURE_NAME, collection names, defaults
-    ├── models/
-    │   ├── index.ts                  # Barrel re-export
-    │   ├── StockNewsArticle.ts       # FMP DTO → domain type
-    │   ├── StoredStockNews.ts        # Firestore document shape
-    │   ├── IngestionCursor.ts        # Cursor + lease state
-    │   └── FetchResult.ts            # Fetch outcome (articles, pagesFetched, reachedOverlap)
-    └── services/
-        ├── fmp_news_service.ts       # FMP /news/stock-latest fetch (latest + ranged backfill)
-        ├── firestore_service.ts      # stock_news writes, cursor/lease/cooldown transactions
-        └── fcm_service.ts            # FCM topic send with APNS collapse id
+├── trigger.ts                    # Cloud Function entry point
+├── usecase.ts                    # StockNewsNotifierUseCase orchestration
+├── constants/
+│   └── index.ts                  # FEATURE_NAME, collection names, defaults
+├── models/
+│   ├── index.ts                  # Barrel re-export
+│   ├── StockNewsArticle.ts       # FMP DTO → domain type
+│   ├── StoredStockNews.ts        # Firestore document shape
+│   ├── IngestionCursor.ts        # Cursor + lease state
+│   └── FetchResult.ts            # Fetch outcome (articles, pagesFetched, reachedOverlap)
+└── services/
+    ├── fmp_news_service.ts       # FMP /news/stock-latest fetch (latest + ranged backfill)
+    ├── firestore_service.ts      # stock_news writes, cursor/lease/cooldown transactions
+    └── fcm_service.ts            # FCM topic send with APNS collapse id
 ```
 
-Registered in `src/index.ts` via `export * from './features/stock_news_notifier/ingestion_and_messaging/trigger'`.
+Registered in `src/index.ts` via `export * from './features/stock_news_notifier/trigger'`.
 
 ---
 

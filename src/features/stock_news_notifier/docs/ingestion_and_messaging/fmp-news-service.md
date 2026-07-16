@@ -27,7 +27,7 @@ retry(fetchPage, {
 });   // 1s → 2s → throw
 ```
 
-Non-`response.ok` throws `Error("FMP API Error: {status} {statusText}")` (retried). A non-array JSON body is logged at error and treated as an empty page (not retried) — same convention as `FmpSecService`.
+Non-`response.ok` throws `Error("FMP API Error: {status} {statusText}")` (retried). A non-array JSON body also throws (`"FMP API returned a non-array response for page {page}"`) and is retried — treating it as an empty page would fake feed exhaustion, skip the backfill fallback, and open a silent coverage gap.
 
 ---
 
@@ -48,8 +48,8 @@ Same endpoint with `from`/`to` params, pages `0..cfg.maxBackfillPages − 1`, st
 
 ## Mapping
 
-Each FMP DTO maps 1:1 to `StockNewsArticle` ([data-models.md](data-models.md)) with:
+Each raw item is validated at the boundary (`parseFmpStockNews`) before mapping to `StockNewsArticle` ([data-models.md](data-models.md)):
+- Rows that are not objects, or whose `symbol`, `url`, or `publishedDate` is missing, empty, or not a string, are dropped and counted in a single info log per page. This is expected on every run — roughly 10% of a live page is `symbol: null` press releases, so the count is routine telemetry, not an alert.
 - `symbol` uppercased and trimmed.
 - `image` normalized to `null` when absent or empty.
-- Items missing `symbol`, `url`, or `publishedDate` are dropped and counted in a single warn log per run.
 - No client-side date filtering here — the use case applies `overlapCutoff`; this service only decides fetch depth.

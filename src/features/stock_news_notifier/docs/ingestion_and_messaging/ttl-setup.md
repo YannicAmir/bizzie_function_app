@@ -30,7 +30,7 @@ Console alternative: Firestore → *Time-to-live* tab → **Create policy** → 
 
 ## Operational Notes
 
-- **Deletion lag:** Firestore TTL typically deletes within 24 hours *after* `expireAt` — treat it as garbage collection, not an access control. Clients querying `stock_news` must filter `where('expireAt', '>', now)`.
+- **Deletion lag:** Firestore TTL typically deletes within 24 hours *after* `expireAt` — treat it as garbage collection, not an access control. Clients never query `expireAt`; they filter `publishedAt >= now − 3d`, which naturally excludes TTL-lagged documents (see the read pattern in [data-models.md](data-models.md)).
 - **Cost:** TTL deletes are billed as normal delete operations.
-- **No index needed:** TTL fields do not require a composite index entry; the client query `symbol == X AND expireAt > now` will, however, need a composite index in `firestore.indexes.json` once the front end adds it.
-- The pipeline never reads `expireAt`; it exists solely for the TTL policy and client filtering.
+- **No index needed for TTL itself:** TTL fields require no composite index entry. The front-end query needs the `(symbol ASC, publishedAt DESC)` composite index documented in [data-models.md](data-models.md) — add it to `firestore.indexes.json`.
+- Nothing reads `expireAt`; it exists solely for the TTL policy.

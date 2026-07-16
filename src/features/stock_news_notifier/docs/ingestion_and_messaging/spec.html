@@ -122,23 +122,23 @@ StockNewsNotifierUseCase.execute()  [usecase.ts]
 
 <section id="structure">
   <h2>File Structure</h2>
+  <p>Code lives at the feature root (single sub-feature, so no <code>ingestion_and_messaging/</code> code folder — only the docs are nested):</p>
   <div class="filetree"><span class="dir">src/features/stock_news_notifier/</span>
-<span class="dir">└── ingestion_and_messaging/</span>
-    <span class="file">├── trigger.ts</span>                    <span class="cmt"># Cloud Function entry point</span>
-    <span class="file">├── usecase.ts</span>                    <span class="cmt"># StockNewsNotifierUseCase orchestration</span>
-    <span class="dir">├── constants/</span>
-    <span class="file">│   └── index.ts</span>                  <span class="cmt"># FEATURE_NAME, collection names, defaults</span>
-    <span class="dir">├── models/</span>
-    <span class="file">│   ├── index.ts</span>                  <span class="cmt"># Barrel re-export</span>
-    <span class="file">│   ├── StockNewsArticle.ts</span>       <span class="cmt"># FMP DTO → domain type</span>
-    <span class="file">│   ├── StoredStockNews.ts</span>        <span class="cmt"># Firestore document shape</span>
-    <span class="file">│   ├── IngestionCursor.ts</span>        <span class="cmt"># Cursor + lease state</span>
-    <span class="file">│   └── FetchResult.ts</span>            <span class="cmt"># Fetch outcome</span>
-    <span class="dir">└── services/</span>
-        <span class="file">├── fmp_news_service.ts</span>       <span class="cmt"># FMP fetch (latest + ranged backfill)</span>
-        <span class="file">├── firestore_service.ts</span>      <span class="cmt"># writes, cursor/lease/cooldown txns</span>
-        <span class="file">└── fcm_service.ts</span>            <span class="cmt"># FCM topic send with APNS collapse id</span></div>
-  <p>Registered in <code>src/index.ts</code> via <code>export * from './features/stock_news_notifier/ingestion_and_messaging/trigger'</code>.</p>
+<span class="file">├── trigger.ts</span>                    <span class="cmt"># Cloud Function entry point</span>
+<span class="file">├── usecase.ts</span>                    <span class="cmt"># StockNewsNotifierUseCase orchestration</span>
+<span class="dir">├── constants/</span>
+<span class="file">│   └── index.ts</span>                  <span class="cmt"># FEATURE_NAME, collection names, defaults</span>
+<span class="dir">├── models/</span>
+<span class="file">│   ├── index.ts</span>                  <span class="cmt"># Barrel re-export</span>
+<span class="file">│   ├── StockNewsArticle.ts</span>       <span class="cmt"># FMP DTO → domain type</span>
+<span class="file">│   ├── StoredStockNews.ts</span>        <span class="cmt"># Firestore document shape</span>
+<span class="file">│   ├── IngestionCursor.ts</span>        <span class="cmt"># Cursor + lease state</span>
+<span class="file">│   └── FetchResult.ts</span>            <span class="cmt"># Fetch outcome</span>
+<span class="dir">└── services/</span>
+    <span class="file">├── fmp_news_service.ts</span>       <span class="cmt"># FMP fetch (latest + ranged backfill)</span>
+    <span class="file">├── firestore_service.ts</span>      <span class="cmt"># writes, cursor/lease/cooldown txns</span>
+    <span class="file">└── fcm_service.ts</span>            <span class="cmt"># FCM topic send with APNS collapse id</span></div>
+  <p>Registered in <code>src/index.ts</code> via <code>export * from './features/stock_news_notifier/trigger'</code>.</p>
 </section>
 
 <section id="trigger">
@@ -225,7 +225,8 @@ interface IngestionCursor {
   <p><code>{newsId}</code> = <code>sha256("{symbol}|{url}")</code> — symbol included because FMP can emit the same URL for multiple tickers. Written with <code>create()</code> (never <code>set</code>) — the failed <code>ALREADY_EXISTS</code> write <strong>is</strong> the dedup mechanism.</p>
   <pre><code>newsId:        string      // duplicated from doc ID for client queries
 symbol:        string
-publishedDate: string      // "YYYY-MM-DD HH:mm:ss"
+publishedDate: string      // "YYYY-MM-DD HH:mm:ss" — raw FMP value, kept for traceability
+publishedAt:   Timestamp   // publishedDate parsed as America/New_York — client sort/filter field
 publisher:     string
 title:         string
 text:          string
@@ -233,8 +234,18 @@ image:         string|null
 site:          string
 url:           string
 createdAt:     Timestamp   // server timestamp
-expireAt:      Timestamp   // createdAt + 72h — TTL field; clients must also filter
-                           // expireAt &gt; now (Firestore TTL deletes up to 24h late)</code></pre>
+expireAt:      Timestamp   // createdAt + 72h — TTL field only; clients never query it</code></pre>
+  <h3>Front-end read pattern</h3>
+  <p>One query per chunk of ≤ 30 tickers (Firestore <code>in</code> limit), merged client-side. Filtering and sorting on the single <code>publishedAt</code> field keeps the query on one inequality; the 3-day freshness window also excludes TTL-lagged documents:</p>
+  <pre><code>db.collection('stock_news')
+  .where('symbol', 'in', tickerChunk)          // equality — composes with orderBy
+  .where('publishedAt', '&gt;=', threeDaysAgo)    // freshness; also excludes TTL-lagged docs
+  .orderBy('publishedAt', 'desc')
+  .limit(50);</code></pre>
+  <p>Requires one composite index in <code>firestore.indexes.json</code> — it also serves the single-ticker detail query (<code>symbol == X</code> + same orderBy):</p>
+  <pre><code>{ "collectionGroup": "stock_news", "queryScope": "COLLECTION",
+  "fields": [ { "fieldPath": "symbol", "order": "ASCENDING" },
+              { "fieldPath": "publishedAt", "order": "DESCENDING" } ] }</code></pre>
   <h3>Other collections</h3>
   <div class="table-wrap"><table>
     <tr><th>Collection</th><th>Access</th><th>Notes</th></tr>
@@ -261,7 +272,7 @@ expireAt:      Timestamp   // createdAt + 72h — TTL field; clients must also f
   </ol>
   <h3>fetchRange(from, to, cfg): Promise&lt;StockNewsArticle[]&gt;</h3>
   <p>Same endpoint with <code>from</code>/<code>to</code>, pages <code>0..maxBackfillPages−1</code>. Hitting <code>maxBackfillPages</code> logs at <span class="badge badge-error">ERROR</span> with the boundaries — the alerting signal that a coverage gap may exist.</p>
-  <p>Mapping: <code>symbol</code> uppercased/trimmed; <code>image</code> normalized to <code>null</code>; items missing <code>symbol</code>, <code>url</code>, or <code>publishedDate</code> dropped with one <span class="badge badge-warn">WARN</span> per run.</p>
+  <p>Mapping: each raw item is validated at the boundary (<code>parseFmpStockNews</code>) — rows that are not objects, or whose <code>symbol</code>, <code>url</code>, or <code>publishedDate</code> is missing, empty, or not a string, are dropped with one <span class="badge badge-info">INFO</span> per page (expected on every run: ~10% of a live page is <code>symbol: null</code> press releases). A non-array JSON body throws and is retried rather than being treated as an empty page, which would fake feed exhaustion and open a silent coverage gap. <code>symbol</code> uppercased/trimmed; <code>image</code> normalized to <code>null</code>.</p>
 </section>
 
 <section id="firestore">
@@ -273,7 +284,7 @@ expireAt:      Timestamp   // createdAt + 72h — TTL field; clients must also f
     <tr><td><code>releaseLease()</code></td><td>Sets <code>leaseExpiresAt = now</code> (merge). Logged, never thrown.</td></tr>
     <tr><td><code>getCursor()</code></td><td>Returns <code>lastPublishedDate</code> or <code>null</code> (first run → caller bootstraps).</td></tr>
     <tr><td><code>advanceCursor(candidate)</code></td><td>Txn: <code>lastPublishedDate = max(current, candidate)</code> — monotonic under any interleaving.</td></tr>
-    <tr><td><code>createNewsIfAbsent(article)</code></td><td><code>create()</code> with <code>createdAt</code> + <code>expireAt = now + 72h</code>. <code>true</code> = new; <code>false</code> = <code>already-exists</code> (gRPC 6), skipped at <span class="badge badge-debug">DEBUG</span>; other errors logged at <span class="badge badge-error">ERROR</span> and re-thrown so the cursor advance is withheld.</td></tr>
+    <tr><td><code>createNewsIfAbsent(article)</code></td><td><code>create()</code> with <code>publishedAt</code> (parsed from <code>publishedDate</code> as <code>America/New_York</code>) + <code>createdAt</code> + <code>expireAt = now + 72h</code>. <code>true</code> = new; <code>false</code> = <code>already-exists</code> (gRPC 6), skipped at <span class="badge badge-debug">DEBUG</span>; other errors logged at <span class="badge badge-error">ERROR</span> and re-thrown so the cursor advance is withheld.</td></tr>
     <tr><td><code>claimNotificationSlot(ticker, cooldownSeconds)</code></td><td>Txn on <code>stock_news_cooldowns/{ticker}</code>: authorize + set <code>lastNotifiedAt</code> atomically. Errors → <code>false</code> (fail closed: prefer a missed notification over a duplicate).</td></tr>
   </table></div>
 </section>
@@ -374,7 +385,7 @@ expireAt:      Timestamp   // createdAt + 72h — TTL field; clients must also f
     </li>
     <li>Verify with <code>gcloud firestore fields ttls list --collection-group=stock_news</code> — state must show <code>ACTIVE</code>.</li>
   </ol>
-  <p><strong>Deletion lag:</strong> TTL deletes up to 24h after <code>expireAt</code> — treat it as garbage collection. Clients must filter <code>where('expireAt', '&gt;', now)</code>. TTL deletes are billed as normal deletes. The client query <code>symbol == X AND expireAt &gt; now</code> will need a composite index in <code>firestore.indexes.json</code> once the front end adds it.</p>
+  <p><strong>Deletion lag:</strong> TTL deletes up to 24h after <code>expireAt</code> — treat it as garbage collection. Clients never query <code>expireAt</code>; they filter <code>publishedAt &gt;= now − 3d</code>, which naturally excludes TTL-lagged documents (see the front-end read pattern in the Data section). TTL deletes are billed as normal deletes; the read pattern's <code>(symbol ASC, publishedAt DESC)</code> composite index goes in <code>firestore.indexes.json</code>.</p>
 </section>
 
 </main>

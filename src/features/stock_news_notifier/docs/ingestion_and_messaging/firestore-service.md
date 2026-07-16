@@ -33,7 +33,7 @@ Reads the singleton doc; returns `lastPublishedDate` or `null` when the doc does
 Transaction: writes `lastPublishedDate = max(current, candidate)` (string comparison) plus `updatedAt = serverTimestamp()`. The `max` makes the cursor monotonic under any interleaving. Throws on failure — caller logs; an un-advanced cursor only causes idempotent re-reads next run, never a gap.
 
 ### `createNewsIfAbsent(article: StockNewsArticle): Promise<boolean>`
-Computes `newsId = sha256("{symbol}|{url}")`, then `docRef.create({ ...article, newsId, createdAt: serverTimestamp, expireAt: Timestamp.fromMillis(Date.now() + 72h) })`.
+Computes `newsId = sha256("{symbol}|{url}")`, then `docRef.create({ ...article, newsId, publishedAt, createdAt: serverTimestamp, expireAt: Timestamp.fromMillis(Date.now() + 72h) })` — where `publishedAt` is `article.publishedDate` parsed as `America/New_York` into a `Timestamp` (the field the front end sorts and filters on; see [data-models.md](data-models.md)).
 - Returns `true` — document created; article is new and eligible for notification.
 - Returns `false` — Firestore error code `already-exists` (gRPC code 6); duplicate from the overlap window, skipped silently at debug level.
 - Any other error: logged at error with `newsId` and `symbol`, then re-thrown so the use case can withhold the cursor advance for this run.

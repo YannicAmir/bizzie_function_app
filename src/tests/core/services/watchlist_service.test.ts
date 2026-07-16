@@ -81,4 +81,49 @@ describe('FirebaseWatchlistService', () => {
         await expect(service.getAllWatchedTickers())
             .rejects.toThrow('Firestore Down');
     });
+
+    it('getAllWatchedTickers_withinCacheTtl_returnsCachedWithoutRefetch', async () => {
+        // Arrange
+        mockGet.mockResolvedValue({
+            empty: false,
+            forEach: (callback: (doc: { id: string; data: () => unknown }) => void) =>
+                [{ id: 'AAPL', data: () => ({ companyName: 'Apple Inc.' }) }].forEach(callback),
+            size: 1
+        });
+
+        // Act
+        const first = await service.getAllWatchedTickers(3600);
+        const second = await service.getAllWatchedTickers(3600);
+
+        // Assert
+        expect(mockGet).toHaveBeenCalledTimes(1);
+        expect(second).toBe(first);
+    });
+
+    it('getAllWatchedTickers_noTtl_refetchesEveryCall', async () => {
+        // Arrange
+        mockGet.mockResolvedValue({ empty: true, forEach: jest.fn(), size: 0 });
+
+        // Act
+        await service.getAllWatchedTickers();
+        await service.getAllWatchedTickers();
+
+        // Assert
+        expect(mockGet).toHaveBeenCalledTimes(2);
+    });
+
+    it('getAllWatchedTickers_cacheTtlExpired_refetches', async () => {
+        // Arrange
+        jest.useFakeTimers().setSystemTime(Date.UTC(2026, 0, 5, 12, 0, 0));
+        mockGet.mockResolvedValue({ empty: true, forEach: jest.fn(), size: 0 });
+
+        // Act
+        await service.getAllWatchedTickers(3600);
+        jest.setSystemTime(Date.UTC(2026, 0, 5, 13, 0, 1));
+        await service.getAllWatchedTickers(3600);
+
+        // Assert
+        expect(mockGet).toHaveBeenCalledTimes(2);
+        jest.useRealTimers();
+    });
 });

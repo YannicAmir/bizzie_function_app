@@ -25,6 +25,14 @@
                 { "fieldPath": "subscriptionExpiryDate", "order": "ASCENDING" },
                 { "fieldPath": "__name__", "order": "ASCENDING" }
             ]
+        },
+        {
+            "collectionGroup": "stock_news",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "symbol", "order": "ASCENDING" },
+                { "fieldPath": "publishedAt", "order": "DESCENDING" }
+            ]
         }
     ],
     "fieldOverrides": [
