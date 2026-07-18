@@ -2,7 +2,7 @@ import { Logger } from '../../../core/logger';
 import { retry } from '../../../core/retry';
 import { getRemoteConfig, StockNewsConfig } from '../../../core/remote-config';
 import { FetchResult, StockNewsArticle } from '../models';
-import { computeOverlapCutoff, formatEasternWallTime } from './date_utils';
+import { computeOverlapCutoff, formatEasternWallTime } from '../../../core/date_utils';
 
 const _logger = new Logger('Stock News FMP Service');
 

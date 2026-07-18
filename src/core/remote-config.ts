@@ -5,11 +5,20 @@ const _logger = new Logger("Remote Config");
 
 export interface StockNewsConfig {
   pageLimit: number;
-  maxPages: number;     
+  maxPages: number;
   maxBackfillPages: number;
   overlapWindowSeconds: number;
   notificationCooldownSeconds: number;
   watchlistCacheSeconds: number;
+}
+
+export interface StockPricesConfig {
+  fetchConcurrency: number;
+  maxCallsPerRun: number;
+  watchlistCacheSeconds: number;
+  seriesBucketMinutes: number;
+  eodLookbackCalendarDays: number;
+  eodFallbackCalendarDays: number;
 }
 
 export interface AppConfig {
@@ -22,6 +31,7 @@ export interface AppConfig {
     v4Url: string;
   };
   stock_news: StockNewsConfig;
+  stock_prices: StockPricesConfig;
   bizzie_chat: {
     chat_model: string;
     chat_model_flash: string;
@@ -79,6 +89,14 @@ const DEFAULT_CONFIG: AppConfig = {
     notificationCooldownSeconds: 600,
     watchlistCacheSeconds: 300,
   },
+  stock_prices: {
+    fetchConcurrency: 8,
+    maxCallsPerRun: 0,
+    watchlistCacheSeconds: 300,
+    seriesBucketMinutes: 5,
+    eodLookbackCalendarDays: 4,
+    eodFallbackCalendarDays: 10,
+  },
 };
 
 let configCache: AppConfig | null = null;
@@ -107,12 +125,16 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const rawLlmResponsesPerDay = (template.parameters['llm_responses_per_day']?.defaultValue as { value?: string } | undefined)?.value;
     const rawWeeklyRecapModel = (template.parameters['weekly_recap_model']?.defaultValue as { value?: string } | undefined)?.value;
     const rawStockNews = (template.parameters['stock_news_config']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawStockPrices = (template.parameters['stock_prices_config']?.defaultValue as { value?: string } | undefined)?.value;
 
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;
     const gemini_model_name = (rawModelName as string) || DEFAULT_CONFIG.gemini_model_name;
     const subscriptionDripCampaign = (rawDrip as string) || DEFAULT_CONFIG.subscriptionDripCampaign;
     const fmp = rawFmp ? JSON.parse(rawFmp) : DEFAULT_CONFIG.fmp;
     const stock_news = rawStockNews ? JSON.parse(rawStockNews) : DEFAULT_CONFIG.stock_news;
+    const stock_prices: StockPricesConfig = rawStockPrices
+        ? { ...DEFAULT_CONFIG.stock_prices, ...JSON.parse(rawStockPrices) }
+        : DEFAULT_CONFIG.stock_prices;
 
     const newConfig: AppConfig = {
       sectors,
@@ -131,6 +153,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
         model: rawWeeklyRecapModel || DEFAULT_CONFIG.weekly_recap.model,
       },
       stock_news,
+      stock_prices,
     };
 
     configCache = newConfig;

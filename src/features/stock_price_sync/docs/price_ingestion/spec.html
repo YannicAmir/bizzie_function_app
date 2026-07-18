@@ -73,6 +73,8 @@ tr:nth-child(even) td { background: #f9fafb; }
     <li><a href="#schemas">Firestore Schemas</a></li>
     <li class="nav-section">Services</li>
     <li><a href="#fmp">fmp_chart_service</a></li>
+    <li><a href="#eod">fmp_eod_service</a></li>
+    <li><a href="#fmpclient">fmp_client (shared)</a></li>
     <li><a href="#firestore">firestore_service</a></li>
     <li class="nav-section">Infrastructure</li>
     <li><a href="#stack">Tech Stack &amp; Retry</a></li>
@@ -88,11 +90,11 @@ tr:nth-child(even) td { background: #f9fafb; }
 
 <section id="overview">
   <div class="page-title">Stock Price Sync — Price Ingestion</div>
-  <div class="page-subtitle">Minute-cadence per-ticker FMP 1-min chart fetch · current-session snapshot derivation · idempotent Firestore overwrite</div>
-  <p>Every minute from 9:30am to 4:05pm ET on weekdays this pipeline reads the global watchlist, fetches each ticker's current-session 1-minute chart from FMP (one API call per ticker — the endpoint does not support multi-symbol queries, and quote endpoints are not available on the current FMP plan), derives a compact price snapshot (latest price, change vs previous close, sparkline series), and overwrites <code>stock_prices/{ticker}</code> in Firestore. Bars are <strong>near-real-time</strong> (the 1-min chart endpoint is not subject to the plan's 15-min quote delay), and the 4:05pm final run captures the complete session including the 4:00pm close.</p>
+  <div class="page-subtitle">Three-phase per-ticker pipeline: pre-open EOD seed · intraday 1-min snapshot · post-close EOD finalize · idempotent Firestore overwrite</div>
+  <p>On weekdays this pipeline reads the global watchlist and keeps one compact snapshot per ticker in <code>stock_prices/{ticker}</code> fresh, in three ET phases: a <strong>pre-open EOD seed</strong> (9:15–9:29) that establishes each ticker's <code>previousClose</code> from the prior session's official closing-auction price; the <strong>intraday loop</strong> (9:30–4:05pm) that fetches each ticker's current-session 1-minute chart, derives a compact snapshot (latest price, change vs previous close, sparkline series), and overwrites the document; and a <strong>post-close EOD finalize</strong> (4:20pm+) that replaces the day's <code>price</code> with the official close once the ~15-min-delayed EOD record publishes. One API call per ticker per phase — neither the 1-min chart nor the EOD endpoint supports multi-symbol queries, and no bulk/batch endpoint is on the current FMP plan.</p>
   <div class="table-wrap"><table>
     <tr><th>Function</th><th>Trigger</th><th>Schedule</th></tr>
-    <tr><td><code>stockPriceSync</code></td><td>Cloud Scheduler</td><td><code>* 9-16 * * 1-5</code> (<code>America/New_York</code>), gated in code to <strong>9:30am–4:05pm ET</strong></td></tr>
+    <tr><td><code>stockPriceSync</code></td><td>Cloud Scheduler</td><td><code>* 9-16 * * 1-5</code> (<code>America/New_York</code>), gated in code into pre-open seed / intraday / post-close finalize phases</td></tr>
   </table></div>
   <div class="callout green"><strong>The keystone property:</strong> each run writes a complete, self-contained snapshot of the current session. Nothing is appended, accumulated, or cursored. Any failure — one ticker, one run, a whole outage — is fully repaired by the next successful run, at most 60 seconds later. Retries, queues, and dead-letter handling are structurally unnecessary: <em>the schedule is the retry</em>.</div>
 </section>
@@ -105,94 +107,137 @@ tr:nth-child(even) td { background: #f9fafb; }
 stockPriceSync  [trigger.ts]  — pause/resume via the Cloud Scheduler job in the GCP console
          │
          ▼
-StockPriceSyncUseCase.execute()  [usecase.ts]
-  1 marketWindowGate()     ── outside 9:30am–4:05pm ET → return (cron can't express :30/:05)
-  2 getWatchedTickers()    ── core watchlist_service   reads watchlist/{ticker} (cached per instance)
-  3 selectCohort()         ── [usecase.ts]             maxCallsPerRun &gt; 0 → deterministic round-robin slice
-  4 per ticker, concurrency-limited (fetchConcurrency, default 8), errors isolated per ticker:
-  │    a resolve prevClose  ── in-memory daily cache; miss → narrow SEED (Mon: today−3, else today−1)
-  │    │                       no prior session? → widened retry (today − seedFallback)
-  │    │                       hit → TODAY-ONLY fetch (from = to = today)     [fmp_chart_service.ts]
-  │    b buildSnapshot()    ── [usecase.ts]            today's bars → price, change%, latestBarAt,
-  │    │                       5-min-bucket series      (no today bars → skip ticker, doc untouched)
-  │    c skip-if-unchanged  ── in-memory latestBarAt cache    same newest bar → skip write
-  │    d upsertPrice()      ── [firestore_service.ts]  set() stock_prices/{ticker} (full overwrite)
-  5 summary log             ── written / skipped / failed of total, run duration</div>
+StockPriceSyncUseCase.execute()  [usecase.ts]  — owns only the step sequence; each step delegated
+  1 resolvePhase()        ── [phase.ts]                ET time → pre-open seed | intraday | finalize | idle
+  2 loadWatchlist()       ── core watchlist_service    reads watchlist/{ticker} (cached per instance)
+  3 selectCohort()        ── [cohort.ts]               maxCallsPerRun &gt; 0 → deterministic round-robin slice
+  4 processCohort() — per ticker, concurrency-limited via core runWithConcurrency, errors isolated:
+  │
+  │  PRE-OPEN SEED (9:15–9:29):
+  │    PreviousCloseResolver.resolve()  ── [previous_close.ts]  narrow EOD window (+ widen-on-miss),
+  │                                newest record before today → previousClose cache; no write
+  │
+  │  INTRADAY (9:30–4:05pm):
+  │    a resolveCachedPreviousClose() ── [previous_close.ts]  cache hit, else resolve (self-heal)
+  │    b fetchTodayBars()   ── [fmp_chart_service.ts → fmp_client.ts]  today-only 1-min bars
+  │    c buildIntradaySnapshot() ── [snapshot.ts]  price, change%, latestBarAt, 5-min series
+  │    d skip-if-unchanged  ── in-memory latestBarAt cache → same newest bar → skip write
+  │    e writeSnapshot()    ── [firestore_service.ts]  set() stock_prices/{ticker} (full overwrite)
+  │
+  │  POST-CLOSE FINALIZE (4:20pm+, once per ticker/day):
+  │    a resolveFinalizeClose() ── [usecase.ts]+[previous_close.ts]  record for date==today? (guarded)
+  │    b fetchTodayBars()   ── [fmp_chart_service.ts]  today-only 1-min bars (frozen session)
+  │    c buildFinalizedSnapshot() ── [snapshot.ts]  price = official close, append 16:00, closeFinalized=true
+  │    d writeSnapshot() (bypass skip)  ── [firestore_service.ts]  unconditional set(); mark finalizedCache
+  │
+  5 logRunSummary()          ── phase · written / skipped / failed of total · run duration</div>
 </section>
 
 <section id="structure">
   <h2>File Structure</h2>
   <p>Code lives at the feature root (single sub-feature, so no <code>price_ingestion/</code> code folder — only the docs are nested):</p>
   <div class="filetree"><span class="dir">src/features/stock_price_sync/</span>
-<span class="file">├── trigger.ts</span>                    <span class="cmt"># Cloud Function entry point</span>
-<span class="file">├── usecase.ts</span>                    <span class="cmt"># StockPriceSyncUseCase orchestration + snapshot derivation</span>
+<span class="file">├── trigger.ts</span>                    <span class="cmt"># Entry point + composition root (lazy service singletons)</span>
+<span class="file">├── usecase.ts</span>                    <span class="cmt"># StockPriceSyncUseCase — run sequence + per-phase workflow only</span>
+<span class="file">├── phase.ts</span>                      <span class="cmt"># resolvePhase() + Phase type (ET-minute → phase)</span>
+<span class="file">├── cohort.ts</span>                     <span class="cmt"># selectCohort() round-robin sharding</span>
+<span class="file">├── previous_close.ts</span>             <span class="cmt"># PreviousCloseResolver — EOD resolution + warm previousClose cache</span>
+<span class="file">├── snapshot.ts</span>                   <span class="cmt"># buildIntradaySnapshot / buildFinalizedSnapshot (pure)</span>
 <span class="dir">├── constants/</span>
-<span class="file">│   └── index.ts</span>                  <span class="cmt"># FEATURE_NAME, STOCK_PRICES_COLLECTION, defaults</span>
+<span class="file">│   └── index.ts</span>                  <span class="cmt"># FEATURE_NAME, collection, phase minutes, FUNCTION_* config, MARKET_CLOSE_LABEL</span>
 <span class="dir">├── models/</span>
 <span class="file">│   ├── index.ts</span>                  <span class="cmt"># Barrel re-export</span>
-<span class="file">│   ├── IntradayBar.ts</span>            <span class="cmt"># FMP DTO → domain type</span>
+<span class="file">│   ├── IntradayBar.ts</span>            <span class="cmt"># FMP 1-min DTO → domain type</span>
+<span class="file">│   ├── DailyClose.ts</span>             <span class="cmt"># FMP EOD DTO → domain type ({date, close})</span>
 <span class="file">│   ├── PricePoint.ts</span>             <span class="cmt"># {t, c} sparkline point</span>
 <span class="file">│   ├── PriceSnapshot.ts</span>          <span class="cmt"># Derived per-ticker snapshot</span>
 <span class="file">│   └── StoredStockPrice.ts</span>       <span class="cmt"># Firestore document shape</span>
 <span class="dir">└── services/</span>
-    <span class="file">├── fmp_chart_service.ts</span>      <span class="cmt"># FMP /historical-chart/1min fetch + validation</span>
+    <span class="file">├── fmp_client.ts</span>            <span class="cmt"># Shared windowed-GET client (retry, timeout, transient policy)</span>
+    <span class="file">├── fmp_chart_service.ts</span>      <span class="cmt"># /historical-chart/1min endpoint config over FmpClient</span>
+    <span class="file">├── fmp_eod_service.ts</span>        <span class="cmt"># /historical-price-eod/light endpoint config over FmpClient</span>
     <span class="file">└── firestore_service.ts</span>      <span class="cmt"># stock_prices upsert</span></div>
-  <p>Registered in <code>src/index.ts</code> via <code>export * from './features/stock_price_sync/trigger'</code>.</p>
+  <p>Also uses core <code>src/core/concurrency.ts</code> (<code>runWithConcurrency</code>). Registered in <code>src/index.ts</code> via <code>export * from './features/stock_price_sync/trigger'</code>.</p>
 </section>
 
 <section id="trigger">
   <h2>Entry Point — stockPriceSync</h2>
-  <p>Instantiates service dependencies at module scope (single composition root) and delegates to the use case. Contains no business logic. <code>FMP_API_KEY</code> is declared with <code>defineSecret('FMP_API_KEY')</code> and bound via <code>secrets: [fmpApiKey]</code>.</p>
+  <p>Composition root: stateless singletons (<code>FirestoreService</code>, <code>FirebaseWatchlistService</code>) built at module scope; the key-dependent <code>FmpChartService</code>/<code>FmpEodService</code> lazily memoized on first invocation (<code>??=</code>). Delegates to the use case; no business logic. <code>FMP_API_KEY</code> via <code>defineSecret</code>; function-deployment values (<code>FUNCTION_MEMORY</code>/<code>FUNCTION_TIMEOUT_SECONDS</code>/<code>FUNCTION_MAX_INSTANCES</code>) come from <code>constants/index.ts</code>.</p>
   <div class="table-wrap"><table>
     <tr><th>Config</th><th>Value</th></tr>
     <tr><td>Type</td><td><code>onSchedule</code></td></tr>
-    <tr><td>Schedule</td><td><code>* 9-16 * * 1-5</code> — cron fires 9:00am–4:59pm ET weekdays; use-case gate trims to <strong>9:30am–4:05pm</strong></td></tr>
+    <tr><td>Schedule</td><td><code>* 9-16 * * 1-5</code> — cron fires 9:00am–4:59pm ET weekdays; the use-case phase gate routes into <strong>pre-open EOD seed (9:15–9:29)</strong>, <strong>intraday 1-min (9:30–4:05pm)</strong>, and <strong>post-close EOD finalize (4:20–4:59pm)</strong></td></tr>
     <tr><td>Timezone</td><td><code>America/New_York</code></td></tr>
-    <tr><td>Memory</td><td><code>256MiB</code></td></tr>
-    <tr><td>Timeout</td><td><code>60s</code> — must stay below the 1-minute schedule interval</td></tr>
-    <tr><td>Max instances</td><td><code>1</code> — overlapping runs prevented here; no lease needed (idempotent full snapshots)</td></tr>
+    <tr><td>Memory</td><td><code>FUNCTION_MEMORY</code> = <code>256MiB</code></td></tr>
+    <tr><td>Timeout</td><td><code>FUNCTION_TIMEOUT_SECONDS</code> = <code>60s</code> — below the 1-minute schedule interval, above <code>RUN_DURATION_WARN_MS</code></td></tr>
+    <tr><td>Max instances</td><td><code>FUNCTION_MAX_INSTANCES</code> = <code>1</code> — overlapping runs prevented here; no lease needed (idempotent full snapshots)</td></tr>
     <tr><td>Secrets</td><td><code>FMP_API_KEY</code> (via <code>defineSecret</code>)</td></tr>
   </table></div>
   <div class="callout"><strong>Operational kill switch:</strong> no Remote Config flag — pause/resume the Cloud Scheduler job in the GCP console. Resuming is trivially safe: the first run after a pause rebuilds every snapshot from scratch — no catch-up logic, no gap to repair.</div>
-  <div class="callout"><strong>The 9:30–4:05 window:</strong> the regular session is 9:30am–4:00pm ET and the 1-min endpoint serves bars near-real-time (verified — no 15-minute delay on this endpoint). The window opens with the session, and the last run at 4:05pm captures the complete session including the 4:00pm close bar. No extended-hours data on the plan, so there is no premarket window to widen into.</div>
+  <div class="callout"><strong>The three phases:</strong> <strong>pre-open EOD seed (9:15–9:29)</strong> front-loads the per-ticker EOD calls that establish <code>previousClose</code> before the intraday hot path, so <code>change</code>/<code>changePercent</code> are ready at the open. <strong>Intraday (9:30–4:05pm)</strong> runs the 1-min snapshot loop; the 1-min endpoint is near-real-time (verified — no 15-min delay on it). <strong>Post-close EOD finalize (4:20pm+)</strong> replaces each ticker's last-trade <code>price</code> with the <strong>official closing-auction price</strong> from the EOD endpoint (which is ~15-min delayed, hence the 4:20pm start), guarded on the EOD record's <code>date === today</code> so it no-ops and retries until the official close publishes, then self-disables. No extended-hours data on the plan, so there is no premarket window to widen into.</div>
   <ol>
     <li>Reads <code>process.env.FMP_API_KEY</code>; if missing, logs an error and returns (no retry — misconfiguration is not transient).</li>
-    <li>Instantiates <code>StockPriceSyncUseCase</code> with <code>FmpChartService</code>, <code>FirestoreService</code>, and the core <code>FirebaseWatchlistService</code>, then calls <code>execute()</code> — its step 1 applies the market-window gate.</li>
-    <li>On use-case error: logs and swallows it. The scheduler fires again in ≤ 60 seconds and the next run rebuilds every snapshot.</li>
+    <li>Lazily memoizes <code>FmpChartService</code>/<code>FmpEodService</code> (both wrap the shared <a href="#fmpclient">FmpClient</a>), then instantiates <code>StockPriceSyncUseCase</code> with <code>FmpChartService</code>, a <code>PreviousCloseResolver</code> wrapping <code>FmpEodService</code>, <code>FirestoreService</code>, and the core <code>FirebaseWatchlistService</code>, and calls <code>execute()</code> — its step 1 applies the phase gate.</li>
+    <li>On use-case error: logs and swallows it. The scheduler fires again in ≤ 60 seconds and the next run rebuilds.</li>
   </ol>
 </section>
 
 <section id="usecase">
   <h2>Orchestration — Use Case Steps</h2>
-  <p>Steps 1–3 run sequentially; step 4 processes tickers concurrently under a <code>fetchConcurrency</code> limit with per-ticker error isolation (<code>Promise.allSettled</code> semantics). Nothing is fire-and-forget.</p>
+  <p>Step 1 resolves the <strong>phase</strong> from the current ET time and dispatches. The per-ticker body (Step 4) runs concurrently under a <code>fetchConcurrency</code> limit with per-ticker error isolation. <code>execute()</code> is a thin orchestrator — it owns only the step sequence and delegates each step to a named method (<code>resolvePhase</code>, <code>loadWatchlist</code>, <code>selectCohort</code>, <code>processCohort</code>, <code>logRunSummary</code>) or sibling module (<code>phase.ts</code>, <code>cohort.ts</code>, <code>previous_close.ts</code>, <code>snapshot.ts</code>, core <code>concurrency.ts</code>).</p>
+  <h3>Phase gate (Step 1)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>ET window</th><th>Phase</th><th>Action</th></tr>
+    <tr><td>&lt; 9:15, 16:06–16:19, or &gt; 16:59</td><td><span class="badge badge-debug">IDLE</span></td><td>debug log and return (cron fires but there is nothing to do)</td></tr>
+    <tr><td><strong>9:15–9:29</strong></td><td>pre-open EOD seed</td><td>warm <code>previousClose</code> for the cohort from the EOD endpoint; <strong>no Firestore writes</strong></td></tr>
+    <tr><td><strong>9:30–16:05</strong></td><td>intraday</td><td>the per-ticker 1-min snapshot loop (unchanged core behavior)</td></tr>
+    <tr><td><strong>16:20–16:59</strong></td><td>post-close finalize</td><td>overwrite each ticker's <code>price</code> with the official EOD close, once today's EOD record exists</td></tr>
+  </table></div>
+  <p>All phases share <strong>load watched tickers</strong> (Step 2) and <strong>cohort selection</strong> (Step 3), run the phase body per ticker under the concurrency limit (Step 4), then emit a <strong>summary log</strong> (Step 5). <em>Step 2:</em> core <code>FirebaseWatchlistService.getAllWatchedTickers()</code> → <code>Map&lt;ticker, companyName&gt;</code>, cached at module scope for <code>watchlistCacheSeconds</code> (default 300s). <em>Step 3:</em> <code>maxCallsPerRun = 0</code> (default) → all tickers; otherwise <code>numCohorts = ceil(N / maxCallsPerRun)</code>, sorted tickers, keep <code>index % numCohorts === minuteOfDay % numCohorts</code>.</p>
+
+  <h3>Module-scope caches</h3>
+  <ul>
+    <li><code>previousCloseCache: Map&lt;ticker, {sessionDate, previousClose}&gt;</code> — <strong>owned by <code>previous_close.ts</code></strong> (managed via <code>PreviousCloseResolver.isFresh</code>/<code>cache</code>); one EOD seed per ticker per day (cached even when <code>null</code>).</li>
+    <li><code>latestBarAtCache: Map&lt;ticker, latestBarAt&gt;</code> — in <code>usecase.ts</code>; intraday unchanged-skip key; set only after a successful write.</li>
+    <li><code>finalizedCache: Map&lt;ticker, sessionDate&gt;</code> — in <code>usecase.ts</code>; marks a ticker finalized today; makes the finalize phase self-disabling and idempotent.</li>
+  </ul>
+
+  <h3>Phase body — pre-open EOD seed (9:15–9:29)</h3>
+  <p>Per ticker (<code>processSeed</code>): if <code>PreviousCloseResolver.isFresh(ticker, today)</code>, skip. Otherwise <code>PreviousCloseResolver.resolve(ticker, cfg, today)</code> — EOD <em>narrow</em> fetch (<code>from = today − eodLookbackCalendarDays</code>, default 4; <code>to = today</code>), take <code>close</code> of the newest record with <code>date &lt; today</code>; on no prior record, one <em>widened</em> retry (<code>today − eodFallbackCalendarDays</code>, default 10) — then <code>cache(...)</code> under today's <code>sessionDate</code> (including <code>null</code>). <strong>No snapshot, no write</strong> — there are no today bars yet; the phase only front-loads the EOD calls off the intraday hot path.</p>
+
+  <h3>Phase body — intraday (9:30–16:05)</h3>
   <ol>
-    <li><strong>Market-window gate</strong> — current ET time outside 9:30am–4:05pm → debug log and return (a gated exit costs milliseconds and zero FMP calls).</li>
-    <li><strong>Load watched tickers</strong> — core <code>FirebaseWatchlistService.getAllWatchedTickers()</code> → <code>Map&lt;ticker, companyName&gt;</code>, cached at module scope for <code>watchlistCacheSeconds</code> (default 300s). Empty map → return. Fetch failure after retries → log error and return; the next minute retries.</li>
-    <li><strong>Select cohort</strong> — <code>maxCallsPerRun = 0</code> (default — 1,500 calls/min Enterprise quota leaves ~3× headroom at 500 tickers) → all tickers. Otherwise <code>numCohorts = ceil(N / maxCallsPerRun)</code>, sorted tickers, keep <code>index % numCohorts === minuteOfDay % numCohorts</code>. Deterministic, stateless, balanced.</li>
-    <li><strong>Per ticker</strong> (concurrency ≤ <code>fetchConcurrency</code>, default 8):
-      <ol>
-        <li><strong>Resolve previous close &amp; fetch</strong> — module-scope <code>Map&lt;ticker, {sessionDate, previousClose}&gt;</code>. Cache hit for today → <em>today-only fetch</em> (<code>from = to = today</code>). Miss (first run of day, cold instance, new ticker) → <em>narrow seed fetch</em> (<code>from = today − 3</code> on Mondays to reach Friday, <code>today − 1</code> Tue–Fri); if the response has no session before today (holiday/ad-hoc closure), retry once <em>widened</em> (<code>from = today − seedFallbackCalendarDays</code>, default 6). <code>previousClose</code> = final bar close of the latest session before today (null if still none), cached under today's date — even when the result is null or today has no bars yet, so one seed sequence per ticker per day. Failure after retries → logged, counted, continue.</li>
-        <li><strong>Build snapshot</strong> — keep only bars whose date prefix equals <strong>today's</strong> ET date; sort ascending; <code>sessionDate</code> = today, <code>price</code>/<code>latestBarAt</code> = newest raw 1-min bar; <code>change</code>/<code>changePercent</code> from <code>previousClose</code> (null when unavailable). <code>series</code> = bars <strong>downsampled</strong> into <code>seriesBucketMinutes</code> buckets (default 5; bucket = floor(minutes-since-midnight ÷ size), one <code>{t, c}</code> point from each bucket's newest bar, in-progress bucket included — the series tip always equals <code>price</code>). No today bars (holiday, new listing) → skip, doc untouched.</li>
-        <li><strong>Skip if unchanged</strong> — module-scope <code>Map&lt;ticker, latestBarAt&gt;</code>; equal → no write. Cache set only after a successful write.</li>
-        <li><strong>Upsert</strong> — full-overwrite <code>set()</code> on <code>stock_prices/{ticker}</code> + <code>updatedAt</code> server timestamp. Failure → logged, counted; next run rewrites.</li>
-      </ol>
-    </li>
-    <li><strong>Summary log</strong> — <code>written/skipped/failed of total</code> + duration ms. Duration &gt; 45s logs at <span class="badge badge-warn">WARN</span> — the watchlist has outgrown the concurrency/timeout budget.</li>
+    <li><strong>Resolve previousClose (cache-first) &amp; fetch today's bars</strong> — <code>PreviousCloseResolver.resolveCachedPreviousClose(ticker, cfg, today)</code>: cache hit → use it; miss (cold instance) → <code>resolve</code> and cache. A failed EOD fetch here warns and returns <code>null</code> (not cached — retries next run); <code>price</code>/<code>series</code> still write with <code>change = null</code>. Then <code>FmpChartService.fetchIntradayBars(ticker, {from: today, to: today})</code>; failure after retries → logged, counted, continue (stale ≤ 60s).</li>
+    <li><strong>Build snapshot</strong> — <code>buildIntradaySnapshot(...)</code> (pure, <code>snapshot.ts</code>): keep only bars whose date prefix equals <strong>today's</strong> ET date; sort ascending; <code>sessionDate</code> = today, <code>price</code>/<code>latestBarAt</code> = newest raw 1-min bar; <code>change</code>/<code>changePercent</code> from <code>previousClose</code> (null when unavailable); <code>series</code> = bars downsampled into <code>seriesBucketMinutes</code> buckets (in-progress bucket included so the tip equals <code>price</code>); <code>closeFinalized = false</code>. No today bars → skip, doc untouched.</li>
+    <li><strong>Skip if unchanged</strong> — <code>latestBarAtCache</code> equal → no write.</li>
+    <li><strong>Upsert</strong> — full-overwrite <code>set()</code> + <code>updatedAt</code> server timestamp; on success set <code>latestBarAtCache</code>. Failure → logged, counted.</li>
   </ol>
-  <div class="callout"><strong>Retention note:</strong> "current session only" applies to what a write <em>contains</em>, not when documents vanish — overnight, on weekends, and on holidays there is nothing new to write, so each document retains the last completed session and the front end simply renders the latest available data (resolved decision). <code>sessionDate</code> identifies the session.</div>
+
+  <h3>Phase body — post-close finalize (16:20–16:59)</h3>
+  <p>Gated by <code>resolveFinalizeClose(ticker, cfg, today)</code>, which returns a discriminated <code>FinalizeGate</code> (<code>{proceed: true, previousClose, officialClose}</code> or <code>{proceed: false, outcome}</code>):</p>
+  <ol>
+    <li><strong>Fetch today's official close</strong> — <code>PreviousCloseResolver.resolve(...)</code> (widen-on-miss); one response yields both the record for <code>date === today</code> (official close) and the newest record before today (<code>previousClose</code>, for cold instances). EOD failure → <code>{proceed:false, 'failed'}</code>. Already finalized (<code>finalizedCache</code> holds today) → <code>{proceed:false, 'skipped'}</code>. <strong>No record for today yet</strong> (the ~15-min-delayed EOD not published) → <code>{proceed:false, 'skipped'}</code>; a later run retries — <strong>guarded on the EOD record's date, never on the clock</strong>. On proceed, the resolver caches <code>previousClose</code> under today.</li>
+    <li><strong>Fetch today's frozen 1-min series</strong> — <code>fetchIntradayBars(ticker, {from: today, to: today})</code> (session over, series stable). No today bars → <code>skipped</code>.</li>
+    <li><strong>Build finalized snapshot</strong> — <code>buildFinalizedSnapshot({..., previousClose, bucketMinutes}, officialClose)</code> (pure, <code>snapshot.ts</code>): <code>price</code> = official close; append <code>{t: MARKET_CLOSE_LABEL "16:00", c: officialClose}</code> so the tip equals <code>price</code>; <code>change</code>/<code>changePercent</code> against <code>previousClose</code>; <code>latestBarAt</code> unchanged (still 15:59); <code>closeFinalized = true</code>.</li>
+    <li><strong>Upsert (bypasses the unchanged-skip)</strong> — the finalize write must <strong>not</strong> consult <code>latestBarAtCache</code> (<code>latestBarAt</code> hasn't changed since 15:59, so the intraday skip would wrongly suppress the correction); writes unconditionally (full-overwrite <code>set()</code>), then records <code>finalizedCache.set(ticker, today)</code>. Idempotent. Counted <code>written</code>.</li>
+  </ol>
+
+  <p><strong>Step 5 — Summary log:</strong> <code>phase</code> + <code>written/skipped/failed of total</code> + duration ms. Intraday duration &gt; 45s logs at <span class="badge badge-warn">WARN</span> — the watchlist has outgrown the concurrency/timeout budget.</p>
+  <div class="callout"><strong>Retention note:</strong> "current session only" applies to what a write <em>contains</em>, not when documents vanish — overnight/weekends/holidays there is nothing new to write, so each document retains the last completed session with <code>closeFinalized = true</code> (the overnight-displayed <code>price</code> is the official close). <code>sessionDate</code> identifies the session.</div>
 </section>
 
 <section id="failures">
   <h2>Failure Isolation</h2>
   <div class="table-wrap"><table>
     <tr><th>Failure</th><th>Effect</th></tr>
-    <tr><td>Single ticker FMP fetch fails after retries</td><td>Logged, counted; other tickers unaffected; refreshed by the next run (stale ≤ 60s)</td></tr>
-    <tr><td>Seed fetch fails</td><td><code>previousClose</code> not cached → next run retries the seed; ticker skipped this run</td></tr>
-    <tr><td>Single document write fails</td><td>Logged, counted; unchanged-skip cache not updated → next run rewrites it</td></tr>
-    <tr><td>Watchlist read fails after retries</td><td>Run aborts with error log; next minute retries; documents keep their last snapshot</td></tr>
+    <tr><td>Single ticker 1-min fetch fails after retries</td><td>Logged, counted; other tickers unaffected; refreshed by the next run (stale ≤ 60s)</td></tr>
+    <tr><td>EOD seed fetch fails (pre-open or intraday miss)</td><td><code>previousClose</code> not cached → next run retries; <code>change</code>/<code>changePercent</code> are <code>null</code> until it succeeds; <code>price</code>/<code>series</code> still write</td></tr>
+    <tr><td>EOD finalize fetch fails, or today's record not yet published</td><td><code>finalizedCache</code> not set → a later finalize run retries; the doc keeps the last-trade <code>price</code> until then</td></tr>
+    <tr><td>Single document write fails</td><td>Logged, counted; the relevant skip/finalized cache not updated → next run rewrites it</td></tr>
+    <tr><td>Watchlist read fails after retries</td><td>Run aborts with error log; next run retries; documents keep their last snapshot</td></tr>
     <tr><td>FMP outage</td><td>Runs fail fast and log; first successful run rebuilds every snapshot in full — no gap-repair or backfill</td></tr>
     <tr><td>Function crash mid-run</td><td>Every document still internally consistent (single-doc atomic writes); next run completes the rest</td></tr>
-    <tr><td>Instance restart</td><td>Both in-memory caches (<code>previousClose</code>, <code>latestBarAt</code>) rebuild next run: one seed fetch + one redundant write per ticker (~25 MB, ~500 writes) — negligible</td></tr>
+    <tr><td>Instance restart</td><td>All in-memory caches rebuild next run: one EOD seed + one redundant write per ticker — negligible</td></tr>
     <tr><td>Overlapping runs</td><td>Prevented by <code>maxInstances: 1</code>; a race would still be safe — both write full valid snapshots, last-write-wins is correct</td></tr>
   </table></div>
 </section>
@@ -208,6 +253,11 @@ StockPriceSyncUseCase.execute()  [usecase.ts]
   volume: number;
 }
 
+interface DailyClose {
+  date: string;      // "YYYY-MM-DD" (ET) — one record per trading day (closed days absent)
+  close: number;     // official (unadjusted) EOD close; the FMP EOD DTO's `price`
+}
+
 interface PricePoint {
   t: string;         // "HH:mm" ET of the bucket's newest bar — sessionDate supplies the date
   c: number;         // that bar's close
@@ -216,15 +266,16 @@ interface PricePoint {
 interface PriceSnapshot {
   ticker: string;                 // uppercase
   companyName: string;
-  price: number;                  // close of the newest 1-min bar of the current session
-  previousClose: number | null;   // final bar close of the prior trading session (daily seed fetch)
+  price: number;                  // intraday: newest 1-min bar close; after finalize: official EOD close
+  previousClose: number | null;   // prior session's official EOD close (daily EOD fetch)
   change: number | null;          // price − previousClose
   changePercent: number | null;   // change / previousClose × 100
   sessionDate: string;            // "YYYY-MM-DD" (ET) — always the current session at write time
-  series: PricePoint[];           // current session, downsampled to seriesBucketMinutes buckets (~79 pts at 5 min)
-  latestBarAt: string;            // newest 1-min bar date — unchanged-skip key
+  series: PricePoint[];           // current session, downsampled to seriesBucketMinutes buckets (+ 16:00 close point on finalize)
+  latestBarAt: string;            // newest 1-min bar date — intraday unchanged-skip key
+  closeFinalized: boolean;        // true once the official EOD close has replaced the last-trade price
 }</code></pre>
-  <p><code>date</code> strings are compared lexicographically everywhere; nothing is parsed to <code>Date</code> except the market gate and window-date computation, done in <code>America/New_York</code> like <code>stock_news_notifier</code>. <code>change</code>/<code>changePercent</code> measure the day's move against the prior session's final 1-min bar close (≈ official close ± a cent or two) from the daily seed fetch; both are null when <code>previousClose</code> is unavailable.</p>
+  <p><code>date</code> strings are compared lexicographically everywhere; nothing is parsed to <code>Date</code> except the phase gate and window-date computation, done in <code>America/New_York</code> like <code>stock_news_notifier</code>. <code>change</code>/<code>changePercent</code> measure the day's move against the prior session's <strong>official EOD close</strong> (the exact auction close) from the daily EOD fetch; both are null when <code>previousClose</code> is unavailable (<code>null</code> or <code>0</code>). During the session <code>price</code> is the newest 1-min bar with <code>closeFinalized = false</code>; after finalize it is the official close (with an appended <code>16:00</code> series point) and <code>closeFinalized = true</code>.</p>
 </section>
 
 <section id="schemas">
@@ -232,10 +283,10 @@ interface PriceSnapshot {
   <h3>watchlist/{ticker} — read</h3>
   <p>Written by <code>watchlist_aggregator</code>, read via the core <code>FirebaseWatchlistService</code>: <code>ticker</code> (doc ID), <code>companyName</code>, <code>lastAddedAt</code>.</p>
   <h3>stock_prices/{ticker} — written</h3>
-  <p><code>StoredStockPrice</code> — <code>PriceSnapshot</code> plus <code>updatedAt</code>. Full-overwrite <code>set()</code> (never merge): the document is a pure projection of the latest FMP fetch. <strong><code>series</code> only ever contains the current session, downsampled server-side to <code>seriesBucketMinutes</code> buckets</strong> — ~79 points ≈ 2 KB at the default 5 min (visually identical on a mini sparkline, which has fewer horizontal pixels than points; a future full-resolution detail chart fetches FMP separately or lowers the knob). One doc per ticker, bounded by watchlist size — no TTL, no cleanup.</p>
+  <p><code>StoredStockPrice</code> — <code>PriceSnapshot</code> plus <code>updatedAt</code>. Full-overwrite <code>set()</code> (never merge), intraday <strong>and</strong> on finalize: the document is a pure projection of the latest fetch. <strong><code>series</code> only ever contains the current session</strong> (plus the <code>16:00</code> close point after finalize), downsampled server-side to <code>seriesBucketMinutes</code> buckets — ~79 points ≈ 2 KB at the default 5 min. The added <code>closeFinalized</code> boolean tells the client the close is authoritative. One doc per ticker, bounded by watchlist size — no TTL, no cleanup.</p>
   <p><strong>Front-end read pattern.</strong> One-time fetches on home-tab view or pull-to-refresh — <strong>no continuous listeners</strong> (a deliberate cost decision: read volume scales with user activity, not with market-hours write volume). Direct document reads, no queries, no composite indexes:</p>
   <pre><code>db.collection('stock_prices').doc(ticker).get()   // one get per watched ticker per refresh</code></pre>
-  <div class="callout green">Outside market hours the document holds the last completed session and the front end simply renders the latest available data — <code>sessionDate</code> identifies the session.</div>
+  <div class="callout green">Outside market hours the document holds the last completed session with <code>closeFinalized = true</code>, so the front end renders the <strong>official close</strong> for the latest available session — <code>sessionDate</code> identifies it.</div>
 </section>
 
 <section id="fmp">
@@ -246,24 +297,55 @@ interface PriceSnapshot {
     <tr><td>Endpoint</td><td><code>GET {baseUrl}/historical-chart/1min</code></td></tr>
     <tr><td>Params</td><td><code>symbol</code> (single ticker), <code>from</code> / <code>to</code> (both = today's ET date), <code>apikey</code></td></tr>
     <tr><td>Auth</td><td><code>apikey</code> query param — <code>FMP_API_KEY</code> via <code>defineSecret</code></td></tr>
-    <tr><td>Response</td><td>JSON array of bars, newest first — near-real-time (verified: no 15-min delay on this endpoint), regular session only</td></tr>
+    <tr><td>Response</td><td>JSON array of bars, newest first — near-real-time (verified: no 15-min delay on this endpoint), regular session only. <strong>Last bar of the day is 15:59</strong></td></tr>
   </table></div>
-  <blockquote>The FMP <strong>quote</strong> endpoints (including <code>batch-quote</code>, which would collapse the whole run into ~1 call) are <strong>not available on the current FMP plan</strong> — confirmed 2026-07-16. See Design Decisions for the migration path if plan access changes.</blockquote>
-  <h3>Two fetch modes</h3>
-  <p>The window is chosen per call by the use case; the today-only default keeps the feature at ~18% of the plan's 500 GB / rolling-30-day bandwidth cap (a multi-day window every minute would total ~570 GB/30d):</p>
+  <blockquote>The 1-min endpoint's last regular-session bar is <strong>15:59</strong> (trades 15:59:00–15:59:59); there is no 16:00 bar because the closing auction prints separately. Its close is a <em>last-trade</em> price, <strong>not</strong> the official close — the official close comes from <a href="#eod">fmp_eod_service</a>. FMP <strong>quote</strong> endpoints (including <code>batch-quote</code>) are <strong>not available on the current plan</strong> — confirmed 2026-07-16.</blockquote>
+  <h3>Single fetch mode — today-only</h3>
+  <p>The use case always calls this with <code>from = to = today</code> (ET). This keeps the feature at ~18% of the plan's 500 GB / rolling-30-day bandwidth cap (a multi-day window every minute would total ~570 GB/30d):</p>
   <div class="table-wrap"><table>
-    <tr><th>Mode</th><th>Window</th><th>When</th><th>Payload</th></tr>
-    <tr><td><strong>Today-only</strong> (~99% of calls)</td><td><code>from = to = today</code></td><td><code>previousClose</code> cached for today</td><td>0→43 KB, growing through the day</td></tr>
-    <tr><td><strong>Seed — narrow</strong></td><td><code>from = today − 3</code> Mondays (reaching Friday), <code>today − 1</code> Tue–Fri</td><td>First run of day, cold instance, new ticker</td><td>~45 KB, once per ticker per day (~25 MB/day — negligible)</td></tr>
-    <tr><td><strong>Seed — widened fallback</strong></td><td><code>from = today − seedFallbackCalendarDays</code> (default 6)</td><td>Narrow seed found no prior session (holiday / ad-hoc closure)</td><td>~130–250 KB, one extra call/ticker on ~9 post-holiday mornings/year</td></tr>
+    <tr><th>Mode</th><th>Window</th><th>Payload</th></tr>
+    <tr><td><strong>Today-only</strong> (every call)</td><td><code>from = to = today</code></td><td>0→43 KB, growing through the day</td></tr>
   </table></div>
-  <div class="callout">The weekday rule handles the predictable calendar (weekends); the widen-on-miss fallback handles the unpredictable one — <strong>the market data itself is the holiday calendar</strong>. "No prior session in the response" is exactly what a closure looks like, so the fallback is always right, including for ad-hoc closures (presidential funerals) no holiday package can predict. This is why the pipeline carries no holiday-calendar dependency.</div>
-  <p><code>fetchIntradayBars(ticker, window)</code>: fetches once (no pagination), validates rows at the boundary (drops rows missing a string <code>date</code> or finite <code>close</code>, one info log per ticker), returns unsorted validated bars — sorting, session filtering, and <code>previousClose</code> derivation belong to the use case. Empty array is valid (holidays, new listings). Retry per fetch: <code>maxAttempts 3, initialDelayMs 1000, backoffFactor 2</code>; non-<code>ok</code> and non-array responses throw and are retried.</p>
+  <div class="callout">The post-close finalize phase re-uses this same today-only fetch to read the now-frozen session series before overwriting <code>price</code> with the official close. The former 1-min <em>previous-close seed</em> (multi-day lookback, weekday-aware narrow window, widen-on-miss) is <strong>removed</strong> — <code>previousClose</code> now comes from the EOD endpoint, which is both more accurate and simpler.</div>
+  <p><strong>Thin endpoint wrapper.</strong> <code>FmpChartService</code> holds no HTTP/retry logic — it constructs a shared <a href="#fmpclient">FmpClient</a> and declares one <code>FmpEndpoint&lt;IntradayBar&gt;</code> (<code>path</code>, <code>label: 'intraday'</code>, error codes, <code>parseRow: parseFmpBar</code>). <code>fetchIntradayBars(ticker, window)</code> delegates to <code>FmpClient.fetchWindowedRows</code>. <code>parseFmpBar</code> drops rows missing a string <code>date</code> or finite <code>close</code> (<code>open</code>/<code>low</code>/<code>high</code>/<code>volume</code> default to <code>close</code>/<code>0</code>); the client logs the drop count once per ticker. Returns unsorted validated bars — sorting/session-filtering/derivation belong to the use case. Empty array is valid (holidays, new listings). Retry/timeout/transient policy is inherited from the client.</p>
+</section>
+
+<section id="eod">
+  <h2>Service — fmp_eod_service</h2>
+  <p>Fetches the <strong>official end-of-day close</strong> — the authoritative source for both <code>previousClose</code> and the finalized close of the current session, the values the 1-min endpoint cannot provide. A <strong>separate service</strong> from the chart service: different endpoint, DTO, and validation boundary (daily records, not intraday bars).</p>
+  <div class="table-wrap"><table>
+    <tr><th>Item</th><th>Value</th></tr>
+    <tr><td>Base URL</td><td><code>getRemoteConfig().fmp.baseUrl</code> → <code>https://financialmodelingprep.com/stable</code></td></tr>
+    <tr><td>Endpoint</td><td><code>GET {baseUrl}/historical-price-eod/light</code></td></tr>
+    <tr><td>Params</td><td><code>symbol</code> (single ticker — no bulk/batch EOD on the plan, confirmed), <code>from</code> / <code>to</code> (date <code>YYYY-MM-DD</code>, inclusive), <code>apikey</code></td></tr>
+    <tr><td>Response</td><td>JSON array of daily records, newest first: <code>{ symbol, date, price, volume }</code> — <code>price</code> is the <strong>official (unadjusted) close</strong>. <strong>~15-min delayed</strong>: today's record appears ~16:15 ET. Closed days have <strong>no record</strong></td></tr>
+  </table></div>
+  <div class="callout">One windowed fetch over <code>[today − lookback, today]</code> answers both questions in one response: <strong>previousClose</strong> = <code>price</code> of the newest record with <code>date &lt; today</code>; <strong>today's official close</strong> = <code>price</code> of the record with <code>date === today</code> (present only after the delay). Closed days are absent, so "newest record before today" is always the correct prior session — the market data is the calendar.</div>
+  <div class="table-wrap"><table>
+    <tr><th>Mode</th><th>Window</th><th>When</th></tr>
+    <tr><td><strong>Narrow</strong></td><td><code>from = today − eodLookbackCalendarDays</code> (default 4), <code>to = today</code></td><td>Every EOD fetch (seed and finalize)</td></tr>
+    <tr><td><strong>Widened fallback</strong></td><td><code>from = today − eodFallbackCalendarDays</code> (default 10)</td><td>Narrow response has no record with <code>date &lt; today</code> (a Thanksgiving/Christmas cluster)</td></tr>
+  </table></div>
+  <p><strong>Thin endpoint wrapper</strong> over the shared <a href="#fmpclient">FmpClient</a>, same as the chart service — one <code>FmpEndpoint&lt;DailyClose&gt;</code> (<code>path</code>, <code>label: 'EOD'</code>, error codes, <code>parseRow: parseEodClose</code>). <code>fetchDailyCloses(ticker, window)</code> delegates to <code>FmpClient.fetchWindowedRows</code> and returns unsorted validated <code>DailyClose[]</code> (<code>{date, close}</code> — the DTO's <code>price</code> maps to <code>close</code>). Selecting the prior-session close and today's close belongs to the <a href="#usecase">PreviousCloseResolver</a>. Empty array is valid (new listing, or before any EOD exists). At most <strong>2 EOD calls/ticker/day</strong> — cost is a rounding error.</p>
+</section>
+
+<section id="fmpclient">
+  <h2>Service — fmp_client (shared)</h2>
+  <p>Both FMP services delegate here. Every FMP call in the feature is a single windowed, single-symbol, bounded GET, so the fetch/retry/timeout/validation machinery is factored once and each service becomes a typed endpoint descriptor.</p>
+  <pre><code>interface FmpEndpoint&lt;T&gt; {
+  path: string;                 // e.g. '/historical-chart/1min'
+  label: string;                // error/log label ('intraday' | 'EOD')
+  fetchFailedCode: string;      // AppError code for a non-ok response
+  invalidResponseCode: string;  // AppError code for a non-array body
+  parseRow: (item: unknown) =&gt; T | null;   // boundary validation; null = drop
+}</code></pre>
+  <p><code>fetchWindowedRows&lt;T&gt;(endpoint, ticker, window)</code>: builds <code>{baseUrl}{path}?symbol=…&amp;from=…&amp;to=…&amp;apikey=…</code>, wraps the request in <code>retry()</code> with a <strong>10s</strong> <code>AbortSignal.timeout</code> per attempt; non-<code>ok</code> → <code>AppError(fetchFailedCode, status)</code>; non-array body → <code>AppError(invalidResponseCode, 422)</code>; maps rows via <code>parseRow</code>, dropping <code>null</code>s with one info log per ticker.</p>
+  <div class="callout"><strong>Transient policy.</strong> Retry <code>maxAttempts 3, 1s → 2s → throw</code>. <code>isTransientError</code> retries only <code>AppError.status ∈ {429, 500, 502, 503, 504}</code>, network errors, and timeouts; a <code>422</code> non-array body and a malformed-JSON <code>SyntaxError</code> (both FMP contract changes) are <strong>not</strong> retried — they fail fast and surface. This is the single place the whole feature's FMP resilience is defined.</div>
 </section>
 
 <section id="firestore">
   <h2>Service — firestore_service</h2>
-  <p><code>upsertPrice(snapshot)</code> — full-overwrite <code>set()</code> on <code>stock_prices/{ticker}</code> with <code>updatedAt: serverTimestamp()</code>. Never <code>merge</code> (stale fields would survive shape changes and break the idempotency argument). Throws on failure — isolation and counting live in the use case; no in-process retry, the next run's rewrite is the retry. No transactions, no state documents, no delete path (watchlist is append-only).</p>
+  <p><code>upsertPrice(snapshot)</code> — guards a non-empty <code>snapshot.ticker</code> (throws before any write), builds a typed <code>StockPriceWrite</code> (<code>Omit&lt;StoredStockPrice,'updatedAt'&gt; &amp; { updatedAt: FieldValue }</code>), then full-overwrite <code>set()</code> on <code>stock_prices/{ticker}</code> with <code>updatedAt: serverTimestamp()</code>. Never <code>merge</code> (stale fields would survive shape changes and break the idempotency argument). Logs and rethrows on failure — isolation and counting live in the use case's <code>writeSnapshot</code>; no in-process retry, the next run's rewrite is the retry. No transactions, no state documents, no delete path (watchlist is append-only).</p>
 </section>
 
 <section id="stack">
@@ -272,21 +354,25 @@ interface PriceSnapshot {
     <tr><th>Layer</th><th>Technology</th></tr>
     <tr><td>Runtime</td><td>Node.js 20, TypeScript 5.x (strict mode)</td></tr>
     <tr><td>Cloud Functions</td><td>GCF 2nd Gen (<code>firebase-functions/v2/scheduler</code>)</td></tr>
-    <tr><td>Scheduling</td><td>Cloud Scheduler — <code>* 9-16 * * 1-5</code> ET + in-code gate 9:30–4:05</td></tr>
+    <tr><td>Scheduling</td><td>Cloud Scheduler — <code>* 9-16 * * 1-5</code> ET + in-code phase gate (seed 9:15–9:29 / intraday 9:30–4:05 / finalize 4:20+)</td></tr>
     <tr><td>Database</td><td>Firestore — <code>stock_prices/{ticker}</code> (no TTL, no indexes)</td></tr>
-    <tr><td>Market data</td><td>FMP REST — <code>stable/historical-chart/1min</code></td></tr>
+    <tr><td>Market data (intraday)</td><td>FMP REST — <code>stable/historical-chart/1min</code> — live series + intraday last price</td></tr>
+    <tr><td>Market data (official close)</td><td>FMP REST — <code>stable/historical-price-eod/light</code> — <code>previousClose</code> seed + post-close finalize</td></tr>
+    <tr><td>FMP transport</td><td><code>services/fmp_client.ts</code> — shared windowed-GET client (retry, 10s timeout, transient policy); both services are endpoint configs over it (<a href="#fmpclient">fmp_client</a>)</td></tr>
+    <tr><td>Concurrency</td><td><code>src/core/concurrency.ts</code> — <code>runWithConcurrency</code> bounded pool</td></tr>
     <tr><td>Secrets</td><td>GCP Secret Manager — <code>FMP_API_KEY</code></td></tr>
-    <tr><td>Retry / Logging / Config</td><td><code>src/core/retry.ts</code> · <code>src/core/logger.ts</code> · <code>src/core/remote-config.ts</code></td></tr>
+    <tr><td>Retry / Logging / Config</td><td><code>src/core/retry.ts</code> (centralized in <code>fmp_client.ts</code> for FMP) · <code>src/core/logger.ts</code> · <code>src/core/remote-config.ts</code></td></tr>
   </table></div>
-  <p>No LLM, no Pub/Sub, no Redis, no FCM — a single function with bounded concurrency covers a stateless snapshot refresh.</p>
+  <p>No LLM, no Pub/Sub, no Redis, no FCM — a single time-phased function with bounded concurrency covers a stateless snapshot refresh. Orchestration is decomposed into <code>phase.ts</code> (gate), <code>cohort.ts</code> (sharding), <code>previous_close.ts</code> (EOD resolution + warm cache), and <code>snapshot.ts</code> (pure derivation); <code>usecase.ts</code> owns only the run sequence.</p>
   <h3>Cost Envelope (defaults, ~500 watched tickers)</h3>
   <div class="table-wrap"><table>
     <tr><th>Resource</th><th>Volume</th></tr>
-    <tr><td>FMP calls</td><td>~500/min × ~396 gated-min/day ≈ 198k/day — ~33% of the 1,500/min quota</td></tr>
-    <tr><td>FMP bandwidth</td><td>~4 GB/trading-day ≈ 90 GB/30d — ~18% of the 500 GB cap</td></tr>
-    <tr><td>Firestore writes</td><td>≤ 500 × ~396 gated-min ≈ 198k/day</td></tr>
+    <tr><td>FMP 1-min calls</td><td>~500/min × ~396 gated-min/day ≈ 198k/day — ~33% of the 1,500/min quota</td></tr>
+    <tr><td>FMP EOD calls</td><td>~500 pre-open + ~500 post-close ≈ ~1k/day (+ ~1 widened retry/ticker on the ~handful of holiday-cluster mornings/year)</td></tr>
+    <tr><td>FMP bandwidth</td><td>~4 GB/trading-day ≈ 90 GB/30d — ~18% of the 500 GB cap (EOD adds a few MB/day)</td></tr>
+    <tr><td>Firestore writes</td><td>intraday ≤ 500 × ~396 gated-min ≈ 198k/day + ~500 finalize writes/day</td></tr>
     <tr><td>Firestore reads</td><td>watchlist 500 × ~77/day (5-min cache) ≈ 39k/day</td></tr>
-    <tr><td>Invocations</td><td>~481/day (gate exits cost ms) × ~10–30s @ 256MiB</td></tr>
+    <tr><td>Invocations</td><td>intraday ~396/day + pre-open ~15 + post-close ~40 (idle exits cost ms) × ~10–30s @ 256MiB</td></tr>
   </table></div>
 </section>
 
@@ -294,23 +380,26 @@ interface PriceSnapshot {
   <h2>Remote Config — stock_prices_config</h2>
   <p>Created with the <strong>JSON data type</strong> (like <code>stock_news_config</code>), parsed into <code>AppConfig.stock_prices</code>:</p>
   <pre><code>stock_prices: {
-  fetchConcurrency: number;       // default 8    — parallel FMP calls
-  maxCallsPerRun: number;         // default 0    — 0 = all tickers/run; &gt; 0 = round-robin cohorts
-  watchlistCacheSeconds: number;  // default 300  — per-instance watchlist cache TTL
-  seriesBucketMinutes: number;    // default 5    — series downsample bucket; 1 = every raw bar
-  seedFallbackCalendarDays: number; // default 6  — widened seed window when the narrow seed finds no prior session
+  fetchConcurrency: number;         // default 8    — parallel FMP calls
+  maxCallsPerRun: number;           // default 0    — 0 = all tickers/run; &gt; 0 = round-robin cohorts
+  watchlistCacheSeconds: number;    // default 300  — per-instance watchlist cache TTL
+  seriesBucketMinutes: number;      // default 5    — series downsample bucket; 1 = every raw bar
+  eodLookbackCalendarDays: number;  // default 4    — narrow EOD window for the prior-session close (covers a long weekend)
+  eodFallbackCalendarDays: number;  // default 10   — widened EOD window when the narrow window finds no prior session
 }</code></pre>
-  <p>All knobs runtime-adjustable without a deploy. No <code>enabled</code> flag — pausing the Cloud Scheduler job is the kill switch.</p>
+  <p>All knobs runtime-adjustable without a deploy. Phase-boundary minutes (9:15 / 9:30 / 4:05 / 4:20) are compile-time constants — the finalize step is guarded on the EOD record's date, not the clock, so the exact minute is not load-bearing. No <code>enabled</code> flag — pausing the Cloud Scheduler job is the kill switch.</p>
+  <div class="callout amber"><strong>Migration note:</strong> the earlier <code>seedFallbackCalendarDays</code> knob (widen-on-miss for the <em>1-min</em> previous-close seed) is removed — the 1-min seed is gone; <code>previousClose</code> now comes from the EOD endpoint, whose window is tuned by <code>eodLookbackCalendarDays</code> / <code>eodFallbackCalendarDays</code>.</div>
 </section>
 
 <section id="planlimits">
   <h2>FMP Plan Limits — confirmed 2026-07-16</h2>
   <div class="table-wrap"><table>
     <tr><th>Limit</th><th>Value</th><th>This feature's budget (~500 tickers)</th></tr>
-    <tr><td>API calls / min</td><td><strong>1,500</strong> (Enterprise plan)</td><td>~500/min ≈ 33% — ample headroom for other features; keep total app usage ≤ ~1,000/min</td></tr>
-    <tr><td>Bandwidth / 30 days</td><td><strong>500 GB</strong> rolling</td><td>~92 GB/30d ≈ 18% via the two-mode fetch — today-only per run + one narrow seed/ticker/day (~25 MB/day); always-multi-day would be ~570 GB and exceed the cap</td></tr>
-    <tr><td>Price data delay</td><td><strong>None on the 1-min chart endpoint</strong> (the plan's 15-min delay applies to quotes)</td><td>Gate runs 9:30am–4:05pm: opens with the session; 4:05 final run captures the full session incl. the close</td></tr>
+    <tr><td>API calls / min</td><td><strong>1,500</strong> (Enterprise plan)</td><td>Intraday ~500/min ≈ 33%. EOD adds ≤ 2 calls/ticker/day in two short ~500-call bursts (seed, finalize) — trivially within quota; keep total app usage ≤ ~1,000/min</td></tr>
+    <tr><td>Bandwidth / 30 days</td><td><strong>500 GB</strong> rolling</td><td>Intraday today-only fetches ≈ 92 GB/30d ≈ 18%; always-multi-day would be ~570 GB and exceed the cap. EOD light records are tiny → a few MB/day, negligible</td></tr>
+    <tr><td>Price data delay</td><td><strong>1-min: none</strong> (verified). <strong>EOD light: ~15-min delayed</strong> — today's record appears ~16:15 ET</td><td>Intraday opens with the session; the post-close finalize runs from 4:20pm, guarded on the EOD record's <code>date === today</code> so it no-ops until the official close publishes</td></tr>
     <tr><td>Extended hours</td><td><strong>Not included</strong></td><td>Regular-session schedule only</td></tr>
+    <tr><td>Bulk / batch EOD</td><td><strong>Not on the plan</strong> (confirmed)</td><td>Per-ticker EOD fan-out, same pattern as the 1-min fetch</td></tr>
   </table></div>
   <div class="callout amber"><code>maxCallsPerRun</code> stays at its default <code>0</code> (no cohorting) — it exists as the live throttle if the watchlist ever grows toward the call or bandwidth ceilings.</div>
 </section>
@@ -327,14 +416,18 @@ interface PriceSnapshot {
   </table></div>
   <div class="callout"><strong>Contrast with weekly_recap</strong>, where Pub/Sub <em>is</em> justified: minutes of LLM work per message on a weekly cadence — a lost company is a lost week. Here the unit of work is a ~300ms GET refreshed ~390×/day; losing one costs 60 seconds of staleness. Revisit if per-ticker work ever becomes expensive and loss-intolerant.</div>
   <ul>
+    <li><strong>Official close from the EOD endpoint, not the 1-min last bar</strong> — the 1-min endpoint's final bar (15:59) is a last-trade price and misses the 16:00 closing auction; the two routinely differ (confirmed end-to-end). <code>price</code> at/after close and <code>previousClose</code> are sourced from <code>historical-price-eod/light</code>'s official close. The EOD endpoint is ~15-min delayed, so finalize runs from 4:20pm and is <strong>guarded on <code>EOD.date === today</code>, not the clock</strong> — it no-ops and retries until the record publishes, then self-disables via an in-memory <code>finalizedCache</code>. No bulk/batch EOD on the plan (confirmed), so EOD stays per-ticker — ≤ 2 calls/ticker/day, a rounding error.</li>
+    <li><strong>Finalize must bypass the unchanged-skip</strong> — the finalize write changes <code>price</code> without a new bar (<code>latestBarAt</code> is still 15:59), so routing it through the <code>latestBarAt</code> skip would silently drop the correction. Finalize writes unconditionally (still a full-overwrite <code>set()</code>, still idempotent) and tracks completion in a separate <code>finalizedCache</code>. This is the subtlest hazard in the design and the reason finalize is a distinct phase.</li>
+    <li><strong>One function, three phases, not two functions</strong> — the finalize pass could be a separate scheduled function, but keeping it in the same use case shares the per-ticker concurrency/error-isolation harness, the services, one log stream, and one kill switch; the phases are mutually exclusive in time, so there is no contention.</li>
+    <li><strong>Series tip stays equal to <code>price</code> after finalize</strong> — rather than relax the "tip == price" invariant, finalize appends one synthetic <code>{ t: "16:00", c: officialClose }</code> point; cosmetic on a sparkline but keeps the doc self-consistent so the front end never special-cases the finalized doc.</li>
     <li><strong>Full-session snapshot, not quote-tick accumulation</strong> — quote endpoints unavailable (confirmed 2026-07-16); accumulation would also need gap/seed/backfill logic. If <code>batch-quote</code> ever becomes available: batch-fetch prices per minute, drop this pipeline to a lower cadence for <code>series</code> — the doc shape already supports the split.</li>
-    <li><strong>Two-mode fetch window</strong> — driven by the 500 GB/30d bandwidth cap: today-only fetches ~99% of the time, one seed per ticker per day for <code>previousClose</code> on the same endpoint (in-memory daily cache, ~25 MB/day). No second endpoint, no stored state. Caveat: the prior session's final 1-min bar close ≈ official close ± a cent or two — acceptable for a watchlist row.</li>
-    <li><strong>Seed window: weekday-aware narrow fetch + widen-on-miss fallback, no holiday calendar</strong> — the narrow seed reaches one calendar step back (<code>today − 3</code> Mondays, <code>today − 1</code> otherwise); if no prior session is present, one widened retry (<code>today − seedFallbackCalendarDays</code>) recovers it. Rejected a holiday package: generic ones are wrong for NYSE (Good Friday closed; Columbus/Veterans Day open) and none predict ad-hoc closures — the market data is the calendar. Also rejected the original fixed 4-day window: correct but ~3× the daily seed payload for one small branch.</li>
-    <li><strong>Current session only in Firestore; documents never blanked</strong> — outside market hours each doc retains the last completed session and the front end renders the latest available data; <code>sessionDate</code> identifies the session.</li>
-    <li><strong>No lease, no state doc</strong> — unlike <code>stock_news_notifier</code>, there is no cursor to corrupt; <code>maxInstances: 1</code> suffices and last-write-wins is correct.</li>
+    <li><strong>Intraday today-only fetch window</strong> — driven by the 500 GB/30d bandwidth cap: every 1-min call fetches <code>from = to = today</code> (~92 GB/30d ≈ 18%); a multi-day window every minute would be ~570 GB and exceed the cap. <code>previousClose</code> no longer rides on this endpoint — it comes from the EOD endpoint.</li>
+    <li><strong>Prior-session close from EOD, narrow window + widen-on-miss, no holiday calendar (supersedes the 1-min seed)</strong> — <code>previousClose</code> = the newest EOD record with <code>date &lt; today</code>, one windowed fetch/ticker/day, cached in memory. Narrow window (<code>today − eodLookbackCalendarDays</code>, default 4) + widen-on-miss (<code>today − eodFallbackCalendarDays</code>, default 10). Closed days are absent, so "newest record before today" is always the correct prior session. Rejected a holiday package (wrong for NYSE, can't predict ad-hoc closures). Retired the former weekday-aware <em>1-min</em> seed: it worked but its close was the skewed 15:59 last-trade price and was more code — EOD is more accurate and simpler, so the 1-min seed and its <code>seedFallbackCalendarDays</code> knob are deleted.</li>
+    <li><strong>Current session only in Firestore; documents never blanked</strong> — outside market hours each doc retains the last completed session with <code>closeFinalized = true</code>, so the overnight-displayed <code>price</code> is the official close, not the 15:59 last trade; <code>sessionDate</code> identifies the session.</li>
+    <li><strong>No lease, no state doc</strong> — unlike <code>stock_news_notifier</code>, there is no cursor to corrupt; <code>maxInstances: 1</code> suffices and last-write-wins is correct. The only per-instance state is three in-memory caches, rebuilt harmlessly on cold start.</li>
     <li><strong>Embedded <code>series</code> array, not a points subcollection</strong> — one read, atomic replace; a subcollection costs one read per point per chart render.</li>
     <li><strong>Series downsampled server-side to 5-min buckets</strong> — a mini sparkline has fewer horizontal pixels than a session has 1-min bars, so raw storage ships ~5× the bytes for zero visual gain; each bucket contributes its newest bar, in-progress bucket included so the series tip equals <code>price</code>.</li>
-    <li><strong>Cron + in-code gate</strong> — a single cron expression cannot express 9:30/4:05 boundaries; a gated exit costs milliseconds and zero FMP calls.</li>
+    <li><strong>Cron + in-code phase gate</strong> — a single cron expression cannot express 9:15/9:30/4:05/4:20 boundaries; the gate routes each minute into pre-open seed / intraday / finalize / idle, and an idle exit costs milliseconds and zero FMP calls.</li>
   </ul>
   <div class="callout green"><strong>Consistency guarantees:</strong> Documents — always internally consistent (atomic full overwrite). Freshness — ≤ 60s behind the FMP feed in-session. Recovery — unconditional: any failure heals on the next successful run, no operator action.</div>
 </section>
@@ -343,16 +436,18 @@ interface PriceSnapshot {
   <h2>Resolved Decisions</h2>
   <div class="table-wrap"><table>
     <tr><th>Decision</th><th>Resolution</th></tr>
-    <tr><td>FMP per-minute quota</td><td>Enterprise plan, 1,500 calls/min (Usage &amp; Limits dashboard). ~500-ticker runs use ~33%; no cohorting needed at current scale.</td></tr>
-    <tr><td>FMP bandwidth cap</td><td>500 GB / rolling 30 days — drove the today-only fetch window (~18% utilization). Monitor the dashboard the first week in prod.</td></tr>
+    <tr><td>Official close vs 1-min last trade</td><td>The 1-min final bar (15:59) misses the 16:00 closing auction — confirmed the two differ. <code>price</code> (at/after close) and <code>previousClose</code> come from the <strong>EOD light endpoint's official close</strong>, not 1-min bars.</td></tr>
+    <tr><td>Change vs previous close</td><td>Measured against the prior session's <strong>official EOD close</strong> (the exact auction close, not ± a cent), sourced by one EOD windowed fetch/ticker/day; <code>null</code> when unavailable.</td></tr>
+    <tr><td>Prior-session lookup (EOD)</td><td><strong>Narrow EOD window (<code>today − eodLookbackCalendarDays</code>, default 4) + widen-on-miss (default 10)</strong> — daily records, closed days absent, so "newest record before today" is always the prior session. Zero holiday-calendar dependency.</td></tr>
+    <tr><td>Today's close finalization</td><td>A <strong>post-close EOD finalize</strong> (4:20pm+) overwrites <code>price</code>, appends a 16:00 series point, sets <code>closeFinalized = true</code>. Guarded on <code>EOD.date === today</code>; self-disabling via an in-memory marker.</td></tr>
+    <tr><td>1-min seed removed</td><td>The former weekday-aware 1-min previous-close seed (narrow + widen-on-miss) is <strong>deleted</strong> — EOD supersedes it, more accurately and with less code.</td></tr>
+    <tr><td>FMP per-minute quota</td><td>Enterprise, 1,500 calls/min. Intraday ~33%; EOD adds two short ~500-call bursts/day — no cohorting needed at current scale.</td></tr>
+    <tr><td>FMP bandwidth cap</td><td>500 GB / rolling 30 days — drove the intraday today-only window (~18%). EOD payloads negligible. Monitor the dashboard the first week in prod.</td></tr>
     <tr><td>Extended hours</td><td>Not on the plan — regular session only.</td></tr>
-    <tr><td>Data delay &amp; window</td><td>The 1-min chart endpoint is near-real-time (the plan's 15-min delay verified <strong>not</strong> to apply). Gate runs 9:30am–4:05pm ET: opens with the session; the 4:05 final run captures the complete session including the close.</td></tr>
-    <tr><td>Storage scope</td><td>Current-session <code>series</code> only; the only prior-session value stored is the <code>previousClose</code> scalar (and derived <code>change</code>/<code>changePercent</code>).</td></tr>
-    <tr><td>Series downsampling</td><td><code>series</code> stores one point per <code>seriesBucketMinutes</code> bucket (default 5 → ~79 points, ~2 KB vs ~10 KB raw); <code>price</code>/<code>latestBarAt</code> stay minute-fresh from the newest raw bar; every front-end fetch ~5× smaller.</td></tr>
-    <tr><td>Change vs previous close</td><td><strong>Included</strong> (decision reversed 2026-07-17): <code>previousClose</code>/<code>change</code>/<code>changePercent</code> stored, measured against the prior session's final 1-min bar close, sourced by one seed fetch per ticker per day.</td></tr>
-    <tr><td>Seed window strategy</td><td><strong>Weekday-aware narrow seed + widen-on-miss fallback</strong>, no holiday-calendar dependency. Mondays reach Friday (<code>today − 3</code>), Tue–Fri fetch <code>today − 1</code>; a no-prior-session response triggers one widened retry (<code>today − seedFallbackCalendarDays</code>). The market data is the calendar — correct even for ad-hoc closures.</td></tr>
-    <tr><td>Off-hours retention</td><td>Documents never blanked — the front end pulls the latest available session.</td></tr>
-    <tr><td>Price staleness</td><td>≤ ~60s (poll cadence; × <code>numCohorts</code> if throttling is enabled) — accepted for a watchlist row. Tick-level real-time would be a websocket/streaming-provider architecture — out of scope.</td></tr>
+    <tr><td>Storage scope</td><td>Current-session <code>series</code> only (plus the synthetic 16:00 close point after finalize); the only prior-session value stored is the <code>previousClose</code> scalar (and derived <code>change</code>/<code>changePercent</code>).</td></tr>
+    <tr><td>Series downsampling</td><td><code>series</code> stores one point per <code>seriesBucketMinutes</code> bucket (default 5 → ~79 points, ~2 KB); finalize appends a 16:00 official-close point; <code>price</code>/<code>latestBarAt</code> stay minute-fresh intraday from the newest raw bar.</td></tr>
+    <tr><td>Off-hours retention</td><td>Documents never blanked — the front end pulls the latest available (finalized) session; the overnight price is the official close.</td></tr>
+    <tr><td>Price staleness</td><td>Intraday ≤ ~60s (poll cadence; × <code>numCohorts</code> if throttling is enabled); the official close lands by ~4:20pm (one finalize pass). Tick-level real-time would be a websocket/streaming architecture — out of scope.</td></tr>
   </table></div>
 </section>
 
@@ -360,8 +455,9 @@ interface PriceSnapshot {
   <h2>Open Questions / TODOs</h2>
   <div class="table-wrap"><table>
     <tr><th>#</th><th>Question</th></tr>
-    <tr><td>1</td><td>Front end: confirm <code>series</code> is consumed as-is (~79 pre-downsampled points) and security rules make <code>stock_prices</code> read-only to authenticated clients.</td></tr>
-    <tr><td>2</td><td>After the first week in prod, check the FMP Usage &amp; Limits dashboard against the ~92 GB/30d bandwidth projection.</td></tr>
+    <tr><td>1</td><td>Front end: confirm <code>series</code> is consumed as-is (~79 pre-downsampled points + the 16:00 close point) and security rules make <code>stock_prices</code> read-only to authenticated clients.</td></tr>
+    <tr><td>2</td><td>After the first week in prod, check the FMP Usage &amp; Limits dashboard against the ~92 GB/30d bandwidth projection and confirm EOD calls stay negligible.</td></tr>
+    <tr><td>3</td><td>Confirm <code>historical-price-eod/light</code> returns the <strong>unadjusted</strong> close (so intraday 1-min prices and <code>previousClose</code> are on the same scale on ex-div/split days).</td></tr>
   </table></div>
 </section>
 
