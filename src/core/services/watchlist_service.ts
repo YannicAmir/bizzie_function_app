@@ -4,14 +4,22 @@ import { Logger } from '../logger';
 type GenericFirestoreDocument = FirebaseFirestore.QueryDocumentSnapshot;
 
 export interface WatchlistService {
-    getAllWatchedTickers(): Promise<Map<string, string>>;
+    getAllWatchedTickers(cacheTtlSeconds?: number): Promise<Map<string, string>>;
 }
 
 const _logger = new Logger('Watchlist Service');
 
 export class FirebaseWatchlistService implements WatchlistService {
 
-    async getAllWatchedTickers(): Promise<Map<string, string>> {
+    private cachedTickers: Map<string, string> | null = null;
+    private cachedAtMs = 0;
+
+    async getAllWatchedTickers(cacheTtlSeconds = 0): Promise<Map<string, string>> {
+        const now = Date.now();
+        if (this.cachedTickers && now - this.cachedAtMs < cacheTtlSeconds * 1000) {
+            return this.cachedTickers;
+        }
+
         try {
             _logger.info('Fetching watched tickers from global watchlist...');
 
@@ -21,17 +29,18 @@ export class FirebaseWatchlistService implements WatchlistService {
 
             if (snapshot.empty) {
                 _logger.info('No watched tickers found.');
-                return tickers;
+            } else {
+                snapshot.forEach((doc: GenericFirestoreDocument) => {
+                    const ticker = doc.id;
+                    const data = doc.data();
+                    const name = data.companyName || data.name || ticker;
+                    tickers.set(ticker, name);
+                });
+                _logger.info(`Found ${tickers.size} distinct watched tickers.`);
             }
 
-            snapshot.forEach((doc: GenericFirestoreDocument) => {
-                const ticker = doc.id;
-                const data = doc.data();
-                const name = data.companyName || data.name || ticker;
-                tickers.set(ticker, name);
-            });
-
-            _logger.info(`Found ${tickers.size} distinct watched tickers.`);
+            this.cachedTickers = tickers;
+            this.cachedAtMs = now;
             return tickers;
         } catch (error) {
             _logger.error('Failed to fetch watchlist', error);

@@ -3,6 +3,15 @@ import { Logger } from './logger';
 
 const _logger = new Logger("Remote Config");
 
+export interface StockNewsConfig {
+  pageLimit: number;
+  maxPages: number;     
+  maxBackfillPages: number;
+  overlapWindowSeconds: number;
+  notificationCooldownSeconds: number;
+  watchlistCacheSeconds: number;
+}
+
 export interface AppConfig {
   sectors: string[];
   gemini_model_name: string;
@@ -12,6 +21,7 @@ export interface AppConfig {
     v3Url: string;
     v4Url: string;
   };
+  stock_news: StockNewsConfig;
   bizzie_chat: {
     chat_model: string;
     chat_model_flash: string;
@@ -61,6 +71,14 @@ const DEFAULT_CONFIG: AppConfig = {
   weekly_recap: {
     model: "gemini-3-flash-preview",
   },
+  stock_news: {
+    pageLimit: 250,
+    maxPages: 4,
+    maxBackfillPages: 10,
+    overlapWindowSeconds: 300,
+    notificationCooldownSeconds: 600,
+    watchlistCacheSeconds: 300,
+  },
 };
 
 let configCache: AppConfig | null = null;
@@ -88,11 +106,13 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const rawChatModelLite = (template.parameters['chat_model_lite']?.defaultValue as { value?: string } | undefined)?.value;
     const rawLlmResponsesPerDay = (template.parameters['llm_responses_per_day']?.defaultValue as { value?: string } | undefined)?.value;
     const rawWeeklyRecapModel = (template.parameters['weekly_recap_model']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawStockNews = (template.parameters['stock_news_config']?.defaultValue as { value?: string } | undefined)?.value;
 
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;
     const gemini_model_name = (rawModelName as string) || DEFAULT_CONFIG.gemini_model_name;
     const subscriptionDripCampaign = (rawDrip as string) || DEFAULT_CONFIG.subscriptionDripCampaign;
     const fmp = rawFmp ? JSON.parse(rawFmp) : DEFAULT_CONFIG.fmp;
+    const stock_news = rawStockNews ? JSON.parse(rawStockNews) : DEFAULT_CONFIG.stock_news;
 
     const newConfig: AppConfig = {
       sectors,
@@ -110,6 +130,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
       weekly_recap: {
         model: rawWeeklyRecapModel || DEFAULT_CONFIG.weekly_recap.model,
       },
+      stock_news,
     };
 
     configCache = newConfig;

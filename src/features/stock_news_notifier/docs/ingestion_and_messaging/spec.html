@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock News Notifier — Ingestion &amp; Messaging Spec</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.7; color: #1a202c; background: #f7f8fa; display: flex; min-height: 100vh; }
+nav { position: fixed; top: 0; left: 0; bottom: 0; width: 252px; background: #0f1117; overflow-y: auto; padding: 0 0 32px; flex-shrink: 0; z-index: 10; }
+nav .brand { padding: 24px 20px 16px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5b8df5; border-bottom: 1px solid #1e2130; }
+nav .brand span { display: block; color: #8b92a5; font-weight: 400; margin-top: 2px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+nav ul { list-style: none; padding: 12px 0; }
+nav li a { display: block; padding: 6px 20px; color: #8b92a5; text-decoration: none; font-size: 13px; transition: color .15s; }
+nav li a:hover, nav li a.active { color: #fff; }
+nav .nav-section { padding: 14px 20px 4px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #3d4251; }
+main { margin-left: 252px; flex: 1; padding: 40px 56px 80px; max-width: 960px; }
+section { margin-bottom: 64px; }
+section:first-child .page-title { margin-top: 0; }
+.page-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 6px; }
+.page-subtitle { color: #6b7280; font-size: 14px; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
+h2 { font-size: 20px; font-weight: 700; color: #0f1117; margin: 36px 0 14px; padding-bottom: 8px; border-bottom: 2px solid #5b8df5; }
+h3 { font-size: 16px; font-weight: 600; color: #1a202c; margin: 24px 0 10px; }
+h4 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #374151; }
+p { margin-bottom: 12px; color: #374151; }
+strong { color: #1a202c; }
+a { color: #5b8df5; text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
+ul, ol { padding-left: 22px; margin-bottom: 14px; }
+li { margin-bottom: 5px; color: #374151; }
+code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 13px; background: #eef0f5; color: #c0392b; padding: 1px 5px; border-radius: 4px; }
+pre { background: #1e2130; border-radius: 8px; padding: 20px; overflow-x: auto; margin: 14px 0 20px; border: 1px solid #2d3148; }
+pre code { background: none; color: #c9d1d9; font-size: 13px; padding: 0; border-radius: 0; }
+blockquote { border-left: 3px solid #f59e0b; background: #fffbeb; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0; color: #92400e; font-size: 14px; }
+.table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { background: #f0f4ff; color: #374151; font-weight: 600; padding: 10px 14px; text-align: left; border-bottom: 2px solid #dbe4ff; }
+td { padding: 9px 14px; border-bottom: 1px solid #e8ecf0; color: #374151; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:nth-child(even) td { background: #f9fafb; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'SF Mono', monospace; letter-spacing: .03em; }
+.badge-info { background: #dbeafe; color: #1d4ed8; }
+.badge-warn { background: #fef3c7; color: #92400e; }
+.badge-error { background: #fee2e2; color: #b91c1c; }
+.badge-debug { background: #f3f4f6; color: #6b7280; }
+.flow { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 12.5px; color: #8be9fd; white-space: pre; overflow-x: auto; line-height: 1.6; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.node { display: inline-block; background: #0f1117; color: #5b8df5; border: 1px solid #2d3148; padding: 1px 8px; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: 12px; }
+.callout { background: #f0f4ff; border-left: 3px solid #5b8df5; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 14px; color: #1e3a8a; }
+.callout.green { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
+.callout.amber { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+.filetree { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: #c9d1d9; white-space: pre; line-height: 1.8; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.filetree .dir { color: #5b8df5; }
+.filetree .file { color: #c9d1d9; }
+.filetree .cmt { color: #6b7587; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">Bizzie Spec<span>stock_news_notifier / ingestion_and_messaging</span></div>
+  <ul>
+    <li class="nav-section">Feature</li>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#flow">End-to-End Flow</a></li>
+    <li><a href="#structure">File Structure</a></li>
+    <li class="nav-section">Entry Points</li>
+    <li><a href="#trigger">stockNewsNotifier</a></li>
+    <li class="nav-section">Orchestration</li>
+    <li><a href="#usecase">Use Case Steps</a></li>
+    <li><a href="#failures">Failure Isolation</a></li>
+    <li class="nav-section">Data</li>
+    <li><a href="#types">Domain Types</a></li>
+    <li><a href="#schemas">Firestore Schemas</a></li>
+    <li class="nav-section">Services</li>
+    <li><a href="#fmp">fmp_news_service</a></li>
+    <li><a href="#firestore">firestore_service</a></li>
+    <li><a href="#fcm">fcm_service</a></li>
+    <li class="nav-section">Infrastructure</li>
+    <li><a href="#stack">Tech Stack &amp; Retry</a></li>
+    <li><a href="#config">Remote Config</a></li>
+    <li class="nav-section">Decisions</li>
+    <li><a href="#decisions">Design Decisions</a></li>
+    <li class="nav-section">Setup</li>
+    <li><a href="#ttl">Firestore TTL Policy</a></li>
+  </ul>
+</nav>
+<main>
+
+<section id="overview">
+  <div class="page-title">Stock News Notifier — Ingestion &amp; Messaging</div>
+  <div class="page-subtitle">Minute-cadence FMP news poller · watchlist filter · idempotent Firestore storage (3-day TTL) · coalesced FCM topic notifications</div>
+  <p>Every minute this pipeline fetches the newest stock news from FMP, keeps only articles whose ticker is on the global watchlist, stores them idempotently in Firestore (3-day TTL), and sends one coalesced FCM topic notification per ticker. An ingestion cursor (high-water mark on <code>publishedDate</code>) plus an overlap window and create-only writes make the pipeline exactly-once for storage and at-least-once-with-dedup for notifications.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Function</th><th>Trigger</th><th>Schedule</th></tr>
+    <tr><td><code>stockNewsNotifier</code></td><td>Cloud Scheduler</td><td><code>* 4-23 * * *</code> — every minute, 4:00am–11:59pm EST (<code>America/New_York</code>)</td></tr>
+  </table></div>
+  <div class="callout green"><strong>Consistency guarantees:</strong> Storage — exactly-once effect (at-least-once fetch + idempotent <code>create()</code>). Notifications — at-most-once per ticker per cooldown window (transactional claim-before-send). Coverage — no gaps (cursor only advances over fetched data; failed runs re-cover; deep gaps route through ranged backfill).</div>
+</section>
+
+<section id="flow">
+  <h2>End-to-End Flow</h2>
+  <div class="flow">Cloud Scheduler (every minute, 4:00am–11:59pm EST)
+         │
+         ▼
+stockNewsNotifier  [trigger.ts]  — pause/resume via the Cloud Scheduler job in the GCP console
+         │
+         ▼
+StockNewsNotifierUseCase.execute()  [usecase.ts]
+  1 acquireLease()          ── [firestore_service.ts] txn on stock_news_notifier_state/ingestion
+  │                            lease held by another run? → log + exit
+  2 getWatchedTickers()     ── core watchlist_service    reads watchlist/{ticker} (cached per instance)
+  3 getCursor()             ── [firestore_service.ts]    → lastPublishedDate watermark
+  4 fetchSinceWatermark()   ── [fmp_news_service.ts]     pages 0..N of /news/stock-latest until
+  │                            oldest item &lt; watermark − overlapWindow (or maxPages → ranged backfill)
+  5 filter + dedupe-create  ── [firestore_service.ts]    symbol ∈ watchlist → create stock_news/{newsId}
+  │                            ALREADY_EXISTS → already processed, skip silently
+  6 notifyPerTicker()       ── [fcm_service.ts]          coalesce per ticker, cooldown claim via
+  │                            stock_news_cooldowns/{ticker}, send FCM topic {ticker}
+  7 advanceCursor()         ── [firestore_service.ts]    txn: watermark = max(publishedDate fetched)
+  8 releaseLease()          ── [firestore_service.ts]    best-effort (lease self-expires on crash)</div>
+</section>
+
+<section id="structure">
+  <h2>File Structure</h2>
+  <p>Code lives at the feature root (single sub-feature, so no <code>ingestion_and_messaging/</code> code folder — only the docs are nested):</p>
+  <div class="filetree"><span class="dir">src/features/stock_news_notifier/</span>
+<span class="file">├── trigger.ts</span>                    <span class="cmt"># Cloud Function entry point</span>
+<span class="file">├── usecase.ts</span>                    <span class="cmt"># StockNewsNotifierUseCase orchestration</span>
+<span class="dir">├── constants/</span>
+<span class="file">│   └── index.ts</span>                  <span class="cmt"># FEATURE_NAME, collection names, defaults</span>
+<span class="dir">├── models/</span>
+<span class="file">│   ├── index.ts</span>                  <span class="cmt"># Barrel re-export</span>
+<span class="file">│   ├── StockNewsArticle.ts</span>       <span class="cmt"># FMP DTO → domain type</span>
+<span class="file">│   ├── StoredStockNews.ts</span>        <span class="cmt"># Firestore document shape</span>
+<span class="file">│   ├── IngestionCursor.ts</span>        <span class="cmt"># Cursor + lease state</span>
+<span class="file">│   └── FetchResult.ts</span>            <span class="cmt"># Fetch outcome</span>
+<span class="dir">└── services/</span>
+    <span class="file">├── fmp_news_service.ts</span>       <span class="cmt"># FMP fetch (latest + ranged backfill)</span>
+    <span class="file">├── firestore_service.ts</span>      <span class="cmt"># writes, cursor/lease/cooldown txns</span>
+    <span class="file">└── fcm_service.ts</span>            <span class="cmt"># FCM topic send with APNS collapse id</span></div>
+  <p>Registered in <code>src/index.ts</code> via <code>export * from './features/stock_news_notifier/trigger'</code>.</p>
+</section>
+
+<section id="trigger">
+  <h2>Entry Point — stockNewsNotifier</h2>
+  <p>Instantiates service dependencies at module scope (single composition root) and delegates to the use case. Contains no business logic. <code>FMP_API_KEY</code> is declared with <code>defineSecret('FMP_API_KEY')</code> and bound via <code>secrets: [fmpApiKey]</code>.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Config</th><th>Value</th></tr>
+    <tr><td>Type</td><td><code>onSchedule</code></td></tr>
+    <tr><td>Schedule</td><td><code>* 4-23 * * *</code> (every minute, 4:00am–11:59pm EST; no runs 12:00–3:59am)</td></tr>
+    <tr><td>Timezone</td><td><code>America/New_York</code></td></tr>
+    <tr><td>Memory</td><td><code>256MiB</code></td></tr>
+    <tr><td>Timeout</td><td><code>60s</code> — must stay below the 1-minute schedule interval</td></tr>
+    <tr><td>Max instances</td><td><code>1</code> — first guard against overlapping runs (lease is the second)</td></tr>
+    <tr><td>Secrets</td><td><code>FMP_API_KEY</code> (via <code>defineSecret</code>)</td></tr>
+  </table></div>
+  <div class="callout"><strong>Operational kill switch:</strong> no Remote Config flag — pause/resume the function's Cloud Scheduler job directly in the GCP console. The cursor makes this safe: on resume, the first run detects it is behind the watermark and catches up via deeper pages or the ranged backfill, with no gap and no duplicates.</div>
+  <div class="callout"><strong>Overnight window:</strong> the schedule deliberately skips 12:00–3:59am EST. The 4:00am run is a routine catch-up: the cursor is ~4h behind, so it fetches deeper pages (or the ranged backfill) and delivers overnight articles as coalesced ~4:00am notifications — no articles are lost, and the per-ticker cooldown prevents a wake-up burst.</div>
+  <ol>
+    <li>Reads <code>process.env.FMP_API_KEY</code>; if missing, logs an error and returns (no retry — misconfiguration is not transient).</li>
+    <li>Instantiates <code>StockNewsNotifierUseCase</code> with <code>FmpNewsService</code>, <code>FirestoreService</code>, <code>FcmService</code>, and the core <code>FirebaseWatchlistService</code>, then calls <code>execute()</code>.</li>
+    <li>On use-case error: logs and swallows it. The scheduler fires again in ≤ 60 seconds and the cursor guarantees the failed window is re-covered.</li>
+  </ol>
+</section>
+
+<section id="usecase">
+  <h2>Orchestration — Use Case Steps</h2>
+  <p>All steps run sequentially. The only intra-step concurrency is the per-page FMP fetch loop (sequential by design) and per-article writes (<code>Promise.allSettled</code> within one ticker batch). Nothing is fire-and-forget.</p>
+  <ol>
+    <li><strong>Acquire run lease</strong> — transaction on <code>stock_news_notifier_state/ingestion</code>: if <code>leaseExpiresAt &gt; now</code>, another invocation is active → log + return. Otherwise set <code>leaseExpiresAt = now + 90s</code>.</li>
+    <li><strong>Load watched tickers</strong> — core <code>FirebaseWatchlistService.getAllWatchedTickers()</code> → <code>Map&lt;ticker, companyName&gt;</code>, cached at module scope for <code>watchlistCacheSeconds</code> (default 300s). Empty map → release lease and return.</li>
+    <li><strong>Read cursor</strong> — <code>lastPublishedDate</code> watermark. First run: bootstrap to <code>now − overlapWindowSeconds</code> in <code>America/New_York</code>, fetch page 0 only.</li>
+    <li><strong>Fetch since watermark</strong> — pages <code>0..maxPages−1</code> until oldest item &lt; <code>overlapCutoff</code>; ranged <code>from</code>/<code>to</code> backfill if <code>maxPages</code> exhausted. Fetch failure after retries → release lease, return <em>without advancing the cursor</em>.</li>
+    <li><strong>Filter + idempotent store</strong> — keep <code>publishedDate ≥ overlapCutoff</code> and <code>symbol</code> ∈ watchlist; <code>create()</code> on <code>stock_news/{newsId}</code>; <code>ALREADY_EXISTS</code> → skip silently.</li>
+    <li><strong>Notify per ticker</strong> — group fresh articles by symbol; transactional cooldown claim, then send. 1 article → <code>"{ticker} News"</code> / article title; N → <code>"{ticker}: {N} new stories"</code> / newest title + <code>"... and more"</code> (title truncated so the body stays ≤ 178 chars with the suffix intact).</li>
+    <li><strong>Advance cursor</strong> — transaction: <code>lastPublishedDate = max(current, maxFetchedPublishedDate)</code> — monotonic.</li>
+    <li><strong>Release lease</strong> — best-effort; expiry covers the crash case.</li>
+  </ol>
+  <div class="callout amber"><strong>Why claim-before-send:</strong> the cooldown claim updates <code>lastNotifiedAt</code> in the same transaction that authorizes the send. A crash after the claim loses at most one notification; it never double-sends. For minute-cadence news a missed push is strictly better than a duplicate.</div>
+</section>
+
+<section id="failures">
+  <h2>Failure Isolation</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Failure</th><th>Effect</th></tr>
+    <tr><td>FMP unreachable after retries</td><td>Cursor not advanced; next run re-covers the window (backfill path if the outage was long)</td></tr>
+    <tr><td>Single article write fails</td><td>Logged per article; other articles and tickers unaffected</td></tr>
+    <tr><td>Any non-<code>ALREADY_EXISTS</code> write failure in a run</td><td>Cursor advance skipped; next run re-fetches and <code>create()</code> dedup absorbs the successful writes</td></tr>
+    <tr><td>FCM send fails</td><td>Logged and swallowed; storage already succeeded</td></tr>
+    <tr><td>Function crash mid-run</td><td>Lease expires after 90s; cursor untouched → full window reprocessed idempotently</td></tr>
+  </table></div>
+</section>
+
+<section id="types">
+  <h2>Data — Domain Types</h2>
+  <pre><code>interface StockNewsArticle {
+  symbol: string;          // uppercase ticker, e.g. "AREC"
+  publishedDate: string;   // "YYYY-MM-DD HH:mm:ss" — US/Eastern, lexicographically sortable
+  publisher: string;
+  title: string;
+  image: string | null;    // FMP may omit
+  site: string;            // source domain, e.g. "proactiveinvestors.com"
+  text: string;
+  url: string;             // canonical article URL — part of the dedup key
+}
+
+interface FetchResult {
+  articles: StockNewsArticle[];  // all pages merged, unfiltered
+  pagesFetched: number;
+  reachedOverlap: boolean;       // false → maxPages hit before overlapCutoff → backfill ran
+  maxPublishedDate: string;      // newest publishedDate seen — next cursor value
+}
+
+interface IngestionCursor {
+  lastPublishedDate: string;     // high-water mark, "YYYY-MM-DD HH:mm:ss"
+  leaseExpiresAt: Timestamp;     // run lock; expired lease = no active run
+  updatedAt: Timestamp;
+}</code></pre>
+  <div class="callout"><code>publishedDate</code> is compared as a plain string everywhere (the FMP format sorts lexicographically). It is parsed as <code>America/New_York</code> only when computing <code>overlapCutoff</code> and the first-run bootstrap watermark — never stored converted.</div>
+</section>
+
+<section id="schemas">
+  <h2>Data — Firestore Schemas</h2>
+  <h3>stock_news/{newsId} — written by this pipeline</h3>
+  <p><code>{newsId}</code> = <code>sha256("{symbol}|{url}")</code> — symbol included because FMP can emit the same URL for multiple tickers. Written with <code>create()</code> (never <code>set</code>) — the failed <code>ALREADY_EXISTS</code> write <strong>is</strong> the dedup mechanism.</p>
+  <pre><code>newsId:        string      // duplicated from doc ID for client queries
+symbol:        string
+publishedDate: string      // "YYYY-MM-DD HH:mm:ss" — raw FMP value, kept for traceability
+publishedAt:   Timestamp   // publishedDate parsed as America/New_York — client sort/filter field
+publisher:     string
+title:         string
+text:          string
+image:         string|null
+site:          string
+url:           string
+createdAt:     Timestamp   // server timestamp
+expireAt:      Timestamp   // createdAt + 72h — TTL field only; clients never query it</code></pre>
+  <h3>Front-end read pattern</h3>
+  <p>One query per chunk of ≤ 30 tickers (Firestore <code>in</code> limit), merged client-side. Filtering and sorting on the single <code>publishedAt</code> field keeps the query on one inequality; the 3-day freshness window also excludes TTL-lagged documents:</p>
+  <pre><code>db.collection('stock_news')
+  .where('symbol', 'in', tickerChunk)          // equality — composes with orderBy
+  .where('publishedAt', '&gt;=', threeDaysAgo)    // freshness; also excludes TTL-lagged docs
+  .orderBy('publishedAt', 'desc')
+  .limit(50);</code></pre>
+  <p>Requires one composite index in <code>firestore.indexes.json</code> — it also serves the single-ticker detail query (<code>symbol == X</code> + same orderBy):</p>
+  <pre><code>{ "collectionGroup": "stock_news", "queryScope": "COLLECTION",
+  "fields": [ { "fieldPath": "symbol", "order": "ASCENDING" },
+              { "fieldPath": "publishedAt", "order": "DESCENDING" } ] }</code></pre>
+  <h3>Other collections</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Collection</th><th>Access</th><th>Notes</th></tr>
+    <tr><td><code>watchlist/{ticker}</code></td><td>read</td><td>Written by <code>watchlist_aggregator</code>; read via core <code>FirebaseWatchlistService</code></td></tr>
+    <tr><td><code>stock_news_notifier_state/ingestion</code></td><td>read/write (txn)</td><td>Singleton cursor + lease doc; cursor only moves forward</td></tr>
+    <tr><td><code>stock_news_cooldowns/{ticker}</code></td><td>read/write (txn)</td><td><code>lastNotifiedAt: Timestamp</code>; not TTL'd (bounded by watchlist size)</td></tr>
+  </table></div>
+</section>
+
+<section id="fmp">
+  <h2>Service — fmp_news_service.ts</h2>
+  <p>Fetches stock news from the FMP stable API with cursor-aware pagination. Modeled on <code>FmpSecService</code>. Base URL from <code>getRemoteConfig().fmp.baseUrl</code> → <code>https://financialmodelingprep.com/stable</code>; endpoint <code>GET {baseUrl}/news/stock-latest</code> with <code>page</code>, <code>limit</code>, optional <code>from</code>/<code>to</code>, and <code>apikey</code>.</p>
+  <pre><code>retry(fetchPage, {
+  maxAttempts: 3,
+  initialDelayMs: 1000,
+  backoffFactor: 2,
+});   // 1s → 2s → throw</code></pre>
+  <h3>fetchSinceWatermark(watermark, cfg): Promise&lt;FetchResult&gt;</h3>
+  <ol>
+    <li>Computes <code>overlapCutoff = watermark − cfg.overlapWindowSeconds</code>.</li>
+    <li>Fetches pages <code>0..maxPages−1</code> (limit <code>pageLimit</code>), stopping early when a page's oldest <code>publishedDate &lt; overlapCutoff</code> or a short page signals feed exhaustion.</li>
+    <li>If <code>maxPages</code> exhausted without overlap → <code>fetchRange(date(watermark), today, cfg)</code>; ranged re-reads whole days, safe because <code>createNewsIfAbsent</code> deduplicates.</li>
+    <li>Returns <code>{ articles, pagesFetched, reachedOverlap, maxPublishedDate }</code>.</li>
+  </ol>
+  <h3>fetchRange(from, to, cfg): Promise&lt;StockNewsArticle[]&gt;</h3>
+  <p>Same endpoint with <code>from</code>/<code>to</code>, pages <code>0..maxBackfillPages−1</code>. Hitting <code>maxBackfillPages</code> logs at <span class="badge badge-error">ERROR</span> with the boundaries — the alerting signal that a coverage gap may exist.</p>
+  <p>Mapping: each raw item is validated at the boundary (<code>parseFmpStockNews</code>) — rows that are not objects, or whose <code>symbol</code>, <code>url</code>, or <code>publishedDate</code> is missing, empty, or not a string, are dropped with one <span class="badge badge-info">INFO</span> per page (expected on every run: ~10% of a live page is <code>symbol: null</code> press releases). A non-array JSON body throws and is retried rather than being treated as an empty page, which would fake feed exhaustion and open a silent coverage gap. <code>symbol</code> uppercased/trimmed; <code>image</code> normalized to <code>null</code>.</p>
+</section>
+
+<section id="firestore">
+  <h2>Service — firestore_service.ts</h2>
+  <p>Owns every Firestore read/write except the watchlist read (core <code>FirebaseWatchlistService</code> reuse). sha256 doc-ID pattern follows <code>filing_history_service.ts</code>.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Function</th><th>Behaviour</th></tr>
+    <tr><td><code>acquireLease()</code></td><td>Txn: <code>false</code> if <code>leaseExpiresAt &gt; now</code>; else set <code>now + 90s</code>, return <code>true</code>. Throws on txn failure.</td></tr>
+    <tr><td><code>releaseLease()</code></td><td>Sets <code>leaseExpiresAt = now</code> (merge). Logged, never thrown.</td></tr>
+    <tr><td><code>getCursor()</code></td><td>Returns <code>lastPublishedDate</code> or <code>null</code> (first run → caller bootstraps).</td></tr>
+    <tr><td><code>advanceCursor(candidate)</code></td><td>Txn: <code>lastPublishedDate = max(current, candidate)</code> — monotonic under any interleaving.</td></tr>
+    <tr><td><code>createNewsIfAbsent(article)</code></td><td><code>create()</code> with <code>publishedAt</code> (parsed from <code>publishedDate</code> as <code>America/New_York</code>) + <code>createdAt</code> + <code>expireAt = now + 72h</code>. <code>true</code> = new; <code>false</code> = <code>already-exists</code> (gRPC 6), skipped at <span class="badge badge-debug">DEBUG</span>; other errors logged at <span class="badge badge-error">ERROR</span> and re-thrown so the cursor advance is withheld.</td></tr>
+    <tr><td><code>claimNotificationSlot(ticker, cooldownSeconds)</code></td><td>Txn on <code>stock_news_cooldowns/{ticker}</code>: authorize + set <code>lastNotifiedAt</code> atomically. Errors → <code>false</code> (fail closed: prefer a missed notification over a duplicate).</td></tr>
+  </table></div>
+</section>
+
+<section id="fcm">
+  <h2>Service — fcm_service.ts</h2>
+  <p>Topic = raw ticker — the same convention <code>realtime_8k_notifier</code> already uses, so clients need no new subscription logic. Feature-local (not core <code>FcmNotificationService</code>) because it needs an APNS collapse id.</p>
+  <pre><code>{
+  topic: ticker,
+  notification: { title, body },
+  apns: {
+    headers: {
+      'apns-priority': '10',
+      'apns-collapse-id': `news_${ticker}`,   // rapid successive sends replace, not stack
+    },
+    payload: { aps: { sound: 'default' } },
+  },
+  android: { collapseKey: `news_${ticker}` },
+  data: {
+    type: 'stock_news',
+    ticker,
+    newsId,                   // newest article's doc ID — client deep-link
+    url,
+    count: String(count),     // FCM data values must be strings
+  },
+}</code></pre>
+  <div class="callout"><strong>Errors are logged and swallowed, never thrown</strong> — a failed push must not block cursor advancement or other tickers. No FCM-level retry: the cooldown claim was already consumed, and a delayed duplicate push is worse than a missed one. Sending to a topic with zero subscribers is a silent no-op on FCM's side.</div>
+</section>
+
+<section id="stack">
+  <h2>Infrastructure — Tech Stack &amp; Retry</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Layer</th><th>Technology</th></tr>
+    <tr><td>Runtime</td><td>Node.js 20, TypeScript 5.x (strict mode)</td></tr>
+    <tr><td>Cloud Functions</td><td>GCF 2nd Gen (<code>firebase-functions/v2/scheduler</code>)</td></tr>
+    <tr><td>Scheduling</td><td>Cloud Scheduler — <code>* 4-23 * * *</code> (every minute, 4:00am–11:59pm EST)</td></tr>
+    <tr><td>Database</td><td>Firestore + TTL policy on <code>stock_news.expireAt</code></td></tr>
+    <tr><td>Market data</td><td>FMP REST — <code>stable/news/stock-latest</code></td></tr>
+    <tr><td>Push</td><td>FCM topic messaging (topic = ticker) with APNS collapse id</td></tr>
+    <tr><td>Secrets</td><td>GCP Secret Manager — <code>FMP_API_KEY</code> via <code>defineSecret</code></td></tr>
+    <tr><td>Retry / Logging / Config</td><td><code>src/core/retry.ts</code> · <code>src/core/logger.ts</code> · <code>src/core/remote-config.ts</code></td></tr>
+  </table></div>
+  <p>No LLM, no Pub/Sub, no Redis — the per-minute cadence and small per-run workload fit a single function.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Call site</th><th>maxAttempts</th><th>initialDelayMs</th><th>backoffFactor</th><th>Delay series</th></tr>
+    <tr><td>FMP page fetch</td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
+    <tr><td>Watchlist fetch (core)</td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
+  </table></div>
+  <p><strong>Transient (retried):</strong> HTTP 429/5xx, network failures. <strong>Run-level permanent handling:</strong> a failed run doesn't advance the cursor; the next minute's run is the retry.</p>
+  <div class="callout green"><strong>Resolved decisions:</strong> FMP <code>publishedDate</code> confirmed US/Eastern — overlap math parses in <code>America/New_York</code>. FMP plan covers the volume; scheduler additionally skips 12:00–3:59am EST (~1,200 runs/day) with overnight articles delivered by the 4:00am catch-up run. No premium gating — all users receive notifications; topic messaging stands. Append-only global watchlist accepted for now — no prune; revisit if cost for unwatched tickers becomes material. Per-ticker cooldown set to 10 minutes (<code>notificationCooldownSeconds: 600</code>), plain suppression with no digest — runtime-tunable via Remote Config.</div>
+  <div class="callout amber"><strong>Open questions:</strong> (1) confirm the front end subscribes to the raw-ticker topic and resubscribes on token rotation; (2) TTL policy must exist per environment before launch.</div>
+</section>
+
+<section id="config">
+  <h2>Infrastructure — Remote Config</h2>
+  <p>New key <code>stock_news_config</code>, created with the <strong>JSON data type</strong> in the Firebase console (unlike the legacy string-typed <code>fmp_config</code>) so malformed values are rejected at save time. The Admin SDK still returns the value as a string in <code>getTemplate()</code>, so <code>remote-config.ts</code> parses it with <code>JSON.parse</code> exactly like <code>fmp_config</code>, into <code>AppConfig.stock_news</code>. Every tuning knob is runtime-adjustable without a deploy; defaults live in <code>DEFAULT_CONFIG</code>. There is deliberately no <code>enabled</code> flag — pausing the Cloud Scheduler job in the GCP console is the kill switch.</p>
+  <pre><code>stock_news: {
+  pageLimit: number;                    // default 250   — items per FMP page
+  maxPages: number;                     // default 4     — latest-feed pages before backfill kicks in
+  maxBackfillPages: number;             // default 10    — ranged-fetch safety cap
+  overlapWindowSeconds: number;         // default 300   — re-read window behind the cursor
+  notificationCooldownSeconds: number;  // default 600   — min gap between pushes per ticker
+  watchlistCacheSeconds: number;        // default 300   — per-instance watchlist cache TTL
+}</code></pre>
+  <div class="table-wrap"><table>
+    <tr><th>Resource</th><th>Volume (defaults, ~500 tickers)</th></tr>
+    <tr><td>FMP calls</td><td>~1,200/day (1–2 pages/min typical; no runs 12:00–3:59am EST)</td></tr>
+    <tr><td>Firestore reads</td><td>watchlist ~500 × 240/day (5-min cache) + state doc reads</td></tr>
+    <tr><td>Firestore writes</td><td>matched articles (~200–2,000/day) + cursor/lease (~3,600/day) + cooldown claims</td></tr>
+    <tr><td>Invocations</td><td>1,200/day × ~2–10s runtime @ 256MiB</td></tr>
+  </table></div>
+</section>
+
+<section id="decisions">
+  <h2>Design Decisions</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Weakness in the original plan</th><th>Hardening</th></tr>
+    <tr><td>"Not already processed" underspecified</td><td>Deterministic doc ID <code>sha256(symbol|url)</code> + <code>create()</code> — the write is the dedup check (one op, race-free)</td></tr>
+    <tr><td>"No gaps" via ad-hoc page/limit tuning</td><td>Explicit cursor + overlap window + page-until-overlap + ranged backfill — deterministic guarantee, not heuristics</td></tr>
+    <tr><td>Overlapping runs</td><td><code>maxInstances: 1</code> + 90s lease; idempotent writes + monotonic cursor mean even lease failure cannot corrupt state</td></tr>
+    <tr><td>Notification spam on hot tickers</td><td>Per-run coalescing + transactional per-ticker cooldown + APNS/Android collapse id</td></tr>
+    <tr><td>Crash between store and notify → double push</td><td>Claim-before-send: worst case one missed push, never a duplicate</td></tr>
+    <tr><td>Full watchlist read every minute</td><td>Per-instance cache (default 5 min)</td></tr>
+    <tr><td>No off switch at ~1,200 runs/day</td><td>Pause the Cloud Scheduler job in the GCP console (cursor makes resume gap-free); all knobs in Remote Config</td></tr>
+  </table></div>
+  <div class="callout green"><strong>Store only watchlisted articles:</strong> write volume proportional to user interest; TTL keeps the collection tiny. Backfill-on-subscribe, if wanted later, belongs in a separate on-demand feature.</div>
+</section>
+
+<section id="ttl">
+  <h2>Setup — Firestore TTL Policy</h2>
+  <blockquote>Must be configured once per environment (dev, qa, prod) <strong>before launch</strong> — without it, <code>expireAt</code> is inert and the collection grows unbounded.</blockquote>
+  <ol>
+    <li>Select the environment's GCP project: <code>gcloud config set project &lt;project id&gt;</code></li>
+    <li>Create the policy:
+      <pre><code>gcloud firestore fields ttls update expireAt \
+  --collection-group=stock_news \
+  --enable-ttl</code></pre>
+    </li>
+    <li>Verify with <code>gcloud firestore fields ttls list --collection-group=stock_news</code> — state must show <code>ACTIVE</code>.</li>
+  </ol>
+  <p><strong>Deletion lag:</strong> TTL deletes up to 24h after <code>expireAt</code> — treat it as garbage collection. Clients never query <code>expireAt</code>; they filter <code>publishedAt &gt;= now − 3d</code>, which naturally excludes TTL-lagged documents (see the front-end read pattern in the Data section). TTL deletes are billed as normal deletes; the read pattern's <code>(symbol ASC, publishedAt DESC)</code> composite index goes in <code>firestore.indexes.json</code>.</p>
+</section>
+
+</main>
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
