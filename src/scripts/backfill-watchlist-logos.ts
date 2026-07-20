@@ -47,7 +47,9 @@ async function fetchLogoUrl(ticker: string, apiKey: string): Promise<string | nu
         return logoCache.get(ticker) ?? null;
     }
 
-    const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(ticker)}&apikey=${apiKey}`;
+    // FMP uses dashes for share classes (BRK.B -> BRK-B)
+    const fmpSymbol = ticker.replace(/\./g, '-');
+    const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(fmpSymbol)}&apikey=${apiKey}`;
     let logoUrl: string | null = null;
     try {
         const res = await fetch(url);
