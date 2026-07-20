@@ -81,7 +81,6 @@ async function run() {
 
         const db = getFirebaseAdmin().firestore();
 
-        // listDocuments() includes users that only exist as subcollection parents
         const userRefs = await db.collection('users').listDocuments();
         _logger.info(`Found ${userRefs.length} user documents.`);
 
