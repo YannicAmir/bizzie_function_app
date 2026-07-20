@@ -17,12 +17,13 @@ describe('WatchlistAggregatorUseCase', () => {
         // Arrange
         const ticker = 'AAPL';
         const companyName = 'Apple Inc.';
+        const logoUrl = 'https://images.financialmodelingprep.com/symbol/AAPL.png';
 
         // Act
-        await useCase.execute(ticker, companyName);
+        await useCase.execute(ticker, companyName, logoUrl);
 
         // Assert
-        expect(mockGlobalWatchlistService.upsertToGlobalList).toHaveBeenCalledWith(ticker, companyName);
+        expect(mockGlobalWatchlistService.upsertToGlobalList).toHaveBeenCalledWith(ticker, companyName, logoUrl);
     });
 
     it('watchlistAggregatorUseCase_execute_missingTicker_doesNotCallService', async () => {
@@ -31,7 +32,7 @@ describe('WatchlistAggregatorUseCase', () => {
         const companyName = 'Apple Inc.';
 
         // Act
-        await useCase.execute(ticker, companyName);
+        await useCase.execute(ticker, companyName, '');
 
         // Assert
         expect(mockGlobalWatchlistService.upsertToGlobalList).not.toHaveBeenCalled();
@@ -43,9 +44,9 @@ describe('WatchlistAggregatorUseCase', () => {
         const companyName = '';
 
         // Act
-        await useCase.execute(ticker, companyName);
+        await useCase.execute(ticker, companyName, '');
 
         // Assert
-        expect(mockGlobalWatchlistService.upsertToGlobalList).toHaveBeenCalledWith(ticker, companyName);
+        expect(mockGlobalWatchlistService.upsertToGlobalList).toHaveBeenCalledWith(ticker, companyName, '');
     });
 });

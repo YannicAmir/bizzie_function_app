@@ -8,10 +8,11 @@ interface WatchlistDocument {
     ticker: string;
     lastAddedAt: FieldValue;
     companyName?: string;
+    logoUrl?: string;
 }
 
 export class GlobalWatchlistService {
-    async upsertToGlobalList(ticker: string, companyName: string): Promise<void> {
+    async upsertToGlobalList(ticker: string, companyName: string, logoUrl: string): Promise<void> {
         try {
             const firestore = getFirebaseAdmin().firestore();
             const docRef = firestore.collection('watchlist').doc(ticker);
@@ -23,6 +24,10 @@ export class GlobalWatchlistService {
 
             if (companyName) {
                 data.companyName = companyName;
+            }
+
+            if (logoUrl) {
+                data.logoUrl = logoUrl;
             }
 
             await docRef.set(data, { merge: true });

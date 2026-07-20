@@ -6,7 +6,7 @@ const logger = new Logger('WatchlistAggregatorUseCase');
 export class WatchlistAggregatorUseCase {
     constructor(private globalWatchlistService: GlobalWatchlistService) { }
 
-    async execute(ticker: string, companyName: string): Promise<void> {
+    async execute(ticker: string, companyName: string, logoUrl: string): Promise<void> {
         if (!ticker) {
             logger.warn('Attempted to aggregate watchlist item without ticker.');
             return;
@@ -14,6 +14,6 @@ export class WatchlistAggregatorUseCase {
 
         logger.info(`Processing watchlist addition for ${ticker}`);
 
-        await this.globalWatchlistService.upsertToGlobalList(ticker, companyName);
+        await this.globalWatchlistService.upsertToGlobalList(ticker, companyName, logoUrl);
     }
 }

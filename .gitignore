@@ -62,3 +62,6 @@ ui-debug.log
 # Temporary
 tmp/
 
+# Manual test harnesses (local only)
+**/_manual_harness.ts
+

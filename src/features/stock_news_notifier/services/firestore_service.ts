@@ -13,7 +13,7 @@ import {
     STOCK_NEWS_COLLECTION,
 } from '../constants';
 import { StockNewsArticle } from '../models/StockNewsArticle';
-import { easternWallTimeToEpochMs } from './date_utils';
+import { easternWallTimeToEpochMs } from '../../../core/date_utils';
 
 const _logger = new Logger('Stock News Firestore Service');
 

@@ -5,7 +5,7 @@ import { WatchlistService } from '../../core/services/watchlist_service';
 import { MULTI_ARTICLE_BODY_SUFFIX, NOTIFICATION_BODY_MAX_CHARS } from './constants';
 import { NewsNotificationInput, StockNewsArticle } from './models';
 import { FcmService } from './services/fcm_service';
-import { computeOverlapCutoff, formatEasternWallTime } from './services/date_utils';
+import { computeOverlapCutoff, formatEasternWallTime } from '../../core/date_utils';
 import { computeNewsId, FirestoreService } from './services/firestore_service';
 import { FmpNewsService } from './services/fmp_news_service';
 

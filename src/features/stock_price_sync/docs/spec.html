@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Price Sync — Feature Spec</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.7; color: #1a202c; background: #f7f8fa; display: flex; min-height: 100vh; }
+nav { position: fixed; top: 0; left: 0; bottom: 0; width: 252px; background: #0f1117; overflow-y: auto; padding: 0 0 32px; flex-shrink: 0; z-index: 10; }
+nav .brand { padding: 24px 20px 16px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5b8df5; border-bottom: 1px solid #1e2130; }
+nav .brand span { display: block; color: #8b92a5; font-weight: 400; margin-top: 2px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+nav ul { list-style: none; padding: 12px 0; }
+nav li a { display: block; padding: 6px 20px; color: #8b92a5; text-decoration: none; font-size: 13px; transition: color .15s; }
+nav li a:hover, nav li a.active { color: #fff; }
+nav .nav-section { padding: 14px 20px 4px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #3d4251; }
+main { margin-left: 252px; flex: 1; padding: 40px 56px 80px; max-width: 960px; }
+section { margin-bottom: 64px; }
+section:first-child .page-title { margin-top: 0; }
+.page-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 6px; }
+.page-subtitle { color: #6b7280; font-size: 14px; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
+h2 { font-size: 20px; font-weight: 700; color: #0f1117; margin: 36px 0 14px; padding-bottom: 8px; border-bottom: 2px solid #5b8df5; }
+h3 { font-size: 16px; font-weight: 600; color: #1a202c; margin: 24px 0 10px; }
+h4 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #374151; }
+p { margin-bottom: 12px; color: #374151; }
+strong { color: #1a202c; }
+a { color: #5b8df5; text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
+ul, ol { padding-left: 22px; margin-bottom: 14px; }
+li { margin-bottom: 5px; color: #374151; }
+code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 13px; background: #eef0f5; color: #c0392b; padding: 1px 5px; border-radius: 4px; }
+pre { background: #1e2130; border-radius: 8px; padding: 20px; overflow-x: auto; margin: 14px 0 20px; border: 1px solid #2d3148; }
+pre code { background: none; color: #c9d1d9; font-size: 13px; padding: 0; border-radius: 0; }
+blockquote { border-left: 3px solid #f59e0b; background: #fffbeb; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0; color: #92400e; font-size: 14px; }
+.table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { background: #f0f4ff; color: #374151; font-weight: 600; padding: 10px 14px; text-align: left; border-bottom: 2px solid #dbe4ff; }
+td { padding: 9px 14px; border-bottom: 1px solid #e8ecf0; color: #374151; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:nth-child(even) td { background: #f9fafb; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'SF Mono', monospace; letter-spacing: .03em; }
+.badge-info { background: #dbeafe; color: #1d4ed8; }
+.badge-warn { background: #fef3c7; color: #92400e; }
+.badge-error { background: #fee2e2; color: #b91c1c; }
+.badge-debug { background: #f3f4f6; color: #6b7280; }
+.flow { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 12.5px; color: #8be9fd; white-space: pre; overflow-x: auto; line-height: 1.6; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.node { display: inline-block; background: #0f1117; color: #5b8df5; border: 1px solid #2d3148; padding: 1px 8px; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: 12px; }
+.callout { background: #f0f4ff; border-left: 3px solid #5b8df5; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 14px; color: #1e3a8a; }
+.callout.green { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
+.callout.amber { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+.filetree { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: #c9d1d9; white-space: pre; line-height: 1.8; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.filetree .dir { color: #5b8df5; }
+.filetree .file { color: #c9d1d9; }
+.filetree .cmt { color: #6b7587; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">Bizzie Spec<span>stock_price_sync</span></div>
+  <ul>
+    <li class="nav-section">Feature</li>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#datamodel">Shared Data Model</a></li>
+    <li class="nav-section">Sub-features</li>
+    <li><a href="price_ingestion/spec.html">price_ingestion →</a></li>
+  </ul>
+</nav>
+<main>
+
+<section id="overview">
+  <div class="page-title">Stock Price Sync</div>
+  <div class="page-subtitle">Minute-cadence watchlist prices: per-ticker FMP 1-min charts · EOD official-close seed &amp; finalize · Firestore snapshot docs · front-end price rows with mini charts</div>
+  <p>Every minute during US market hours (gated in code to 9:30am–4:05pm ET, weekdays), fetches the current-session 1-minute price series for every ticker on the global watchlist from FMP and writes one compact snapshot document per ticker to Firestore — latest price, day change vs previous close, and the intraday sparkline series for <strong>the current session only</strong>. Around the session it runs two short EOD passes: a <strong>pre-open seed</strong> that establishes each ticker's <code>previousClose</code> from the prior session's <strong>official closing-auction price</strong>, and a <strong>post-close finalize</strong> that overwrites the day's <code>price</code> with the official close (the 1-minute feed's last bar is 15:59 and misses the 16:00 auction). The front end renders each user's watchlist rows (price, mini chart) with one-time document fetches when the user views the home tab or pulls to refresh, always showing the latest available session.</p>
+  <p>Every write is a <strong>stateless full-session snapshot refresh</strong>: each write fully replaces the previous one, so a failed run, a crashed function, or an FMP outage is completely healed by the next run. There is no cursor, no queue, and no retry infrastructure — the schedule <em>is</em> the retry. The only server state is two in-memory per-instance caches (<code>previousClose</code>, <code>latestBarAt</code>) plus a finalize marker, all rebuilt harmlessly on cold start.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Sub-feature</th><th>Trigger</th><th>Responsibility</th></tr>
+    <tr>
+      <td><a href="price_ingestion/spec.html">price_ingestion</a></td>
+      <td>Cloud Scheduler <code>* 9-16 * * 1-5</code> ET, gated in code into three phases</td>
+      <td>Pre-open EOD <code>previousClose</code> seed · per-ticker intraday 1-min fetch + snapshot derivation (price, change %, sparkline) · post-close EOD finalize of the official close · idempotent full-overwrite Firestore write with unchanged-skip</td>
+    </tr>
+  </table></div>
+</section>
+
+<section id="architecture">
+  <h2>High-Level Architecture</h2>
+  <div class="flow">Cloud Scheduler (every minute, Mon–Fri, gated in code by ET phase)
+         │
+         ▼
+stockPriceSync  [trigger.ts]
+         │
+         ▼
+StockPriceSyncUseCase  [usecase.ts]  — phase gate: pre-open seed | intraday | post-close finalize
+   ├── reads  watchlist/{ticker}                   (written by watchlist_aggregator, cached per instance)
+   ├── reads  FMP /historical-price-eod/light      (official close → previousClose seed + post-close finalize)
+   ├── reads  FMP /historical-chart/1min           (1 call/ticker; today-only intraday series + last price)
+   └── writes stock_prices/{ticker}                (current-session snapshot overwrite, skip-if-unchanged)
+                    │
+                    ▼
+          Front end (one-time get() on home-tab view / pull-to-refresh) — watchlist rows: price · Δ% · mini chart</div>
+</section>
+
+<section id="datamodel">
+  <h2>Shared Data Model — StoredStockPrice</h2>
+  <p>Written to <code>stock_prices/{ticker}</code>. The front end does a <strong>one-time fetch</strong> of each watched ticker's document when the user views the home tab or pulls to refresh — no continuous listeners, direct document reads, no queries, no composite indexes — and renders the row and sparkline from this single document.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>ticker</code></td><td>string</td><td>Uppercase ticker — also the document ID</td></tr>
+    <tr><td><code>companyName</code></td><td>string</td><td>From the watchlist entry</td></tr>
+    <tr><td><code>price</code></td><td>number</td><td>Intraday: close of the newest 1-min bar. After finalize: the <strong>official EOD close</strong></td></tr>
+    <tr><td><code>previousClose</code></td><td>number | null</td><td>Prior trading session's <strong>official EOD close</strong> (null if not derivable)</td></tr>
+    <tr><td><code>change</code></td><td>number | null</td><td><code>price − previousClose</code></td></tr>
+    <tr><td><code>changePercent</code></td><td>number | null</td><td><code>change / previousClose × 100</code></td></tr>
+    <tr><td><code>sessionDate</code></td><td>string</td><td><code>"YYYY-MM-DD"</code> (ET) of the session the series covers</td></tr>
+    <tr><td><code>series</code></td><td>{t, c}[]</td><td>Chronological intraday points for the current session only, downsampled server-side to 5-min buckets (newest bar per bucket) — <code>t</code> = <code>"HH:mm"</code> (ET), <code>c</code> = close. ~79 points; a <code>16:00</code> official-close point is appended on finalize</td></tr>
+    <tr><td><code>latestBarAt</code></td><td>string</td><td><code>"YYYY-MM-DD HH:mm:ss"</code> (ET) of the newest 1-min bar — the intraday unchanged-skip key</td></tr>
+    <tr><td><code>closeFinalized</code></td><td>boolean</td><td><code>true</code> once the official EOD close has replaced the last-trade price</td></tr>
+    <tr><td><code>updatedAt</code></td><td>Timestamp</td><td>Server timestamp at write</td></tr>
+  </table></div>
+  <div class="callout green"><code>change</code>/<code>changePercent</code> measure the day's move against the prior trading session's <strong>official closing-auction price</strong> — the exact close, sourced once per ticker per day from the EOD endpoint. During the session <code>price</code> is minute-fresh from the 1-min feed with <code>closeFinalized = false</code>; after ~4:20pm ET <code>price</code> is the official close with <code>closeFinalized = true</code>. Outside market hours nothing new is written, so the document retains the last completed (finalized) session — <code>sessionDate</code> identifies it.</div>
+  <div class="callout">Full implementation detail — trigger, orchestration, snapshot derivation, services, confirmed FMP plan limits, and the Pub/Sub design evaluation — lives in the <a href="price_ingestion/spec.html">price_ingestion spec</a>.</div>
+</section>
+
+</main>
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

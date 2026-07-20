@@ -47,7 +47,14 @@ Also read any technology-specific best practice file that applies to the file un
 
 ### Audit Scope
 
-Check the file against every applicable rule in the reference files. For each violation found, record:
+Check the file against every applicable rule in the reference files.
+
+**Mandatory metric checks** — measure these explicitly for every function/method; they are easy to miss when reading for logic alone:
+
+- **Length** — flag any function/method longer than ~30 lines. An orchestrator that inlines each step (rather than delegating to named sub-functions) is a Single Responsibility violation even when each step reads cleanly.
+- **Parameter count** — flag any function/method taking more than three parameters (introduce a parameter object).
+
+For each violation found, record:
 
 - **Line(s)** — exact file:line reference
 - **Rule broken** — the specific rule or principle violated

@@ -93,6 +93,8 @@ description: General software development best practices for quality, maintainab
 
 - [ ] No duplicated logic — DRY applied.
 - [ ] Every function/class has a single, clear responsibility.
+- [ ] No function exceeds ~30 lines or coordinates more than one step — extract sub-functions (an orchestrator delegates; it does not inline each step).
+- [ ] No function takes more than three parameters — use a parameter object.
 - [ ] No boolean flag parameters that alter control flow.
 - [ ] No magic numbers or strings — named constants used.
 - [ ] No commented-out code or dead code.

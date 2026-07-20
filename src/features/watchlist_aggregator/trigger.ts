@@ -38,12 +38,13 @@ export const syncWatchlist = onDocumentWritten({
     const tickerId = event.params.tickerId;
     const ticker = data.ticker || tickerId;
     const companyName = data.companyName || '';
+    const logoUrl = data.logoUrl || '';
 
     const service = new GlobalWatchlistService();
     const useCase = new WatchlistAggregatorUseCase(service);
 
     try {
-        await useCase.execute(ticker, companyName);
+        await useCase.execute(ticker, companyName, logoUrl);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
 
