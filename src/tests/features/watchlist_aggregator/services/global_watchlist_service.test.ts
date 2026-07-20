@@ -33,9 +33,10 @@ describe('GlobalWatchlistService', () => {
         // Arrange
         const ticker = 'NVDA';
         const companyName = 'NVIDIA';
+        const logoUrl = 'https://images.financialmodelingprep.com/symbol/NVDA.png';
 
         // Act
-        await service.upsertToGlobalList(ticker, companyName);
+        await service.upsertToGlobalList(ticker, companyName, logoUrl);
 
         // Assert
         expect(mockFirestore.collection).toHaveBeenCalledWith('watchlist');
@@ -44,8 +45,24 @@ describe('GlobalWatchlistService', () => {
             expect.objectContaining({
                 ticker,
                 companyName,
+                logoUrl,
                 lastAddedAt: expect.anything(), // FieldValue.serverTimestamp() matches anything in mock
             }),
+            { merge: true }
+        );
+    });
+
+    it('globalWatchlistService_upsertToGlobalList_missingLogoUrl_omitsLogoUrlField', async () => {
+        // Arrange
+        const ticker = 'NVDA';
+        const companyName = 'NVIDIA';
+
+        // Act
+        await service.upsertToGlobalList(ticker, companyName, '');
+
+        // Assert
+        expect(mockDoc.set).toHaveBeenCalledWith(
+            expect.not.objectContaining({ logoUrl: expect.anything() }),
             { merge: true }
         );
     });
@@ -56,6 +73,6 @@ describe('GlobalWatchlistService', () => {
         mockDoc.set.mockRejectedValue(new Error('Firestore unavailable'));
 
         // Act & Assert
-        await expect(service.upsertToGlobalList(ticker, 'Name')).rejects.toThrow('Firestore unavailable');
+        await expect(service.upsertToGlobalList(ticker, 'Name', '')).rejects.toThrow('Firestore unavailable');
     });
 });

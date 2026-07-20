@@ -13,3 +13,7 @@
 - `npm run lint` — ESLint
 - `npm run shell` — interactive local Firebase shell
 
+## Manual scripts
+One-off/manual scripts live in `src/scripts/`. Every new manual script must get an npm script entry in `package.json` (using `ts-node --transpile-only`) so it is run as `npm run <name> -- <args>`. When giving the user run instructions, always use the `npm run` form — never `npx ts-node ...` and never a `PATH="..."` prefix.
+- `npm run backfill:watchlist-logos -- --project <dev|qa|prod> [--dry-run] [--force]` — backfill `logoUrl` on user watchlist docs from FMP profiles
+
