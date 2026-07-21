@@ -12,6 +12,14 @@ export interface StockNewsConfig {
   watchlistCacheSeconds: number;
 }
 
+export interface GeneralMarketNewsConfig {
+  pageLimit: number;
+  maxPages: number;
+  maxBackfillPages: number;
+  overlapWindowSeconds: number;
+  runIntervalSeconds: number;
+}
+
 export interface StockPricesConfig {
   fetchConcurrency: number;
   maxCallsPerRun: number;
@@ -32,6 +40,7 @@ export interface AppConfig {
   };
   stock_news: StockNewsConfig;
   stock_prices: StockPricesConfig;
+  general_market_news: GeneralMarketNewsConfig;
   bizzie_chat: {
     chat_model: string;
     chat_model_flash: string;
@@ -97,6 +106,13 @@ const DEFAULT_CONFIG: AppConfig = {
     eodLookbackCalendarDays: 4,
     eodFallbackCalendarDays: 10,
   },
+  general_market_news: {
+    pageLimit: 250,
+    maxPages: 4,
+    maxBackfillPages: 10,
+    overlapWindowSeconds: 600,
+    runIntervalSeconds: 300,
+  },
 };
 
 let configCache: AppConfig | null = null;
@@ -126,6 +142,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const rawWeeklyRecapModel = (template.parameters['weekly_recap_model']?.defaultValue as { value?: string } | undefined)?.value;
     const rawStockNews = (template.parameters['stock_news_config']?.defaultValue as { value?: string } | undefined)?.value;
     const rawStockPrices = (template.parameters['stock_prices_config']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawGeneralMarketNews = (template.parameters['general_market_news_config']?.defaultValue as { value?: string } | undefined)?.value;
 
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;
     const gemini_model_name = (rawModelName as string) || DEFAULT_CONFIG.gemini_model_name;
@@ -135,6 +152,9 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const stock_prices: StockPricesConfig = rawStockPrices
         ? { ...DEFAULT_CONFIG.stock_prices, ...JSON.parse(rawStockPrices) }
         : DEFAULT_CONFIG.stock_prices;
+    const general_market_news: GeneralMarketNewsConfig = rawGeneralMarketNews
+        ? { ...DEFAULT_CONFIG.general_market_news, ...JSON.parse(rawGeneralMarketNews) }
+        : DEFAULT_CONFIG.general_market_news;
 
     const newConfig: AppConfig = {
       sectors,
@@ -154,6 +174,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
       },
       stock_news,
       stock_prices,
+      general_market_news,
     };
 
     configCache = newConfig;

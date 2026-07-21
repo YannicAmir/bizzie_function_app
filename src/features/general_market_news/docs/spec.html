@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>General Market News — Feature Spec</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.7; color: #1a202c; background: #f7f8fa; display: flex; min-height: 100vh; }
+nav { position: fixed; top: 0; left: 0; bottom: 0; width: 252px; background: #0f1117; overflow-y: auto; padding: 0 0 32px; flex-shrink: 0; z-index: 10; }
+nav .brand { padding: 24px 20px 16px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5b8df5; border-bottom: 1px solid #1e2130; }
+nav .brand span { display: block; color: #8b92a5; font-weight: 400; margin-top: 2px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+nav ul { list-style: none; padding: 12px 0; }
+nav li a { display: block; padding: 6px 20px; color: #8b92a5; text-decoration: none; font-size: 13px; transition: color .15s; }
+nav li a:hover, nav li a.active { color: #fff; }
+nav .nav-section { padding: 14px 20px 4px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #3d4251; }
+main { margin-left: 252px; flex: 1; padding: 40px 56px 80px; max-width: 960px; }
+section { margin-bottom: 64px; }
+section:first-child .page-title { margin-top: 0; }
+.page-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 6px; }
+.page-subtitle { color: #6b7280; font-size: 14px; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
+h2 { font-size: 20px; font-weight: 700; color: #0f1117; margin: 36px 0 14px; padding-bottom: 8px; border-bottom: 2px solid #5b8df5; }
+h3 { font-size: 16px; font-weight: 600; color: #1a202c; margin: 24px 0 10px; }
+h4 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #374151; }
+p { margin-bottom: 12px; color: #374151; }
+strong { color: #1a202c; }
+a { color: #5b8df5; text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
+ul, ol { padding-left: 22px; margin-bottom: 14px; }
+li { margin-bottom: 5px; color: #374151; }
+code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 13px; background: #eef0f5; color: #c0392b; padding: 1px 5px; border-radius: 4px; }
+pre { background: #1e2130; border-radius: 8px; padding: 20px; overflow-x: auto; margin: 14px 0 20px; border: 1px solid #2d3148; }
+pre code { background: none; color: #c9d1d9; font-size: 13px; padding: 0; border-radius: 0; }
+blockquote { border-left: 3px solid #f59e0b; background: #fffbeb; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0; color: #92400e; font-size: 14px; }
+.table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { background: #f0f4ff; color: #374151; font-weight: 600; padding: 10px 14px; text-align: left; border-bottom: 2px solid #dbe4ff; }
+td { padding: 9px 14px; border-bottom: 1px solid #e8ecf0; color: #374151; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:nth-child(even) td { background: #f9fafb; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'SF Mono', monospace; letter-spacing: .03em; }
+.badge-info { background: #dbeafe; color: #1d4ed8; }
+.badge-warn { background: #fef3c7; color: #92400e; }
+.badge-error { background: #fee2e2; color: #b91c1c; }
+.badge-debug { background: #f3f4f6; color: #6b7280; }
+.flow { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 12.5px; color: #8be9fd; white-space: pre; overflow-x: auto; line-height: 1.6; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.node { display: inline-block; background: #0f1117; color: #5b8df5; border: 1px solid #2d3148; padding: 1px 8px; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: 12px; }
+.callout { background: #f0f4ff; border-left: 3px solid #5b8df5; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 14px; color: #1e3a8a; }
+.callout.green { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
+.callout.amber { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+.filetree { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: #c9d1d9; white-space: pre; line-height: 1.8; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.filetree .dir { color: #5b8df5; }
+.filetree .file { color: #c9d1d9; }
+.filetree .cmt { color: #6b7587; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">Bizzie Spec<span>general_market_news</span></div>
+  <ul>
+    <li class="nav-section">Feature</li>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#datamodel">Shared Data Model</a></li>
+    <li class="nav-section">Sub-features</li>
+    <li><a href="ingestion/spec.html">ingestion →</a></li>
+  </ul>
+</nav>
+<main>
+
+<section id="overview">
+  <div class="page-title">General Market News</div>
+  <div class="page-subtitle">General (non-ticker) market news: 5-minute FMP polling · Firestore storage with 2-day TTL · no notifications</div>
+  <p>Polls the FMP latest general-news feed on a Remote-Config-controlled interval (default every 5 minutes) and persists every article to Firestore with a 2-day TTL. Unlike <code>stock_news_notifier</code>, articles are not tied to a ticker — there is no watchlist filter and no push notification. A Firestore ingestion cursor with an overlap window guarantees no article is missed between runs and no article is processed twice, even across function crashes, FMP outages, and overlapping invocations.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Sub-feature</th><th>Trigger</th><th>Responsibility</th></tr>
+    <tr>
+      <td><a href="ingestion/spec.html">ingestion</a></td>
+      <td>Cloud Scheduler <code>* * * * *</code> (every minute; effective poll cadence gated by Remote Config <code>runIntervalSeconds</code>, default 300s)</td>
+      <td>Cursor-based FMP fetch · idempotent Firestore write (TTL 2d)</td>
+    </tr>
+  </table></div>
+</section>
+
+<section id="architecture">
+  <h2>High-Level Architecture</h2>
+  <div class="flow">Cloud Scheduler (every minute — finest poll tick)
+         │
+         ▼
+generalMarketNews  [trigger.ts]
+         │
+         ▼
+GeneralMarketNewsUseCase  [usecase.ts]
+   ├── gate    runIntervalSeconds elapsed?    (Remote Config; skip tick if not — no FMP call)
+   ├── reads  FMP /news/general-latest                    (cursor + overlap pagination)
+   ├── writes general_market_news/{newsId}                (create-only, expireAt TTL = +48h)
+   └── r/w    general_market_news_state/ingestion         (cursor + run lease + last-run gate)</div>
+  <div class="callout">Remote-switch polling frequency: the Cloud Scheduler job always ticks every minute — the finest cadence the pipeline can ever poll at. The actual FMP-polling frequency is controlled by <code>runIntervalSeconds</code> in the <code>general_market_news_config</code> Remote Config key (default <code>300</code> = 5 minutes). Setting it to <code>60</code> makes the pipeline poll every minute instead of every 5, with no redeploy.</div>
+</section>
+
+<section id="datamodel">
+  <h2>Shared Data Model — StoredGeneralMarketNews</h2>
+  <p>Written to <code>general_market_news/{newsId}</code> where <code>newsId = sha256(url)</code>. FMP general news carries no ticker (<code>symbol</code> is always <code>null</code> on this endpoint), so the dedup key is the URL alone — unlike <code>stock_news</code>, which prefixes with <code>symbol</code> to disambiguate the same URL reused across tickers.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>newsId</code></td><td>string</td><td>sha256 of <code>url</code> — also the document ID</td></tr>
+    <tr><td><code>publishedDate</code></td><td>string</td><td>Raw FMP publish time, <code>"YYYY-MM-DD HH:mm:ss"</code> (US/Eastern)</td></tr>
+    <tr><td><code>publishedAt</code></td><td>Timestamp</td><td><code>publishedDate</code> parsed as <code>America/New_York</code> — the client sort/filter field</td></tr>
+    <tr><td><code>publisher</code></td><td>string</td><td>e.g. <code>"Bloomberg Markets and Finance"</code></td></tr>
+    <tr><td><code>title</code></td><td>string</td><td>Article headline</td></tr>
+    <tr><td><code>text</code></td><td>string</td><td>Article body/summary from FMP</td></tr>
+    <tr><td><code>image</code></td><td>string | null</td><td>Article image URL</td></tr>
+    <tr><td><code>site</code></td><td>string</td><td>Source domain</td></tr>
+    <tr><td><code>url</code></td><td>string</td><td>Canonical article URL</td></tr>
+    <tr><td><code>createdAt</code></td><td>Timestamp</td><td>Server timestamp at write</td></tr>
+    <tr><td><code>expireAt</code></td><td>Timestamp</td><td><code>createdAt + 48h</code> — TTL field only, never queried</td></tr>
+  </table></div>
+  <div class="callout">Full implementation detail — triggers, cursor algorithm, services, retry strategy, and TTL setup — lives in the <a href="ingestion/spec.html">ingestion spec</a>.</div>
+</section>
+
+</main>
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
