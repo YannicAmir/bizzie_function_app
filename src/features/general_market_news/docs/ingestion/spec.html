@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>General Market News — Ingestion Spec</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.7; color: #1a202c; background: #f7f8fa; display: flex; min-height: 100vh; }
+nav { position: fixed; top: 0; left: 0; bottom: 0; width: 252px; background: #0f1117; overflow-y: auto; padding: 0 0 32px; flex-shrink: 0; z-index: 10; }
+nav .brand { padding: 24px 20px 16px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5b8df5; border-bottom: 1px solid #1e2130; }
+nav .brand span { display: block; color: #8b92a5; font-weight: 400; margin-top: 2px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+nav ul { list-style: none; padding: 12px 0; }
+nav li a { display: block; padding: 6px 20px; color: #8b92a5; text-decoration: none; font-size: 13px; transition: color .15s; }
+nav li a:hover, nav li a.active { color: #fff; }
+nav .nav-section { padding: 14px 20px 4px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #3d4251; }
+main { margin-left: 252px; flex: 1; padding: 40px 56px 80px; max-width: 960px; }
+section { margin-bottom: 64px; }
+section:first-child .page-title { margin-top: 0; }
+.page-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 6px; }
+.page-subtitle { color: #6b7280; font-size: 14px; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
+h2 { font-size: 20px; font-weight: 700; color: #0f1117; margin: 36px 0 14px; padding-bottom: 8px; border-bottom: 2px solid #5b8df5; }
+h3 { font-size: 16px; font-weight: 600; color: #1a202c; margin: 24px 0 10px; }
+h4 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #374151; }
+p { margin-bottom: 12px; color: #374151; }
+strong { color: #1a202c; }
+a { color: #5b8df5; text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
+ul, ol { padding-left: 22px; margin-bottom: 14px; }
+li { margin-bottom: 5px; color: #374151; }
+code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 13px; background: #eef0f5; color: #c0392b; padding: 1px 5px; border-radius: 4px; }
+pre { background: #1e2130; border-radius: 8px; padding: 20px; overflow-x: auto; margin: 14px 0 20px; border: 1px solid #2d3148; }
+pre code { background: none; color: #c9d1d9; font-size: 13px; padding: 0; border-radius: 0; }
+blockquote { border-left: 3px solid #f59e0b; background: #fffbeb; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0; color: #92400e; font-size: 14px; }
+.table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { background: #f0f4ff; color: #374151; font-weight: 600; padding: 10px 14px; text-align: left; border-bottom: 2px solid #dbe4ff; }
+td { padding: 9px 14px; border-bottom: 1px solid #e8ecf0; color: #374151; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:nth-child(even) td { background: #f9fafb; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'SF Mono', monospace; letter-spacing: .03em; }
+.badge-info { background: #dbeafe; color: #1d4ed8; }
+.badge-warn { background: #fef3c7; color: #92400e; }
+.badge-error { background: #fee2e2; color: #b91c1c; }
+.badge-debug { background: #f3f4f6; color: #6b7280; }
+.flow { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 12.5px; color: #8be9fd; white-space: pre; overflow-x: auto; line-height: 1.6; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.node { display: inline-block; background: #0f1117; color: #5b8df5; border: 1px solid #2d3148; padding: 1px 8px; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: 12px; }
+.callout { background: #f0f4ff; border-left: 3px solid #5b8df5; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 14px; color: #1e3a8a; }
+.callout.green { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
+.callout.amber { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+.filetree { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: #c9d1d9; white-space: pre; line-height: 1.8; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.filetree .dir { color: #5b8df5; }
+.filetree .file { color: #c9d1d9; }
+.filetree .cmt { color: #6b7587; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">Bizzie Spec<span>general_market_news / ingestion</span></div>
+  <ul>
+    <li class="nav-section">Overview</li>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#flow">End-to-End Flow</a></li>
+    <li><a href="#filetree">File Structure</a></li>
+    <li class="nav-section">Entry Points</li>
+    <li><a href="#trigger">generalMarketNews</a></li>
+    <li class="nav-section">Orchestration</li>
+    <li><a href="#usecase">Usecase Steps</a></li>
+    <li><a href="#failure">Failure Isolation</a></li>
+    <li class="nav-section">Data</li>
+    <li><a href="#domain-types">Domain Types</a></li>
+    <li><a href="#firestore-schemas">Firestore Schemas</a></li>
+    <li class="nav-section">Services</li>
+    <li><a href="#firestore-service">firestore_service.ts</a></li>
+    <li><a href="#fmp-service">fmp_news_service.ts</a></li>
+    <li class="nav-section">Infrastructure</li>
+    <li><a href="#tech-stack">Tech Stack</a></li>
+    <li><a href="#remote-config">Remote Config</a></li>
+    <li><a href="#retry">Retry Strategy</a></li>
+    <li><a href="#open-questions">Open Questions</a></li>
+    <li class="nav-section">Setup</li>
+    <li><a href="#ttl-setup">TTL Policy Setup</a></li>
+    <li class="nav-section">Feature</li>
+    <li><a href="../../spec.html">← Feature root</a></li>
+  </ul>
+</nav>
+<main>
+
+<section id="overview">
+  <div class="page-title">Ingestion Pipeline</div>
+  <div class="page-subtitle">Cursor-based FMP polling, cadence set by a Remote Config switch (default every 5 minutes) · idempotent Firestore storage · 2-day TTL · no tickers, no notifications</div>
+  <p>Every minute the Cloud Scheduler job ticks, but the pipeline only actually polls FMP once per <code>runIntervalSeconds</code> (Remote Config, default 300s = 5 minutes) — every other tick is a cheap no-op. This makes the poll cadence a runtime switch: flipping <code>runIntervalSeconds</code> to <code>60</code> polls every minute instead of every 5, with no redeploy. No ticker filtering, no watchlist read, no notifications — every article FMP returns is eligible for storage. An ingestion cursor (high-water mark on <code>publishedDate</code>) plus an overlap window and create-only writes make the pipeline exactly-once for storage, the same guarantee <code>stock_news_notifier</code> provides for ticker news.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Function</th><th>Trigger</th><th>Schedule</th></tr>
+    <tr><td><code>generalMarketNews</code></td><td>Cloud Scheduler</td><td><code>* * * * *</code> — every minute, all day (finest poll tick; see <a href="#remote-config">Remote Config</a> for the cadence gate)</td></tr>
+  </table></div>
+</section>
+
+<section id="flow">
+  <h2>End-to-End Flow</h2>
+  <div class="flow">Cloud Scheduler (every minute — finest poll tick)
+         │
+         ▼
+generalMarketNews  [trigger.ts]  — pause/resume via the Cloud Scheduler job in the GCP console
+         │
+         ▼
+GeneralMarketNewsUseCase.execute()  [usecase.ts]
+  1 acquireLease(runIntervalSeconds) ── [firestore_service.ts] txn on general_market_news_state/ingestion
+  │                            lease held by another run, OR lastRunAt + runIntervalSeconds > now?
+  │                            → log + exit (no FMP call — this tick is a no-op by design)
+  2 getCursor()              ── [firestore_service.ts]    → lastPublishedDate watermark
+  3 fetchSinceWatermark()    ── [fmp_news_service.ts]     pages 0..N of /news/general-latest until
+  │                             oldest item < watermark − overlapWindow (or maxPages → ranged backfill)
+  4 filter + dedupe-create   ── [firestore_service.ts]    publishedDate ≥ overlapCutoff → create
+  │                             general_market_news/{newsId}; ALREADY_EXISTS → skip silently
+  5 advanceCursor()          ── [firestore_service.ts]    txn: watermark = max(publishedDate fetched)
+  6 releaseLease()           ── [firestore_service.ts]    best-effort (lease self-expires on crash)</div>
+  <div class="callout">Trimmed version of <code>stock_news_notifier</code>'s pipeline: no watchlist load, no ticker filter, no FCM step.</div>
+</section>
+
+<section id="filetree">
+  <h2>File Structure</h2>
+  <div class="filetree"><span class="dir">src/features/general_market_news/</span>
+├── <span class="file">trigger.ts</span>                    <span class="cmt"># Cloud Function entry point</span>
+├── <span class="file">usecase.ts</span>                    <span class="cmt"># GeneralMarketNewsUseCase orchestration</span>
+├── <span class="dir">constants/</span>
+│   └── <span class="file">index.ts</span>                  <span class="cmt"># FEATURE_NAME, collection names, defaults</span>
+├── <span class="dir">models/</span>
+│   ├── <span class="file">index.ts</span>                  <span class="cmt"># Barrel re-export</span>
+│   ├── <span class="file">GeneralNewsArticle.ts</span>     <span class="cmt"># FMP DTO → domain type</span>
+│   ├── <span class="file">StoredGeneralNews.ts</span>      <span class="cmt"># Firestore document shape</span>
+│   ├── <span class="file">IngestionCursor.ts</span>        <span class="cmt"># Cursor + lease state</span>
+│   └── <span class="file">FetchResult.ts</span>            <span class="cmt"># Fetch outcome (articles, pagesFetched, reachedOverlap)</span>
+└── <span class="dir">services/</span>
+    ├── <span class="file">fmp_news_service.ts</span>       <span class="cmt"># FMP /news/general-latest fetch (latest + ranged backfill)</span>
+    └── <span class="file">firestore_service.ts</span>      <span class="cmt"># general_market_news writes, cursor/lease transactions</span></div>
+  <p>Registered in <code>src/index.ts</code> via <code>export * from './features/general_market_news/trigger'</code>.</p>
+</section>
+
+<section id="trigger">
+  <h2>Entry Point — generalMarketNews</h2>
+  <p>Cloud Function entry point. Instantiates service dependencies at module scope (single composition root) and delegates to the use case. Contains no business logic. Modeled directly on <code>stock_news_notifier/trigger.ts</code>.</p>
+  <p><code>FMP_API_KEY</code> is declared with <code>defineSecret('FMP_API_KEY')</code> from <code>firebase-functions/params</code> and bound via <code>secrets: [fmpApiKey]</code> — the same secret <code>stock_news_notifier</code> uses, injected as <code>process.env.FMP_API_KEY</code> at runtime. Collection names and the feature name come from <code>constants/index.ts</code> — no string literals in this file.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Config</th><th>Value</th></tr>
+    <tr><td>Type</td><td><code>onSchedule</code></td></tr>
+    <tr><td>Schedule</td><td><code>* * * * *</code> (every minute, all day — no time-of-day restriction)</td></tr>
+    <tr><td>Timezone</td><td><code>America/New_York</code> — used only for <code>publishedDate</code> parsing consistency, not schedule gating</td></tr>
+    <tr><td>Memory</td><td><code>256MiB</code></td></tr>
+    <tr><td>Timeout</td><td><code>60s</code> — hard upper bound; must stay below the 1-minute schedule interval</td></tr>
+    <tr><td>Max instances</td><td><code>1</code> — first guard against overlapping runs (lease is the second)</td></tr>
+    <tr><td>Secrets</td><td><code>FMP_API_KEY</code> (via <code>defineSecret</code>)</td></tr>
+  </table></div>
+  <div class="callout">The trigger fires every minute regardless of poll cadence. The Cloud Scheduler cron is fixed at the finest interval the pipeline will ever need (<code>* * * * *</code>). Whether a given tick actually calls FMP is decided inside the use case by comparing <code>runIntervalSeconds</code> (Remote Config, default 300s) against how long it's been since the last run. This makes poll frequency a runtime switch (e.g. 300 → 60 to go from every 5 minutes to every minute) with no redeploy and no Cloud Scheduler edit.</div>
+  <div class="callout">Operational kill switch: no Remote Config flag fully disables the function — pause/resume the Cloud Scheduler job directly in the GCP console to stop it completely. Raising <code>runIntervalSeconds</code> slows polling but each tick still costs one function invocation (cheap: a single Firestore transactional read, no FMP call, when the interval hasn't elapsed). The cursor makes resuming after a pause safe: the first run detects it is behind the watermark and catches up via deeper pages or the ranged backfill, with no gap and no duplicates.</div>
+  <div class="callout amber">No time-of-day gap: unlike <code>stock_news_notifier</code>, which skips 12:00–3:59am EST because it only cares about watched-ticker activity, this feed runs around the clock — general market news (e.g. overnight Asia/Europe coverage) is relevant at all hours.</div>
+  <h3>Steps</h3>
+  <ol>
+    <li>Reads <code>process.env.FMP_API_KEY</code>; if missing, logs an error and returns (no retry — misconfiguration is not transient).</li>
+    <li>Instantiates <code>GeneralMarketNewsUseCase</code> with <code>FmpNewsService</code> and <code>FirestoreService</code>, then calls <code>execute()</code>.</li>
+    <li>On use-case error: logs the error and swallows it. The scheduler fires again in ≤ 1 minute and the cursor guarantees the failed window is re-covered; re-throwing would only trigger a redundant Cloud Scheduler retry racing the next tick.</li>
+  </ol>
+</section>
+
+<section id="usecase">
+  <h2>Orchestration — GeneralMarketNewsUseCase.execute()</h2>
+  <p>All steps run sequentially — each depends on the previous step's output. The only intra-step concurrency is the per-page FMP fetch loop (sequential by design, to stop as soon as the overlap is reached) and per-article writes (<code>Promise.allSettled</code> across the fetched batch). Nothing is fire-and-forget.</p>
+  <ol>
+    <li><strong>Acquire run lease + poll-interval gate</strong> — <code>FirestoreService.acquireLease(runIntervalSeconds)</code>, where <code>runIntervalSeconds</code> comes from <code>getRemoteConfig().general_market_news</code> (default 300s). Transaction on <code>general_market_news_state/ingestion</code> checks two conditions and fails closed on either: <code>leaseExpiresAt &gt; now</code> (another invocation is still active), or <code>lastRunAt + runIntervalSeconds &gt; now</code> (not enough time has passed since the last attempt — the expected outcome on most ticks once <code>runIntervalSeconds</code> exceeds the 1-minute schedule interval, no FMP call made). Otherwise the transaction sets <code>leaseExpiresAt = now + 90s</code> and <code>lastRunAt = now</code> (function timeout is 60s, so a crashed run self-expires before the next minute's tick). On transaction failure: log error and return — next scheduled run retries.</li>
+    <li><strong>Read cursor</strong> — <code>FirestoreService.getCursor()</code> → <code>lastPublishedDate</code> watermark. First run (no doc): initialize watermark to <code>now − overlapWindowSeconds</code> formatted as <code>"YYYY-MM-DD HH:mm:ss"</code> in <code>America/New_York</code>, and fetch page 0 only.</li>
+    <li><strong>Fetch since watermark</strong> — <code>FmpNewsService.fetchSinceWatermark(watermark)</code> → <code>FetchResult</code>. Computes <code>overlapCutoff = watermark − overlapWindowSeconds</code> and fetches <code>/news/general-latest</code> pages <code>0..maxPages−1</code> (limit <code>pageLimit</code>) until the oldest item on a page is older than <code>overlapCutoff</code>. If <code>maxPages</code> is exhausted without reaching the cutoff (<code>reachedOverlap = false</code>), it falls back to the ranged endpoint (<code>from=date(watermark)</code>, <code>to=today</code>) for up to <code>maxBackfillPages</code> pages. Still not caught up → log at <strong>error</strong> (alert signal). On fetch failure after retries: release lease and return <strong>without advancing the cursor</strong>.</li>
+    <li><strong>Filter + idempotent store</strong> — keep articles with <code>publishedDate ≥ overlapCutoff</code> (no ticker filter — every article in range is eligible). For each, <code>FirestoreService.createNewsIfAbsent(article)</code> — a <code>create()</code> on <code>general_market_news/{newsId}</code> with <code>newsId = sha256(url)</code>. <code>ALREADY_EXISTS</code> → skipped silently at debug level. Other write errors: logged per article and cause the cursor advance to be skipped for this run.</li>
+    <li><strong>Advance cursor</strong> — <code>FirestoreService.advanceCursor(maxFetchedPublishedDate)</code>. Transaction: <code>lastPublishedDate = max(current, maxFetchedPublishedDate)</code> — monotonic. Runs only after step 4 completed its write pass with no failures.</li>
+    <li><strong>Release lease</strong> — <code>FirestoreService.releaseLease()</code> sets <code>leaseExpiresAt = now</code>. Best-effort; expiry covers the crash case.</li>
+  </ol>
+</section>
+
+<section id="failure">
+  <h2>Failure Isolation</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Failure</th><th>Effect</th></tr>
+    <tr><td>FMP unreachable after retries</td><td>Cursor not advanced; next run's fetch step re-covers the window (backfill path if the outage was long)</td></tr>
+    <tr><td>Single article write fails</td><td>Logged per article; other articles unaffected</td></tr>
+    <tr><td>Any article write in a run fails (non-<code>ALREADY_EXISTS</code>)</td><td>Cursor advance is skipped for that run; next run re-fetches and the <code>create()</code> dedup absorbs the successful writes</td></tr>
+    <tr><td>Function crash mid-run</td><td>Lease expires after 90s; cursor untouched → full window reprocessed idempotently</td></tr>
+  </table></div>
+</section>
+
+<section id="domain-types">
+  <h2>Domain Types</h2>
+  <pre><code>interface GeneralNewsArticle {
+  publishedDate: string;   // "YYYY-MM-DD HH:mm:ss" — US/Eastern, lexicographically sortable
+  publisher: string;
+  title: string;
+  image: string | null;    // FMP may omit
+  site: string;            // source domain, e.g. "seekingalpha.com"
+  text: string;
+  url: string;             // canonical article URL — the entire dedup key (no symbol on this feed)
+}
+
+interface FetchResult {
+  articles: GeneralNewsArticle[];  // all pages merged, unfiltered
+  pagesFetched: number;
+  reachedOverlap: boolean;         // false → maxPages hit before overlapCutoff → backfill ran
+  maxPublishedDate: string;        // newest publishedDate seen — next cursor value
+}
+
+interface IngestionCursor {
+  lastPublishedDate: string;     // high-water mark, "YYYY-MM-DD HH:mm:ss"
+  lastRunAt: Timestamp;          // set at the start of every attempted run; gates poll frequency via runIntervalSeconds
+  leaseExpiresAt: Timestamp;     // run lock; expired lease = no active run
+  updatedAt: Timestamp;          // last successful cursor advance (may lag lastRunAt on a fetch failure)
+}</code></pre>
+  <p><code>publishedDate</code> is compared as a plain string everywhere (the FMP format sorts lexicographically). It is parsed as <code>America/New_York</code> only when computing <code>overlapCutoff</code> and the first-run bootstrap watermark — never stored converted.</p>
+  <div class="callout amber">The raw FMP payload's <code>symbol</code> field is always <code>null</code> on <code>/news/general-latest</code> (confirmed from sample data) and is dropped during mapping rather than carried through as a domain field.</div>
+</section>
+
+<section id="firestore-schemas">
+  <h2>Firestore Schemas</h2>
+  <h3>general_market_news/{newsId} — written by this pipeline</h3>
+  <p><code>{newsId} = sha256(url)</code>. Unlike <code>stock_news/{newsId}</code> (which prefixes with <code>symbol</code> because the same URL can serve multiple tickers), general news has no ticker to disambiguate, so the URL alone is the natural key. Written with <code>create()</code> (never <code>set</code>) — the failed <code>ALREADY_EXISTS</code> write <strong>is</strong> the dedup mechanism. A TTL policy on <code>expireAt</code> deletes documents ~48h after creation.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>newsId</code></td><td>string</td><td>sha256 of <code>url</code> — also the document ID</td></tr>
+    <tr><td><code>publishedDate</code></td><td>string</td><td>Raw FMP publish time, <code>"YYYY-MM-DD HH:mm:ss"</code> (US/Eastern)</td></tr>
+    <tr><td><code>publishedAt</code></td><td>Timestamp</td><td><code>publishedDate</code> parsed as <code>America/New_York</code> — the client sort/filter field</td></tr>
+    <tr><td><code>publisher</code></td><td>string</td><td>e.g. <code>"Bloomberg Markets and Finance"</code></td></tr>
+    <tr><td><code>title</code></td><td>string</td><td>Article headline</td></tr>
+    <tr><td><code>text</code></td><td>string</td><td>Article body/summary from FMP</td></tr>
+    <tr><td><code>image</code></td><td>string | null</td><td>Article image URL</td></tr>
+    <tr><td><code>site</code></td><td>string</td><td>Source domain, e.g. <code>"seekingalpha.com"</code></td></tr>
+    <tr><td><code>url</code></td><td>string</td><td>Canonical article URL</td></tr>
+    <tr><td><code>createdAt</code></td><td>Timestamp</td><td>Server timestamp at write</td></tr>
+    <tr><td><code>expireAt</code></td><td>Timestamp</td><td><code>createdAt + 48h</code> — TTL field only, never queried</td></tr>
+  </table></div>
+  <p><strong>Front-end read pattern.</strong> No <code>symbol</code> filter — a single feed query:</p>
+  <pre><code>db.collection('general_market_news')
+  .orderBy('publishedAt', 'desc')
+  .limit(50);</code></pre>
+  <p>No composite index required (single-field descending on <code>publishedAt</code> is auto-created by Firestore) unless a <code>where</code> clause is added later.</p>
+  <h3>general_market_news_state/ingestion — read/written by this pipeline</h3>
+  <p>Singleton document holding the cursor, run lease, and poll-interval gate (see <code>IngestionCursor</code> above). All mutations are transactions; the cursor only moves forward. <code>lastRunAt</code> is the field that makes poll frequency a Remote Config switch.</p>
+</section>
+
+<section id="firestore-service">
+  <h2>Service — firestore_service.ts</h2>
+  <p>Owns every Firestore read/write of this pipeline. Modeled directly on <code>stock_news_notifier/firestore_service.ts</code>, with the cooldown functions removed (no notifications) and the watchlist read removed (no ticker filter).</p>
+  <p>Imports: <code>getFirebaseAdmin</code> from <code>src/core/firebase</code>, <code>Logger</code> from <code>src/core/logger</code>, <code>crypto</code> (Node built-in) for the sha256 doc ID.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Collection</th><th>Access</th><th>Notes</th></tr>
+    <tr><td><code>general_market_news/{newsId}</code></td><td>write (create-only)</td><td>TTL on <code>expireAt</code></td></tr>
+    <tr><td><code>general_market_news_state/ingestion</code></td><td>read/write (transactional)</td><td>Singleton cursor + lease doc</td></tr>
+  </table></div>
+  <h3>acquireLease(runIntervalSeconds: number): Promise&lt;boolean&gt;</h3>
+  <p>Transaction on <code>general_market_news_state/ingestion</code>. Returns <code>false</code> if either is true: <code>leaseExpiresAt &gt; now</code> (run already active), or <code>lastRunAt + runIntervalSeconds &gt; now</code> (poll interval hasn't elapsed yet — the Remote Config-driven cadence gate). Otherwise sets <code>leaseExpiresAt = now + 90s</code> and <code>lastRunAt = now</code> (merge) and returns <code>true</code>. Throws on transaction failure — caller logs and exits.</p>
+  <h3>releaseLease(): Promise&lt;void&gt;</h3>
+  <p>Sets <code>leaseExpiresAt = now</code> (merge). Errors are logged, never thrown — lease expiry is the safety net.</p>
+  <h3>getCursor(): Promise&lt;string | null&gt;</h3>
+  <p>Reads the singleton doc; returns <code>lastPublishedDate</code> or <code>null</code> when the doc does not exist (first run — caller bootstraps the watermark).</p>
+  <h3>advanceCursor(candidate: string): Promise&lt;void&gt;</h3>
+  <p>Transaction: writes <code>lastPublishedDate = max(current, candidate)</code> (string comparison) plus <code>updatedAt = serverTimestamp()</code>. Throws on failure — caller logs; an un-advanced cursor only causes idempotent re-reads next run, never a gap.</p>
+  <h3>createNewsIfAbsent(article: GeneralNewsArticle): Promise&lt;boolean&gt;</h3>
+  <p>Computes <code>newsId = sha256(url)</code>, then <code>docRef.create({ ...article, newsId, publishedAt, createdAt: serverTimestamp, expireAt: Timestamp.fromMillis(Date.now() + 48h) })</code> — where <code>publishedAt</code> is <code>article.publishedDate</code> parsed as <code>America/New_York</code> into a <code>Timestamp</code>.</p>
+  <ul>
+    <li>Returns <code>true</code> — document created; article is new.</li>
+    <li>Returns <code>false</code> — Firestore error code <code>already-exists</code> (gRPC code 6); skipped silently at debug level.</li>
+    <li>Any other error: logged at error with <code>newsId</code>, then re-thrown so the use case can withhold the cursor advance for this run.</li>
+  </ul>
+</section>
+
+<section id="fmp-service">
+  <h2>Service — fmp_news_service.ts</h2>
+  <p>Fetches general market news from the FMP stable API with cursor-aware pagination. Structurally identical to <code>stock_news_notifier/fmp_news_service.ts</code>, pointed at the general-news endpoint and mapping one fewer field (<code>symbol</code>).</p>
+  <p>Imports: <code>retry</code> from <code>src/core/retry</code>, <code>getRemoteConfig</code> from <code>src/core/remote-config</code>, <code>Logger</code> from <code>src/core/logger</code>.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Item</th><th>Value</th></tr>
+    <tr><td>Base URL</td><td><code>getRemoteConfig().fmp.baseUrl</code> → <code>https://financialmodelingprep.com/stable</code></td></tr>
+    <tr><td>Endpoint</td><td><code>GET {baseUrl}/news/general-latest</code></td></tr>
+    <tr><td>Params</td><td><code>page</code> (number), <code>limit</code> (number), optional <code>from</code> / <code>to</code> (date <code>YYYY-MM-DD</code>), <code>apikey</code></td></tr>
+    <tr><td>Auth</td><td><code>apikey</code> query param — <code>FMP_API_KEY</code> from Secret Manager, injected via <code>defineSecret</code> (shared with <code>stock_news_notifier</code>)</td></tr>
+  </table></div>
+  <pre><code>retry(fetchPage, {
+  maxAttempts: 3,
+  initialDelayMs: 1000,
+  backoffFactor: 2,
+});   // 1s → 2s → throw</code></pre>
+  <p>Non-<code>response.ok</code> throws <code>Error("FMP API Error: {status} {statusText}")</code> (retried). A non-array JSON body also throws and is retried — treating it as an empty page would fake feed exhaustion, skip the backfill fallback, and open a silent coverage gap.</p>
+  <h3>fetchSinceWatermark(watermark: string, cfg: GeneralMarketNewsConfig): Promise&lt;FetchResult&gt;</h3>
+  <ol>
+    <li>Computes <code>overlapCutoff = watermark − cfg.overlapWindowSeconds</code> (parsed/formatted in <code>America/New_York</code>; compared as string thereafter).</li>
+    <li>Fetches <code>page = 0..cfg.maxPages − 1</code> with <code>limit = cfg.pageLimit</code>, accumulating mapped articles. Stops early when a page's oldest <code>publishedDate &lt; overlapCutoff</code> (<code>reachedOverlap = true</code>) or a page returns fewer than <code>limit</code> items (feed exhausted).</li>
+    <li>If <code>maxPages</code> was exhausted with <code>reachedOverlap = false</code>, calls <code>fetchRange(date(watermark), today, cfg)</code> and merges the results.</li>
+    <li>Returns <code>{ articles, pagesFetched, reachedOverlap, maxPublishedDate }</code>.</li>
+  </ol>
+  <h3>fetchRange(from: string, to: string, cfg: GeneralMarketNewsConfig): Promise&lt;GeneralNewsArticle[]&gt;</h3>
+  <p>Same endpoint with <code>from</code>/<code>to</code> params, pages <code>0..cfg.maxBackfillPages − 1</code>, stopping when a page returns fewer than <code>limit</code> items. Hitting <code>maxBackfillPages</code> logs at <strong>error</strong> with <code>from</code>/<code>to</code>.</p>
+  <h3>Mapping</h3>
+  <p>Each raw item is validated at the boundary (<code>parseFmpGeneralNews</code>) before mapping to <code>GeneralNewsArticle</code>:</p>
+  <ul>
+    <li>Rows that are not objects, or whose <code>url</code> or <code>publishedDate</code> is missing, empty, or not a string, are dropped and counted in a single info log per page.</li>
+    <li><code>symbol</code> is read but discarded — this endpoint always returns <code>null</code> for it; it is not part of the domain type.</li>
+    <li><code>image</code> normalized to <code>null</code> when absent or empty.</li>
+    <li>No client-side date filtering here — the use case applies <code>overlapCutoff</code>; this service only decides fetch depth.</li>
+  </ul>
+</section>
+
+<section id="tech-stack">
+  <h2>Tech Stack</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Layer</th><th>Technology</th></tr>
+    <tr><td>Runtime</td><td>Node.js 20, TypeScript 5.x (strict mode)</td></tr>
+    <tr><td>Cloud Functions</td><td>Google Cloud Functions 2nd Gen (<code>firebase-functions/v2/scheduler</code>)</td></tr>
+    <tr><td>Scheduling</td><td>Google Cloud Scheduler — <code>* * * * *</code> (every minute, all day; effective poll cadence gated by Remote Config, see below)</td></tr>
+    <tr><td>Database</td><td>Google Cloud Firestore (+ TTL policy on <code>general_market_news.expireAt</code>)</td></tr>
+    <tr><td>Market data</td><td>FMP REST API — <code>stable/news/general-latest</code></td></tr>
+    <tr><td>Secrets</td><td>GCP Secret Manager — <code>FMP_API_KEY</code> via <code>defineSecret</code> (shared with <code>stock_news_notifier</code>)</td></tr>
+    <tr><td>Retry / backoff</td><td><code>src/core/retry.ts</code></td></tr>
+    <tr><td>Logging</td><td><code>src/core/logger.ts</code></td></tr>
+    <tr><td>Config</td><td><code>src/core/remote-config.ts</code> — new <code>general_market_news</code> block</td></tr>
+  </table></div>
+  <p>No LLM, no Pub/Sub, no Redis, no FCM — same rationale as <code>stock_news_notifier</code>: the low per-run workload fits a single scheduled function.</p>
+</section>
+
+<section id="remote-config">
+  <h2>Remote Config — general_market_news_config</h2>
+  <p>Created with the <strong>JSON data type</strong> in the Firebase console, following the <code>stock_news_config</code> precedent (not the legacy string-typed <code>fmp_config</code>) so malformed values are rejected at save time. <code>src/core/remote-config.ts</code> parses it with <code>JSON.parse</code> into <code>AppConfig.general_market_news</code>, merged over defaults the same way <code>stock_prices</code> is (<code>{ ...DEFAULT_CONFIG.general_market_news, ...parsed }</code>) so partial Remote Config payloads don't drop unset fields.</p>
+  <pre><code>general_market_news: {
+  pageLimit: number;                    // default 250   — items per FMP page
+  maxPages: number;                     // default 4     — latest-feed pages before backfill kicks in
+  maxBackfillPages: number;             // default 10    — ranged-fetch safety cap
+  overlapWindowSeconds: number;         // default 600   — re-read window behind the cursor
+  runIntervalSeconds: number;           // default 300   — min seconds between actual FMP polls (the remote switch)
+}</code></pre>
+  <p>Every tuning knob is runtime-adjustable without a deploy. Defaults live in <code>DEFAULT_CONFIG</code>. There is deliberately no <code>enabled</code> flag — pausing the Cloud Scheduler job in the GCP console is the kill switch.</p>
+  <div class="callout amber"><code>pageLimit</code>/<code>maxPages</code>/<code>maxBackfillPages</code> defaults are reused as-is from <code>stock_news_config</code> as a starting point — see open questions below on tuning for actual general-news volume, which is unfiltered (every publisher, not just watchlisted tickers) and likely higher throughput per page than the per-ticker feed.</div>
+  <h3>runIntervalSeconds — the poll-frequency switch</h3>
+  <p>The Cloud Scheduler trigger fires every minute unconditionally; <code>runIntervalSeconds</code> decides how many of those ticks actually call FMP. <code>FirestoreService.acquireLease(runIntervalSeconds)</code> compares it against <code>lastRunAt</code> on the singleton cursor doc and short-circuits ticks that arrive too soon.</p>
+  <ul>
+    <li><strong>Default <code>300</code></strong> (5 minutes) — matches the original fixed-schedule design.</li>
+    <li><strong>Set to <code>60</code></strong> to poll every minute instead — no redeploy, no Cloud Scheduler edit, takes effect on the next tick (config cache TTL is 1 hour in <code>src/core/remote-config.ts</code>, so a manual cache-bust or a wait may be needed to see it take effect immediately).</li>
+    <li><strong>Floor is 60</strong> — since the trigger itself only ticks once per minute, any value below <code>60</code> has no additional effect.</li>
+  </ul>
+</section>
+
+<section id="retry">
+  <h2>Retry Strategy</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Call site</th><th>maxAttempts</th><th>initialDelayMs</th><th>backoffFactor</th><th>Delay series</th></tr>
+    <tr><td>FMP page fetch (<code>fmp_news_service.ts</code>)</td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
+  </table></div>
+  <p><strong>Transient (retried):</strong> HTTP 429/5xx, network failures. <strong>Permanent (not retried):</strong> run-level — a failed run simply doesn't advance the cursor; the next scheduled run is the retry. Firestore transactions rely on the SDK's built-in retry.</p>
+  <p><strong>Per-item isolation:</strong> article writes are individually caught via <code>Promise.allSettled</code>.</p>
+</section>
+
+<section id="open-questions">
+  <h2>Open Questions / TODOs</h2>
+  <div class="table-wrap"><table>
+    <tr><th>#</th><th>Question</th></tr>
+    <tr><td>1</td><td>Confirm <code>pageLimit</code>/<code>maxPages</code>/<code>maxBackfillPages</code> defaults (reused from <code>stock_news_config</code>) are sized correctly for general-news volume — this feed is unfiltered and may need a higher <code>pageLimit</code> or <code>maxPages</code> to reach <code>overlapCutoff</code> within one run.</td></tr>
+    <tr><td>2</td><td>Confirm <code>overlapWindowSeconds: 600</code> is sufficient margin against FMP publish/clock skew — it is not auto-derived from <code>runIntervalSeconds</code>, so lowering the interval to <code>60</code> should come with a manual sanity-check that the overlap window stays proportionate (rough rule: ≥2x the effective interval).</td></tr>
+    <tr><td>3</td><td>TTL policy must be created per environment (dev/qa/prod) before launch.</td></tr>
+    <tr><td>4</td><td>Confirm whether the front end needs a composite index (e.g. <code>site</code> or <code>publisher</code> equality + <code>publishedAt</code> ordering) before adding filters beyond the plain feed query.</td></tr>
+    <tr><td>5</td><td>The Cloud Scheduler job bills one function invocation every minute regardless of <code>runIntervalSeconds</code> — skipped ticks are cheap (one Firestore transactional read, no FMP call) but not free. Confirm this per-minute invocation floor is acceptable.</td></tr>
+  </table></div>
+</section>
+
+<section id="ttl-setup">
+  <h2>Setup — Firestore TTL Policy on general_market_news</h2>
+  <p>Firestore deletes documents automatically once a TTL policy names a timestamp field and that field's value passes. This must be configured <strong>once per environment</strong> (dev, qa, prod) before launch — without it, <code>expireAt</code> is inert and the collection grows unbounded.</p>
+  <ol>
+    <li>Select the environment's GCP project:
+      <pre><code>gcloud config set project &lt;dev|qa|prod project id&gt;</code></pre>
+    </li>
+    <li>Create the TTL policy on the <code>expireAt</code> field of the <code>general_market_news</code> collection group:
+      <pre><code>gcloud firestore fields ttls update expireAt \
+  --collection-group=general_market_news \
+  --enable-ttl</code></pre>
+    </li>
+    <li>Verify:
+      <pre><code>gcloud firestore fields ttls list --collection-group=general_market_news</code></pre>
+      State must show <code>ACTIVE</code> (initial rollout can take a few minutes).
+    </li>
+  </ol>
+  <p>Console alternative: Firestore → <em>Time-to-live</em> tab → <strong>Create policy</strong> → collection group <code>general_market_news</code>, timestamp field <code>expireAt</code>.</p>
+  <h3>Operational Notes</h3>
+  <ul>
+    <li><strong>Deletion lag:</strong> Firestore TTL typically deletes within 24 hours <em>after</em> <code>expireAt</code> — treat it as garbage collection, not an access control. Clients filtering <code>publishedAt &gt;= now − 2d</code> naturally exclude TTL-lagged documents.</li>
+    <li><strong>Cost:</strong> TTL deletes are billed as normal delete operations.</li>
+    <li><strong>No index needed for TTL itself:</strong> TTL fields require no composite index entry.</li>
+    <li>Nothing reads <code>expireAt</code>; it exists solely for the TTL policy.</li>
+  </ul>
+</section>
+
+</main>
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

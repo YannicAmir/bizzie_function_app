@@ -15,3 +15,4 @@ export * from './features/weekly_recap/storage/trigger';
 export * from './features/weekly_recap/retrieval_and_messaging/trigger';
 export * from './features/stock_news_notifier/trigger';
 export * from './features/stock_price_sync/trigger';
+export * from './features/general_market_news/trigger';

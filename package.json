@@ -18,6 +18,7 @@
     "test": "jest",
     "harness:price-sync": "ts-node --transpile-only src/features/stock_price_sync/_manual_harness.ts",
     "harness:price-sync:all": "PHASE=all ts-node --transpile-only src/features/stock_price_sync/_manual_harness.ts",
+    "harness:general-news": "ts-node --transpile-only src/features/general_market_news/_manual_harness.ts",
     "backfill:watchlist-logos": "ts-node --transpile-only src/scripts/backfill-watchlist-logos.ts"
   },
   "keywords": [],

@@ -81,6 +81,10 @@ export function subtractCalendarDays(dateStr: string, days: number): string {
     return `${shiftedYear}-${shiftedMonth}-${shiftedDay}`;
 }
 
+export function dateOf(wallTime: string): string {
+    return wallTime.split(' ')[0] ?? wallTime;
+}
+
 export function formatEasternWallTime(epochMs: number): string {
     const parts = easternParts(epochMs);
     return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
