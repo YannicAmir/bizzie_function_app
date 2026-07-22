@@ -29,6 +29,12 @@ export interface StockPricesConfig {
   eodFallbackCalendarDays: number;
 }
 
+export interface YtdPriceChangeConfig {
+  fetchConcurrency: number;
+  watchlistCacheSeconds: number;
+  baselineLookbackCalendarDays: number;
+}
+
 export interface AppConfig {
   sectors: string[];
   gemini_model_name: string;
@@ -40,6 +46,7 @@ export interface AppConfig {
   };
   stock_news: StockNewsConfig;
   stock_prices: StockPricesConfig;
+  ytd_price_change: YtdPriceChangeConfig;
   general_market_news: GeneralMarketNewsConfig;
   bizzie_chat: {
     chat_model: string;
@@ -106,6 +113,11 @@ const DEFAULT_CONFIG: AppConfig = {
     eodLookbackCalendarDays: 4,
     eodFallbackCalendarDays: 10,
   },
+  ytd_price_change: {
+    fetchConcurrency: 8,
+    watchlistCacheSeconds: 300,
+    baselineLookbackCalendarDays: 15,
+  },
   general_market_news: {
     pageLimit: 250,
     maxPages: 4,
@@ -142,6 +154,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const rawWeeklyRecapModel = (template.parameters['weekly_recap_model']?.defaultValue as { value?: string } | undefined)?.value;
     const rawStockNews = (template.parameters['stock_news_config']?.defaultValue as { value?: string } | undefined)?.value;
     const rawStockPrices = (template.parameters['stock_prices_config']?.defaultValue as { value?: string } | undefined)?.value;
+    const rawYtdPriceChange = (template.parameters['ytd_price_change_config']?.defaultValue as { value?: string } | undefined)?.value;
     const rawGeneralMarketNews = (template.parameters['general_market_news_config']?.defaultValue as { value?: string } | undefined)?.value;
 
     const sectors = rawSectors ? JSON.parse(rawSectors) : DEFAULT_CONFIG.sectors;
@@ -152,6 +165,9 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
     const stock_prices: StockPricesConfig = rawStockPrices
         ? { ...DEFAULT_CONFIG.stock_prices, ...JSON.parse(rawStockPrices) }
         : DEFAULT_CONFIG.stock_prices;
+    const ytd_price_change: YtdPriceChangeConfig = rawYtdPriceChange
+        ? { ...DEFAULT_CONFIG.ytd_price_change, ...JSON.parse(rawYtdPriceChange) }
+        : DEFAULT_CONFIG.ytd_price_change;
     const general_market_news: GeneralMarketNewsConfig = rawGeneralMarketNews
         ? { ...DEFAULT_CONFIG.general_market_news, ...JSON.parse(rawGeneralMarketNews) }
         : DEFAULT_CONFIG.general_market_news;
@@ -174,6 +190,7 @@ export const getRemoteConfig = async (): Promise<AppConfig> => {
       },
       stock_news,
       stock_prices,
+      ytd_price_change,
       general_market_news,
     };
 

@@ -20,13 +20,13 @@ This is the same property `stock_price_sync` rests on, so the same conclusion fo
 
 `ytdChange` measures the move from the **prior trading year's official final close** — the newest EOD record with `date < `${year}-01-01``. This is the standard financial YTD convention (performance "since year-end"), not the first-session-of-year open. The single fetch window is widened to mid-December of the prior year (`baselineLookbackCalendarDays`, default 15) so that record is always present; because EOD records are daily-grained, **closed days are simply absent**, so "newest record before Jan 1" is always the correct prior-year close with **zero holiday-calendar dependency** — the market data is the calendar (same reasoning as `stock_price_sync`'s previous-close lookup).
 
-**Single baseline source — no fallback.** The baseline is *always* the prior-year final close; there is no `baselineSource` discriminator. The only way a ticker lacks a prior-year record is if it first listed in the current year, and the watchlist does not carry current-year listings — so a would-be fallback branch is unreachable in practice. Rather than carry dead code, `buildYtdSnapshot` returns `null` when no prior-year close exists and the ticker is **skipped** (no document written). *Rejected:* a `first_session_of_year` fallback with a `baselineSource` field — it added a field and a code path that would never fire for the tickers this feature actually processes, and it conflates two different meanings ("since year-end" vs "since IPO") in one number. If current-year IPOs are ever added to the watchlist, revisit this deliberately rather than let a silent fallback change what the number means.
+**Baseline with a first-session fallback.** The baseline is normally the prior-year final close. A ticker that first listed **in the current year** has no prior-year record, so the baseline **falls back to the first available close of the current year** (its first session). This is a deliberate product decision: the global watchlist may gain mid-year listings, and every watchlisted company must be backed by a `ytd_price_change` document so the front end renders a consistent figure for all rows — skipping current-year listings would leave those rows blank. The fallback keeps the **document shape identical** (no `baselineSource` discriminator field); for a mid-year listing the number reads as "since first session" rather than "since year-end", which is the natural YTD for a company that did not trade last year. The wide fetch window (mid-December → today) already contains the first current-year close, so no extra fetch is needed.
 
 ---
 
 ## "Current" = latest EOD-light record, not a live quote
 
-The EOD-light endpoint **includes today's row during the session** (~15-min delayed on the Enterprise plan; verified an AAPL call at 12:36 ET on 2026-07-21 returned a same-day row). So a single endpoint supplies both ends of the calculation, and all four daily fires advance `latestClose`. *Rejected:* reading the live intraday price `stock_price_sync` already writes to `stock_prices/{ticker}` — it would couple the two features and add a second data source for a ~15-minute freshness gain that a YTD figure does not need.
+The EOD-light endpoint **includes today's row during the session** (~15-min delayed on the Enterprise plan; verified an AAPL call at 12:36 ET on 2026-07-21 returned a same-day row). So a single endpoint supplies both ends of the calculation, and every fire during the session advances `latestClose`. *Rejected:* reading the live intraday price `stock_price_sync` already writes to `stock_prices/{ticker}` — it would couple the two features and add a second data source for a ~15-minute freshness gain that a YTD figure does not need.
 
 ---
 
@@ -36,7 +36,7 @@ Three pieces of `stock_price_sync` machinery are deliberately **absent**:
 
 | Dropped | Why it existed there | Why it is unnecessary here |
 |---|---|---|
-| **Phase gate** (`phase.ts`) | One cron couldn't express 9:15 / 9:30 / 4:05 / 4:20 boundaries, so an in-code gate routed each minute | The schedule *is* the policy — four discrete fires, each running the identical full pipeline. Cron expresses it directly. |
+| **Phase gate** (`phase.ts`) | One cron couldn't express 9:15 / 9:30 / 4:05 / 4:20 boundaries, so an in-code gate routed each minute | The schedule *is* the policy — a plain every-10-minute fire, each running the identical full pipeline. Cron expresses it directly. |
 | **Cohort sharding** (`cohort.ts`, `maxCallsPerRun`) | Per-minute runs could round-robin the watchlist across runs to throttle FMP | This runs **4×/day**; sharding across runs would leave tickers stale for *hours*. The whole watchlist must be processed every fire — a single ~500-call burst is well within the 1,500/min quota, so no throttle is needed. |
 | **Previous-close warm cache** (`previous_close.ts`) | The intraday loop needed `previousClose` on every minute without re-fetching | The baseline comes from the *same* single fetch as the latest close; there is nothing to cache across runs. |
 
@@ -46,7 +46,7 @@ Three pieces of `stock_price_sync` machinery are deliberately **absent**:
 
 ## No unchanged-skip cache
 
-`stock_price_sync` suppresses writes when the newest 1-min bar is unchanged because it fires ~390×/day (≈198k potential writes). Here the ceiling is `watchlist × 4 ≈ 2k writes/day`, and every fire legitimately produces a fresh `latestClose`, so an unchanged-skip cache would add state and complexity to save almost nothing. Omitted.
+`stock_price_sync` suppresses writes when the newest 1-min bar is unchanged because it fires ~390×/day (≈198k potential writes). Here the ceiling is `watchlist × 144 ≈ 72k writes/day`; during the session every fire produces a fresh `latestClose`, and off-session fires rewrite an identical snapshot cheaply. An unchanged-skip cache would trim the off-hours writes but adds cross-run state for a Firestore cost that is still negligible, so it is omitted — revisit if write volume ever matters.
 
 ---
 

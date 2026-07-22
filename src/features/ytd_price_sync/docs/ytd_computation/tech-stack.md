@@ -10,7 +10,7 @@
 |---|---|
 | Runtime | Node.js 20, TypeScript 5.x (strict mode) |
 | Cloud Functions | Google Cloud Functions 2nd Gen (`firebase-functions/v2/scheduler`) |
-| Scheduling | Google Cloud Scheduler — `0 10,12,14,17 * * 1-5` (`America/New_York`); four discrete fires, no in-code time gate ([trigger.md](trigger.md)) |
+| Scheduling | Google Cloud Scheduler — `*/10 * * * *`; fires every 10 minutes, every day (144 fires/day), no in-code time gate ([trigger.md](trigger.md)) |
 | Database | Google Cloud Firestore — `ytd_price_change/{ticker}` snapshot docs (no TTL, no indexes) |
 | Market data | FMP REST API — `stable/historical-price-eod/light` — daily closes for the baseline and latest close ([fmp-eod-service.md](fmp-eod-service.md)) |
 | FMP transport | `services/fmp_client.ts` — shared windowed-GET client (retry, 10s timeout, transient policy); the EOD service is a thin endpoint config over it ([fmp-client.md](fmp-client.md)) |
@@ -55,8 +55,8 @@ Wiring required in `remote-config.ts`: add the `YtdPriceChangeConfig` interface,
 
 | Limit | Value | This feature's budget (~500 tickers) |
 |---|---|---|
-| API calls / min | **1,500** | One ~500-call burst at each of the four fires — ≤ 33% of quota for a few seconds, not sustained; trivially within limit |
-| Bandwidth / rolling 30 days | **500 GB** | ~140-row daily series per ticker ≈ a few KB/call → ~500 × 4/day ≈ **a few MB/day → negligible** |
+| API calls / min | **1,500** | One ~500-call burst per fire (fires are 10 min apart, never concurrent) — ≤ 33% of quota for a few seconds, not sustained; trivially within limit |
+| Bandwidth / rolling 30 days | **500 GB** | ~140-row daily series per ticker ≈ a few KB/call → ~500 × 144/day ≈ **~200 MB/day → ~6 GB/30d, well within cap** |
 | Price data delay | **EOD light: ~15-min delayed** | `latestClose` is ~15 min behind during the session; the 17:00 fire captures today's finalized close |
 | Extended hours | **Not included** | Irrelevant — daily closes only |
 | Bulk / batch EOD | **Not on the plan** | Per-ticker fan-out, bounded by `fetchConcurrency` |
@@ -67,11 +67,11 @@ Wiring required in `remote-config.ts`: add the `YtdPriceChangeConfig` interface,
 
 | Resource | Volume |
 |---|---|
-| FMP EOD calls | ~500 × 4 fires ≈ **2k/day** (+ retries only on transient blips) |
-| FMP bandwidth | ~500 × 4 × a few KB ≈ **a few MB/day** — a rounding error against the 500 GB cap |
-| Firestore writes | ≤ 500 × 4 ≈ **2k/day** (full-overwrite `set()`) |
-| Firestore reads | watchlist 500 × 4 ≈ **2k/day** (fires are hours apart, so the 300s cache rarely hits across fires) |
-| Function invocations | **4/day** × ~10–30s runtime @ 256MiB |
+| FMP EOD calls | ~500 × 144 fires ≈ **72k/day** (+ retries only on transient blips) |
+| FMP bandwidth | ~500 × 144 × a few KB ≈ **~200 MB/day** — ~6 GB/30d, a small fraction of the 500 GB cap |
+| Firestore writes | ≤ 500 × 144 ≈ **72k/day** (full-overwrite `set()`) |
+| Firestore reads | watchlist 500 × 144 ≈ **72k/day** — fires are 10 min apart and the watchlist cache TTL is 300s, so each fire re-reads; raise `watchlistCacheSeconds` above 600 to halve this if desired |
+| Function invocations | **144/day** × ~10–30s runtime @ 256MiB |
 
 ---
 
@@ -79,19 +79,19 @@ Wiring required in `remote-config.ts`: add the `YtdPriceChangeConfig` interface,
 
 | Decision | Resolution |
 |---|---|
-| **Baseline** | Always the prior trading year's **official final close** (newest EOD record with `date < Jan 1`) — no fallback, no `baselineSource` field. A ticker with no prior-year record (a current-year listing, not carried on the watchlist) is skipped. See [design-decisions.md](design-decisions.md#baseline--prior-year-final-close). |
-| **"Current" value** | Latest EOD-light record in the same response — includes today's ~15-min-delayed row intraday, so all four fires advance it. No separate live-intraday source (declined). |
+| **Baseline** | Prior trading year's **official final close** (newest EOD record with `date < Jan 1`); for a ticker that first listed in the current year, **falls back to the first available close of the current year** so mid-year watchlist additions still get a document (same shape, no `baselineSource` field). See [design-decisions.md](design-decisions.md#baseline--prior-year-final-close). |
+| **"Current" value** | Latest EOD-light record in the same response — includes today's ~15-min-delayed row intraday, so fires during the session advance it. No separate live-intraday source (declined). |
 | **Full-year fetch window** | `from = Jan 1 − baselineLookbackCalendarDays` (default 15 → mid-Dec prior year) captures the prior-year final close across the holiday break; closed days are simply absent, so no holiday calendar is needed. |
 | **No phase / cohort / lease** | Four discrete fires and one call per ticker — no cron phase gate, no `maxCallsPerRun` sharding, no transactional lease; `maxInstances: 1` + last-write-wins suffices. See [design-decisions.md](design-decisions.md#no-lease-no-cohort-no-phase-gate). |
 | **No unchanged-skip cache** | At 4 runs/day the write volume is trivial and every run yields a fresh `latestClose`; the skip machinery `stock_price_sync` needs is omitted. |
+| **`ytdChangePercent` units** | A percentage number (`12.34` = +12.34%), matching `stock_price_sync`'s `changePercent` = `(change / base) × 100` — identical formula, so the front end sees the same unit as the existing price feed. |
+| **Current-year listings** | Not skipped. A ticker that first listed in the current year gets a baseline of its **first current-year close** (first session), so every watchlisted company — including mid-year additions — is backed by a `ytd_price_change` doc. See [design-decisions.md](design-decisions.md#baseline--prior-year-final-close). |
+| **Stale documents** | No cleanup pass — tickers are never removed from the global watchlist, so documents are only ever created or overwritten. |
+| **Manual harness** | `_manual_harness.ts` + `npm run harness:ytd-sync -- --project <dev\|qa\|prod>` — runs the pipeline end-to-end locally against a fixed ticker set. |
 
 ## Open Questions / TODOs
 
 | # | Question |
 |---|---|
 | 1 | **Adjusted vs unadjusted close.** Confirm `historical-price-eod/light` (with `nonadjusted` omitted) returns split/dividend-**adjusted** closes, so a split between Jan 1 and today does not distort the YTD %. If it returns unadjusted, decide whether to pass `nonadjusted=false` explicitly or adjust in code. |
-| 2 | **`ytdChangePercent` units** are a percentage number (`12.34` = +12.34%), not a fraction or basis points — confirm the front end expects this. |
-| 3 | **Current-year listings.** Confirmed the watchlist does not carry tickers that first listed in the current year, so skipping any ticker with no prior-year close is safe. Revisit the baseline rule deliberately if that ever changes. |
-| 4 | **Stale documents.** A ticker removed from the watchlist keeps its `ytd_price_change/{ticker}` doc (no longer updated, not deleted). Decide whether a cleanup pass is needed (out of scope v1). |
-| 5 | **Front-end read fit.** Confirm reads of `ytd_price_change/{ticker}` fit the security rules (read-only to authenticated clients, writes denied). |
-| 6 | **Manual harness.** Add `_manual_harness.ts` + a `package.json` script (`ts-node --transpile-only`) so a run is exercisable locally as `npm run <name> -- --project <dev\|qa\|prod>`, per project convention. |
+| 2 | **Front-end read fit.** Confirm reads of `ytd_price_change/{ticker}` fit the security rules (read-only to authenticated clients, writes denied). |

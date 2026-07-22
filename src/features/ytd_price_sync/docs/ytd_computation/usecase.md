@@ -32,7 +32,7 @@ There is **no in-memory unchanged-skip cache**: at four runs/day the write volum
 Returns `YtdChangeSnapshot | null`. All date comparisons are lexicographic on `"YYYY-MM-DD"` strings (no `Date` parsing).
 
 1. If `closes` is empty → return `null`.
-2. **Baseline.** `baseline = latestCloseBefore(closes, `${year}-01-01`)` — the close on the greatest date `< Jan 1` (the prior-year final close). If there is no such record (a ticker that first listed this year), or `baselineClose === 0` → return `null` (skipped, no doc written; guards divide-by-zero). This is a defensive path — the watchlist does not carry current-year listings, so in practice every ticker has a prior-year close.
+2. **Baseline.** `baseline = latestCloseBefore(closes, `${year}-01-01`) ?? closeWithMinDate(closes)` — the close on the greatest date `< Jan 1` (the prior-year final close), or, when the ticker has no prior-year record (it first listed this year), the earliest close in the series (its first current-year session). Only if there is *no* usable close at all, or `baselineClose === 0`, return `null` (skipped, no doc written; guards divide-by-zero). The fallback ensures mid-year watchlist additions still receive a document.
 3. **Latest.** `latest = closeWithMaxDate(closes)` — the newest record (`≤ today`; includes today's row intraday). If none → return `null`.
 4. `ytdChange = latestClose − baselineClose`; `ytdChangePercent = ytdChange / baselineClose × 100`.
 5. Return the fully populated `YtdChangeSnapshot` (no `updatedAt` — the Firestore service stamps that).

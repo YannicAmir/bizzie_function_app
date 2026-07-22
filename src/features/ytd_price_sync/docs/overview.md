@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Four times per trading day (10:00 / 12:00 / 14:00 / 17:00 ET, weekdays), fetches the current year's daily-close series for every ticker on the global watchlist from FMP and writes one compact snapshot document per ticker to Firestore — the **year-to-date price change**: the baseline (prior-year final close), the latest available close, and the resulting absolute (`$`) and percentage move. The front end renders each user's watchlist rows with a YTD figure via one-time document fetches when the user views the relevant tab or pulls to refresh, always showing the latest computed value. Structurally this is [stock_price_sync](../../stock_price_sync/docs/overview.md)'s smaller sibling — same global watchlist source, the same FMP EOD-light endpoint, the same per-ticker bounded concurrency and shared `fmp_client` transport — but it derives one YTD scalar per ticker instead of an intraday sparkline, so it drops that feature's phase gate, cohort sharding, and previous-close warm cache (see [design-decisions.md](ytd_computation/design-decisions.md)).
+Every 10 minutes, every day, fetches the current year's daily-close series for every ticker on the global watchlist from FMP and writes one compact snapshot document per ticker to Firestore — the **year-to-date price change**: the baseline (prior-year final close), the latest available close, and the resulting absolute (`$`) and percentage move. The front end renders each user's watchlist rows with a YTD figure via one-time document fetches when the user views the relevant tab or pulls to refresh, always showing the latest computed value. Structurally this is [stock_price_sync](../../stock_price_sync/docs/overview.md)'s smaller sibling — same global watchlist source, the same FMP EOD-light endpoint, the same per-ticker bounded concurrency and shared `fmp_client` transport — but it derives one YTD scalar per ticker instead of an intraday sparkline, so it drops that feature's phase gate, cohort sharding, and previous-close warm cache (see [design-decisions.md](ytd_computation/design-decisions.md)).
 
 Every write is a **stateless full recompute**: each run re-fetches the *entire* year window per ticker and *fully overwrites* the document, so a failed ticker, a crashed function, or an FMP outage is completely healed by the next scheduled run — there is no cursor, no queue, no lease, and no retry infrastructure. The schedule *is* the retry. The only server state is a per-instance watchlist cache, rebuilt harmlessly on cold start.
 
@@ -12,14 +12,14 @@ Every write is a **stateless full recompute**: each run re-fetches the *entire* 
 
 | Sub-feature | Trigger | Responsibility |
 |---|---|---|
-| [ytd_computation](ytd_computation/overview.md) | Cloud Scheduler `0 10,12,14,17 * * 1-5` (`America/New_York`) | Per ticker: one EOD-light fetch (mid-Dec of prior year → today) · derive baseline (prior-year final close) + latest close · compute absolute & % change · idempotent full-overwrite write to `ytd_price_change/{ticker}` |
+| [ytd_computation](ytd_computation/overview.md) | Cloud Scheduler `*/10 * * * *` (every 10 min) | Per ticker: one EOD-light fetch (mid-Dec of prior year → today) · derive baseline (prior-year final close) + latest close · compute absolute & % change · idempotent full-overwrite write to `ytd_price_change/{ticker}` |
 
 ---
 
 ## High-Level Architecture
 
 ```
-Cloud Scheduler (0 10,12,14,17 * * 1-5, ET, Mon–Fri)
+Cloud Scheduler (*/10 * * * *, every 10 min, all days)
          │
          ▼
 ytdPriceSync  [trigger.ts]  — pause/resume via the Cloud Scheduler job in the GCP console
@@ -54,4 +54,4 @@ Written to `ytd_price_change/{ticker}`. The front end does a **one-time fetch** 
 | `ytdChangePercent` | number | `ytdChange / baselineClose × 100`, e.g. `12.34` = +12.34% |
 | `updatedAt` | Timestamp | Server timestamp at write |
 
-The baseline is always the **prior trading year's official final close** — the newest EOD record with `date < Jan 1` of `year`. A ticker with no prior-year record (one that first listed in the current year) is **skipped** — no document is written; in practice the watchlist does not carry current-year listings, so this is a defensive path. `latestClose` is the newest record in the same response; the EOD-light endpoint includes today's row during the session (verified 2026-07-21), so every one of the four daily runs updates it. Outside the fetch window nothing new is written, so the document retains the last computed value.
+The baseline is the **prior trading year's official final close** — the newest EOD record with `date < Jan 1` of `year` — or, for a ticker that first listed in the current year, the **first available close of the current year** (its first session). This fallback means mid-year watchlist additions are backed by a document of the same shape rather than skipped, so the front end renders every watchlisted company consistently. A ticker is skipped only when it has no usable close at all (empty series or a zero baseline). `latestClose` is the newest record in the same response; the EOD-light endpoint includes today's row during the session (verified 2026-07-21), so runs during the session update it. Outside market hours the series is unchanged, so those runs rewrite the same value (harmless — each write is an idempotent full recompute).
