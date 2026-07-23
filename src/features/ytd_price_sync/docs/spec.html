@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YTD Price Sync — Feature Spec</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.7; color: #1a202c; background: #f7f8fa; display: flex; min-height: 100vh; }
+nav { position: fixed; top: 0; left: 0; bottom: 0; width: 252px; background: #0f1117; overflow-y: auto; padding: 0 0 32px; flex-shrink: 0; z-index: 10; }
+nav .brand { padding: 24px 20px 16px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5b8df5; border-bottom: 1px solid #1e2130; }
+nav .brand span { display: block; color: #8b92a5; font-weight: 400; margin-top: 2px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+nav ul { list-style: none; padding: 12px 0; }
+nav li a { display: block; padding: 6px 20px; color: #8b92a5; text-decoration: none; font-size: 13px; transition: color .15s; }
+nav li a:hover, nav li a.active { color: #fff; }
+nav .nav-section { padding: 14px 20px 4px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #3d4251; }
+main { margin-left: 252px; flex: 1; padding: 40px 56px 80px; max-width: 960px; }
+section { margin-bottom: 64px; }
+section:first-child .page-title { margin-top: 0; }
+.page-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 6px; }
+.page-subtitle { color: #6b7280; font-size: 14px; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
+h2 { font-size: 20px; font-weight: 700; color: #0f1117; margin: 36px 0 14px; padding-bottom: 8px; border-bottom: 2px solid #5b8df5; }
+h3 { font-size: 16px; font-weight: 600; color: #1a202c; margin: 24px 0 10px; }
+h4 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #374151; }
+p { margin-bottom: 12px; color: #374151; }
+strong { color: #1a202c; }
+a { color: #5b8df5; text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
+ul, ol { padding-left: 22px; margin-bottom: 14px; }
+li { margin-bottom: 5px; color: #374151; }
+code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 13px; background: #eef0f5; color: #c0392b; padding: 1px 5px; border-radius: 4px; }
+pre { background: #1e2130; border-radius: 8px; padding: 20px; overflow-x: auto; margin: 14px 0 20px; border: 1px solid #2d3148; }
+pre code { background: none; color: #c9d1d9; font-size: 13px; padding: 0; border-radius: 0; }
+blockquote { border-left: 3px solid #f59e0b; background: #fffbeb; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0; color: #92400e; font-size: 14px; }
+.table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { background: #f0f4ff; color: #374151; font-weight: 600; padding: 10px 14px; text-align: left; border-bottom: 2px solid #dbe4ff; }
+td { padding: 9px 14px; border-bottom: 1px solid #e8ecf0; color: #374151; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:nth-child(even) td { background: #f9fafb; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'SF Mono', monospace; letter-spacing: .03em; }
+.badge-info { background: #dbeafe; color: #1d4ed8; }
+.badge-warn { background: #fef3c7; color: #92400e; }
+.badge-error { background: #fee2e2; color: #b91c1c; }
+.badge-debug { background: #f3f4f6; color: #6b7280; }
+.flow { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 12.5px; color: #8be9fd; white-space: pre; overflow-x: auto; line-height: 1.6; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.node { display: inline-block; background: #0f1117; color: #5b8df5; border: 1px solid #2d3148; padding: 1px 8px; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: 12px; }
+.callout { background: #f0f4ff; border-left: 3px solid #5b8df5; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 14px; color: #1e3a8a; }
+.callout.green { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
+.callout.amber { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+.filetree { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: #c9d1d9; white-space: pre; line-height: 1.8; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.filetree .dir { color: #5b8df5; }
+.filetree .file { color: #c9d1d9; }
+.filetree .cmt { color: #6b7587; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">Bizzie Spec<span>ytd_price_sync</span></div>
+  <ul>
+    <li class="nav-section">Feature</li>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#datamodel">Shared Data Model</a></li>
+    <li class="nav-section">Sub-features</li>
+    <li><a href="ytd_computation/spec.html">ytd_computation →</a></li>
+  </ul>
+</nav>
+<main>
+
+<section id="overview">
+  <div class="page-title">YTD Price Sync</div>
+  <div class="page-subtitle">Four-times-daily watchlist YTD change: per-ticker FMP EOD-light fetch · prior-year-close baseline · Firestore snapshot docs · front-end YTD rows</div>
+  <p>Four times per trading day (10:00 / 12:00 / 14:00 / 17:00 ET, weekdays), fetches the current year's daily-close series for every ticker on the global watchlist from FMP and writes one compact snapshot document per ticker to Firestore — the <strong>year-to-date price change</strong>: the baseline (prior-year final close), the latest available close, and the resulting absolute (<code>$</code>) and percentage move. The front end renders each user's watchlist rows with a YTD figure via one-time document fetches when the user views the relevant tab or pulls to refresh, always showing the latest computed value. Structurally this is <a href="../../stock_price_sync/docs/spec.html">stock_price_sync</a>'s smaller sibling — same global watchlist source, the same FMP EOD-light endpoint, the same per-ticker bounded concurrency and shared <code>fmp_client</code> transport — but it derives one YTD scalar per ticker instead of an intraday sparkline, so it drops that feature's phase gate, cohort sharding, and previous-close warm cache.</p>
+  <p>Every write is a <strong>stateless full recompute</strong>: each run re-fetches the <em>entire</em> year window per ticker and <em>fully overwrites</em> the document, so a failed ticker, a crashed function, or an FMP outage is completely healed by the next scheduled run — there is no cursor, no queue, no lease, and no retry infrastructure. The schedule <em>is</em> the retry. The only server state is a per-instance watchlist cache, rebuilt harmlessly on cold start.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Sub-feature</th><th>Trigger</th><th>Responsibility</th></tr>
+    <tr>
+      <td><a href="ytd_computation/spec.html">ytd_computation</a></td>
+      <td>Cloud Scheduler <code>0 10,12,14,17 * * 1-5</code> (<code>America/New_York</code>)</td>
+      <td>Per ticker: one EOD-light fetch (mid-Dec prior year → today) · derive baseline (prior-year final close) + latest close · compute absolute &amp; % change · idempotent full-overwrite write to <code>ytd_price_change/{ticker}</code></td>
+    </tr>
+  </table></div>
+</section>
+
+<section id="architecture">
+  <h2>High-Level Architecture</h2>
+  <div class="flow">Cloud Scheduler (0 10,12,14,17 * * 1-5, ET, Mon–Fri)
+         │
+         ▼
+ytdPriceSync  [trigger.ts]  — pause/resume via the Cloud Scheduler job in the GCP console
+         │
+         ▼
+YtdPriceSyncUseCase.execute()  [usecase.ts]  — load → per-ticker fetch/derive/write → summary
+   ├── reads  watchlist/{ticker}                   (core WatchlistService, cached per instance)
+   ├── reads  FMP /historical-price-eod/light      (1 call/ticker; from = mid-Dec prior year, to = today)
+   ├── derives baseline + latest close             [snapshot.ts]  buildYtdSnapshot (pure)
+   └── writes ytd_price_change/{ticker}            (full-overwrite set())
+                    │
+                    ▼
+          Front end (one-time get() on watchlist view / pull-to-refresh) — YTD $ + Δ% per row</div>
+</section>
+
+<section id="datamodel">
+  <h2>Shared Data Model — StoredYtdChange</h2>
+  <p>Written to <code>ytd_price_change/{ticker}</code>. The front end does a <strong>one-time fetch</strong> of each watched ticker's document — no continuous listeners, no queries, no composite indexes — and renders the YTD figure from this single document.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>ticker</code></td><td>string</td><td>Uppercase ticker — also the document ID</td></tr>
+    <tr><td><code>companyName</code></td><td>string</td><td>From the watchlist entry</td></tr>
+    <tr><td><code>year</code></td><td>number</td><td>Eastern-time calendar year the YTD covers, e.g. <code>2026</code></td></tr>
+    <tr><td><code>baselineDate</code></td><td>string</td><td><code>"YYYY-MM-DD"</code> (ET) of the prior-year final close (the YTD baseline)</td></tr>
+    <tr><td><code>baselineClose</code></td><td>number</td><td>Baseline price — the denominator of the % change</td></tr>
+    <tr><td><code>latestDate</code></td><td>string</td><td><code>"YYYY-MM-DD"</code> (ET) of the most recent close in the series</td></tr>
+    <tr><td><code>latestClose</code></td><td>number</td><td>Most recent available close — the "current" value (includes today's ~15-min-delayed row intraday)</td></tr>
+    <tr><td><code>ytdChange</code></td><td>number</td><td><code>latestClose − baselineClose</code> (absolute, currency)</td></tr>
+    <tr><td><code>ytdChangePercent</code></td><td>number</td><td><code>ytdChange / baselineClose × 100</code>, e.g. <code>12.34</code> = +12.34%</td></tr>
+    <tr><td><code>updatedAt</code></td><td>Timestamp</td><td>Server timestamp at write</td></tr>
+  </table></div>
+  <div class="callout green">The baseline is always the <strong>prior trading year's official final close</strong> — the newest EOD record with <code>date &lt; Jan 1</code> of <code>year</code>. A ticker with no prior-year record (one that first listed in the current year) is <strong>skipped</strong> — no document is written; the watchlist does not carry current-year listings, so this is a defensive path. <code>latestClose</code> is the newest record in the same response; the EOD-light endpoint includes today's row during the session (verified 2026-07-21), so every one of the four daily runs updates it.</div>
+  <div class="callout">Full implementation detail — trigger, orchestration, snapshot derivation, services, FMP plan limits, and the keystone design evaluation — lives in the <a href="ytd_computation/spec.html">ytd_computation spec</a>.</div>
+</section>
+
+</main>
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

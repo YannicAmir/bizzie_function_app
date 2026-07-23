@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YTD Price Sync — YTD Computation Spec</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.7; color: #1a202c; background: #f7f8fa; display: flex; min-height: 100vh; }
+nav { position: fixed; top: 0; left: 0; bottom: 0; width: 252px; background: #0f1117; overflow-y: auto; padding: 0 0 32px; flex-shrink: 0; z-index: 10; }
+nav .brand { padding: 24px 20px 16px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5b8df5; border-bottom: 1px solid #1e2130; }
+nav .brand span { display: block; color: #8b92a5; font-weight: 400; margin-top: 2px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+nav ul { list-style: none; padding: 12px 0; }
+nav li a { display: block; padding: 6px 20px; color: #8b92a5; text-decoration: none; font-size: 13px; transition: color .15s; }
+nav li a:hover, nav li a.active { color: #fff; }
+nav .nav-section { padding: 14px 20px 4px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #3d4251; }
+main { margin-left: 252px; flex: 1; padding: 40px 56px 80px; max-width: 960px; }
+section { margin-bottom: 64px; }
+section:first-child .page-title { margin-top: 0; }
+.page-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 6px; }
+.page-subtitle { color: #6b7280; font-size: 14px; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
+h2 { font-size: 20px; font-weight: 700; color: #0f1117; margin: 36px 0 14px; padding-bottom: 8px; border-bottom: 2px solid #5b8df5; }
+h3 { font-size: 16px; font-weight: 600; color: #1a202c; margin: 24px 0 10px; }
+h4 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #374151; }
+p { margin-bottom: 12px; color: #374151; }
+strong { color: #1a202c; }
+a { color: #5b8df5; text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 28px 0; }
+ul, ol { padding-left: 22px; margin-bottom: 14px; }
+li { margin-bottom: 5px; color: #374151; }
+code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 13px; background: #eef0f5; color: #c0392b; padding: 1px 5px; border-radius: 4px; }
+pre { background: #1e2130; border-radius: 8px; padding: 20px; overflow-x: auto; margin: 14px 0 20px; border: 1px solid #2d3148; }
+pre code { background: none; color: #c9d1d9; font-size: 13px; padding: 0; border-radius: 0; }
+blockquote { border-left: 3px solid #f59e0b; background: #fffbeb; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0; color: #92400e; font-size: 14px; }
+.table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { background: #f0f4ff; color: #374151; font-weight: 600; padding: 10px 14px; text-align: left; border-bottom: 2px solid #dbe4ff; }
+td { padding: 9px 14px; border-bottom: 1px solid #e8ecf0; color: #374151; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:nth-child(even) td { background: #f9fafb; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'SF Mono', monospace; letter-spacing: .03em; }
+.badge-info { background: #dbeafe; color: #1d4ed8; }
+.badge-warn { background: #fef3c7; color: #92400e; }
+.badge-error { background: #fee2e2; color: #b91c1c; }
+.badge-debug { background: #f3f4f6; color: #6b7280; }
+.flow { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 12.5px; color: #8be9fd; white-space: pre; overflow-x: auto; line-height: 1.6; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.node { display: inline-block; background: #0f1117; color: #5b8df5; border: 1px solid #2d3148; padding: 1px 8px; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: 12px; }
+.callout { background: #f0f4ff; border-left: 3px solid #5b8df5; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 14px; color: #1e3a8a; }
+.callout.green { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
+.callout.amber { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+.filetree { background: #1e2130; border-radius: 8px; padding: 20px 24px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: #c9d1d9; white-space: pre; line-height: 1.8; border: 1px solid #2d3148; margin: 14px 0 20px; }
+.filetree .dir { color: #5b8df5; }
+.filetree .file { color: #c9d1d9; }
+.filetree .cmt { color: #6b7587; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">Bizzie Spec<span>ytd_price_sync / ytd_computation</span></div>
+  <ul>
+    <li class="nav-section">Feature</li>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#flow">End-to-End Flow</a></li>
+    <li><a href="#structure">File Structure</a></li>
+    <li class="nav-section">Entry Points</li>
+    <li><a href="#trigger">ytdPriceSync</a></li>
+    <li class="nav-section">Orchestration</li>
+    <li><a href="#usecase">Use Case Steps</a></li>
+    <li><a href="#failures">Failure Isolation</a></li>
+    <li class="nav-section">Data</li>
+    <li><a href="#types">Domain Types</a></li>
+    <li><a href="#schemas">Firestore Schemas</a></li>
+    <li class="nav-section">Services</li>
+    <li><a href="#eod">fmp_eod_service</a></li>
+    <li><a href="#fmpclient">fmp_client (shared)</a></li>
+    <li><a href="#firestore">firestore_service</a></li>
+    <li class="nav-section">Infrastructure</li>
+    <li><a href="#stack">Tech Stack &amp; Retry</a></li>
+    <li><a href="#config">Remote Config</a></li>
+    <li><a href="#planlimits">FMP Plan Limits</a></li>
+    <li class="nav-section">Decisions</li>
+    <li><a href="#decisions">Design Decisions</a></li>
+    <li><a href="#resolved">Resolved Decisions</a></li>
+    <li><a href="#openq">Open Questions</a></li>
+  </ul>
+</nav>
+<main>
+
+<section id="overview">
+  <div class="page-title">YTD Price Sync — YTD Computation</div>
+  <div class="page-subtitle">Per-ticker pipeline: one EOD-light fetch · prior-year-close baseline · absolute &amp; % change · idempotent Firestore overwrite</div>
+  <p>On weekdays, at 10:00 / 12:00 / 14:00 / 17:00 ET, this pipeline reads the global watchlist and keeps one YTD snapshot per ticker in <code>ytd_price_change/{ticker}</code> fresh. For each ticker it makes <strong>one</strong> FMP EOD-light call spanning mid-December of the prior year through today, derives the YTD baseline (the prior-year final close) and the latest close, computes the absolute and percentage change, and overwrites the document. One API call per ticker per run — the EOD endpoint is single-symbol and no bulk/batch endpoint is on the current FMP plan.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Function</th><th>Trigger</th><th>Schedule</th></tr>
+    <tr><td><code>ytdPriceSync</code></td><td>Cloud Scheduler</td><td><code>0 10,12,14,17 * * 1-5</code> (<code>America/New_York</code>) — four discrete fires, no in-code time gate</td></tr>
+  </table></div>
+  <div class="callout green"><strong>The keystone property:</strong> each run re-fetches the entire year window per ticker and fully overwrites <code>ytd_price_change/{ticker}</code>. Nothing is appended, accumulated, or cursored. Any failure — one ticker, one run, a whole outage — is fully repaired by the next successful fire. Retries, queues, phases, and cohort sharding are structurally unnecessary: <em>the schedule is the retry</em>.</div>
+</section>
+
+<section id="flow">
+  <h2>End-to-End Flow</h2>
+  <div class="flow">Cloud Scheduler (0 10,12,14,17 * * 1-5 ET, Mon–Fri)
+         │
+         ▼
+ytdPriceSync  [trigger.ts]  — composition root: wires services, requires FMP_API_KEY
+         │
+         ▼
+YtdPriceSyncUseCase.execute()  [usecase.ts]  — owns the run sequence; each step delegated
+  1 resolve year + today  ── core date_utils      todayEasternDate(now) → year, today (ET)
+  2 loadWatchlist()       ── core watchlist_service  reads watchlist/{ticker} (cached per instance; retried)
+  3 compute fetch window  ── core date_utils        from = Jan 1 − baselineLookbackCalendarDays; to = today
+  4 processWatchlist() — per ticker, concurrency-limited (fetchConcurrency, default 8), errors isolated:
+  │    a fetchDailyCloses()  ── [fmp_eod_service.ts → fmp_client.ts]  one EOD-light call over the window
+  │    b buildYtdSnapshot()  ── [snapshot.ts]  baseline (prior-year final close) + latest → change $/%
+  │                                └─ null (empty series / no prior-year close / baseline 0) → skipped, doc untouched
+  │    c upsertYtd()         ── [firestore_service.ts]  set() ytd_price_change/{ticker} (full overwrite)
+  5 logRunSummary()          ── written / skipped / failed of total · run duration</div>
+</section>
+
+<section id="structure">
+  <h2>File Structure</h2>
+  <p>Code lives at the feature root (single sub-feature, so no <code>ytd_computation/</code> code folder — only the docs are nested):</p>
+  <div class="filetree"><span class="dir">src/features/ytd_price_sync/</span>
+<span class="file">├── trigger.ts</span>                    <span class="cmt"># Cloud Function entry point + composition root</span>
+<span class="file">├── usecase.ts</span>                    <span class="cmt"># YtdPriceSyncUseCase — run orchestration (load → per-ticker workflow → summary)</span>
+<span class="file">├── snapshot.ts</span>                   <span class="cmt"># buildYtdSnapshot — pure baseline/latest/change derivation</span>
+<span class="dir">├── constants/</span>
+<span class="file">│   └── index.ts</span>                  <span class="cmt"># FEATURE_NAME, YTD_PRICE_CHANGE_COLLECTION, schedule, runtime, warn threshold</span>
+<span class="dir">├── models/</span>
+<span class="file">│   ├── EodClose.ts</span>               <span class="cmt"># FMP EOD DTO → domain type ({date, close})</span>
+<span class="file">│   ├── YtdChangeSnapshot.ts</span>      <span class="cmt"># Derived per-ticker snapshot (pre-persist)</span>
+<span class="file">│   └── StoredYtdChange.ts</span>        <span class="cmt"># Firestore document shape</span>
+<span class="dir">└── services/</span>
+    <span class="file">├── fmp_client.ts</span>            <span class="cmt"># Shared windowed-GET client (retry, timeout, transient policy)</span>
+    <span class="file">├── fmp_eod_service.ts</span>        <span class="cmt"># /historical-price-eod/light endpoint config over FmpClient</span>
+    <span class="file">└── firestore_service.ts</span>      <span class="cmt"># ytd_price_change upsert</span></div>
+  <p>No <code>phase.ts</code>, <code>cohort.ts</code>, or <code>previous_close.ts</code> — those are <code>stock_price_sync</code> concerns this feature deliberately does not need (see <a href="#decisions">Design Decisions</a>). Also uses core <code>src/core/concurrency.ts</code> (<code>runWithConcurrency</code>). Registered in <code>src/index.ts</code> via <code>export * from './features/ytd_price_sync/trigger'</code>.</p>
+</section>
+
+<section id="trigger">
+  <h2>Entry Point — ytdPriceSync</h2>
+  <p>Composition root: <code>getFirebaseAdmin()</code> at module load; stateless singletons (<code>FirestoreService</code>, <code>FirebaseWatchlistService</code>) built at module scope; the key-dependent <code>FmpEodService</code> lazily memoized on first invocation (<code>??=</code>). Delegates to the use case; no business logic. <code>FMP_API_KEY</code> via <code>defineSecret</code>. Unlike <code>stock_price_sync</code> there is <strong>no in-code phase gate</strong> — the schedule expresses the full policy (four discrete fires), so every invocation runs the complete pipeline.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Config</th><th>Value</th></tr>
+    <tr><td>Type</td><td><code>onSchedule</code> (<code>firebase-functions/v2/scheduler</code>)</td></tr>
+    <tr><td>Schedule</td><td><code>0 10,12,14,17 * * 1-5</code> — 10:00 / 12:00 / 14:00 / 17:00 ET, Mon–Fri; the scheduler resolves DST automatically</td></tr>
+    <tr><td>Timezone</td><td><code>America/New_York</code></td></tr>
+    <tr><td>Memory</td><td><code>FUNCTION_MEMORY</code> = <code>256MiB</code></td></tr>
+    <tr><td>Timeout</td><td><code>FUNCTION_TIMEOUT_SECONDS</code> = <code>300s</code> — each fire processes the whole watchlist (not a per-minute cohort)</td></tr>
+    <tr><td>Max instances</td><td><code>FUNCTION_MAX_INSTANCES</code> = <code>1</code> — keeps last-write-wins correct; no lease needed (idempotent full recompute)</td></tr>
+    <tr><td>Secrets</td><td><code>FMP_API_KEY</code> (via <code>defineSecret</code>)</td></tr>
+  </table></div>
+  <div class="callout"><strong>Operational kill switch:</strong> no Remote Config flag — pause/resume the Cloud Scheduler job in the GCP console. Resuming is trivially safe: the first run after a pause rebuilds every document from scratch — no catch-up logic, no gap to repair.</div>
+  <ol>
+    <li>Reads <code>process.env.FMP_API_KEY</code>; if missing, logs <code>Missing FMP_API_KEY</code> and returns (no retry — misconfiguration is not transient).</li>
+    <li>Lazily memoizes <code>FmpEodService</code> (wraps the shared <a href="#fmpclient">FmpClient</a>), then instantiates <code>YtdPriceSyncUseCase</code> with <code>FmpEodService</code>, <code>FirestoreService</code>, and the core <code>FirebaseWatchlistService</code>, and calls <code>execute()</code>.</li>
+    <li>On use-case error: logs <code>YTD price sync run failed</code> and swallows it. The next scheduled fire is the retry.</li>
+  </ol>
+</section>
+
+<section id="usecase">
+  <h2>Orchestration — Use Case Steps</h2>
+  <p><code>YtdPriceSyncUseCase.execute()</code> owns only the run <em>sequence</em> (resolve dates → load watchlist → per-ticker workflow → summary). The per-ticker body (Step 4) runs concurrently under a <code>fetchConcurrency</code> limit with per-ticker error isolation. The pure derivation lives in <code>snapshot.ts</code> (<code>buildYtdSnapshot</code>) so it is unit-testable without FMP or Firestore.</p>
+  <h3>execute() steps</h3>
+  <ol>
+    <li><strong>Resolve dates</strong> — <code>today = todayEasternDate(now)</code>, <code>year = Number(today.slice(0,4))</code> (core <code>date_utils</code>).</li>
+    <li><strong>Load config</strong> — <code>cfg = (await getRemoteConfig()).ytd_price_change</code>.</li>
+    <li><strong>Load watchlist</strong> — <code>retry(() =&gt; watchlistService.getAllWatchedTickers(cfg.watchlistCacheSeconds), WATCHLIST_RETRY_OPTIONS)</code> (3 attempts, 1s initial, ×2). Exhausted retries → log and return (next fire retries). Empty map → log <code>No tickers watched</code> and return.</li>
+    <li><strong>Fetch window</strong> (computed once) — <code>from = subtractCalendarDays(`${year}-01-01`, cfg.baselineLookbackCalendarDays)</code> (default 15 → mid-Dec prior year, so the prior-year final close is in range across the holiday break); <code>to = today</code>.</li>
+    <li><strong>Process watchlist</strong> — <code>runWithConcurrency(entries, cfg.fetchConcurrency, processTicker)</code> over <strong>every</strong> <code>[ticker, companyName]</code> (no cohort sharding — the whole list every run). Each <code>processTicker</code> is wrapped so its outcome is tallied and a throw is caught and counted <code>failed</code> — one ticker never aborts the run.</li>
+    <li><strong>Summary log</strong> — <code>written / skipped / failed of N (durationMs)</code>; <span class="badge badge-warn">WARN</span> if <code>durationMs &gt; RUN_DURATION_WARN_MS</code>.</li>
+  </ol>
+  <h3>processTicker(ctx) → 'written' | 'skipped' | 'failed'</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Step</th><th>Action</th><th>Failure</th></tr>
+    <tr><td>a</td><td><code>closes = await fmpEodService.fetchDailyCloses(ticker, window)</code></td><td>throw → <code>failed</code> (logged; next fire retries)</td></tr>
+    <tr><td>b</td><td><code>snapshot = buildYtdSnapshot(ticker, companyName, year, closes)</code></td><td><code>null</code> → <code>skipped</code> (existing doc left untouched)</td></tr>
+    <tr><td>c</td><td><code>await firestoreService.upsertYtd(snapshot)</code> → <code>written</code></td><td>throw → <code>failed</code></td></tr>
+  </table></div>
+  <div class="callout">There is <strong>no in-memory unchanged-skip cache</strong>: at four runs/day the write volume is trivial and every run legitimately produces a fresh <code>latestClose</code>, so the skip machinery <code>stock_price_sync</code> needs (~198k intraday writes/day) would earn nothing here.</div>
+  <h3>buildYtdSnapshot(ticker, companyName, year, closes) — pure (snapshot.ts)</h3>
+  <p>Returns <code>YtdChangeSnapshot | null</code>. All date comparisons are lexicographic on <code>"YYYY-MM-DD"</code> strings (no <code>Date</code> parsing).</p>
+  <ol>
+    <li>If <code>closes</code> is empty → return <code>null</code>.</li>
+    <li><strong>Baseline.</strong> <code>baseline = latestCloseBefore(closes, `${year}-01-01`)</code> — the close on the greatest date <code>&lt; Jan 1</code> (the prior-year final close). If there is no such record (a ticker that first listed this year), or <code>baselineClose === 0</code> → return <code>null</code> (skipped, no doc written; guards divide-by-zero). Defensive — the watchlist does not carry current-year listings, so in practice every ticker has a prior-year close.</li>
+    <li><strong>Latest.</strong> <code>latest = closeWithMaxDate(closes)</code> — the newest record (<code>≤ today</code>; includes today's row intraday). If none → return <code>null</code>.</li>
+    <li><code>ytdChange = latestClose − baselineClose</code>; <code>ytdChangePercent = ytdChange / baselineClose × 100</code>.</li>
+    <li>Return the fully populated <code>YtdChangeSnapshot</code> (no <code>updatedAt</code> — the Firestore service stamps that).</li>
+  </ol>
+</section>
+
+<section id="failures">
+  <h2>Failure Isolation</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Failure</th><th>Effect</th></tr>
+    <tr><td>Single ticker EOD fetch fails after retries</td><td>Logged, counted <code>failed</code>; other tickers unaffected; recomputed by the next fire</td></tr>
+    <tr><td>Empty series / no prior-year close / baseline is 0</td><td><code>buildYtdSnapshot</code> returns <code>null</code> → <code>skipped</code>; the existing document is left untouched</td></tr>
+    <tr><td>Single document write fails</td><td>Logged, counted <code>failed</code>; the next fire rewrites it (writes never retried in-process)</td></tr>
+    <tr><td>Watchlist read fails after retries</td><td>Run aborts with error log; the next fire retries; documents keep their last computed value</td></tr>
+    <tr><td>FMP outage</td><td>Runs fail fast and log; the first successful fire rebuilds every document in full — no gap-repair or backfill</td></tr>
+    <tr><td>Function crash mid-run</td><td>Every document still internally consistent (single-doc atomic writes); the next fire completes the rest</td></tr>
+    <tr><td>Instance restart</td><td>The per-instance watchlist cache rebuilds on the next fire — one extra watchlist read, negligible</td></tr>
+    <tr><td>Overlapping runs</td><td>Prevented by <code>maxInstances: 1</code>; a race would still be safe — both write full valid snapshots, last-write-wins is correct</td></tr>
+  </table></div>
+</section>
+
+<section id="types">
+  <h2>Domain Types</h2>
+  <p>Defined in <code>models/</code> — one interface per file, imported from its exact path (e.g. <code>../models/YtdChangeSnapshot</code>); no barrel <code>index.ts</code>, per the project TypeScript standard.</p>
+  <pre><code>interface EodClose {
+  date: string;   // "YYYY-MM-DD" (ET) — one record per trading day (closed days absent)
+  close: number;  // end-of-day close; the FMP EOD-light DTO's `price`
+}
+
+interface YtdChangeSnapshot {
+  ticker: string;          // uppercase — also the doc ID
+  companyName: string;
+  year: number;            // Eastern-time calendar year the YTD covers, e.g. 2026
+  baselineDate: string;    // "YYYY-MM-DD" of the prior-year final close
+  baselineClose: number;   // denominator of the % change
+  latestDate: string;      // "YYYY-MM-DD" of the newest close in the series
+  latestClose: number;     // the "current" value (includes today's row intraday)
+  ytdChange: number;       // latestClose − baselineClose (currency)
+  ytdChangePercent: number;// ytdChange / baselineClose × 100
+}
+
+interface StoredYtdChange extends YtdChangeSnapshot {
+  updatedAt: Timestamp;    // firebase-admin server timestamp at write
+}</code></pre>
+  <p><code>date</code> strings sort lexicographically (the FMP format sorts correctly); nothing is parsed to <code>Date</code> except the window-date computation, done in <code>America/New_York</code> via core <code>date_utils</code>.</p>
+  <div class="callout green"><strong>Baseline = prior-year final close.</strong> The baseline is always the <strong>prior trading year's final close</strong> — the newest <code>EodClose</code> with <code>date &lt; `${year}-01-01`</code>. Widening the fetch to mid-December guarantees that record is present for any ticker that traded last year. A ticker with no prior-year record (one that first listed in the current year) yields no baseline, so <code>buildYtdSnapshot</code> returns <code>null</code> and the ticker is <strong>skipped</strong> — a defensive path, since the watchlist does not carry current-year listings.</div>
+  <div class="callout"><strong>Latest / "current".</strong> <code>latestClose</code> is the newest record in the same response. The EOD-light endpoint returns today's row during the session (~15-min delayed on the Enterprise plan; verified 2026-07-21), so every one of the four daily runs advances <code>latestClose</code>/<code>latestDate</code> — no separate intraday source is needed.</div>
+</section>
+
+<section id="schemas">
+  <h2>Firestore Schemas</h2>
+  <h3>watchlist/{ticker} — read</h3>
+  <p>Written elsewhere; read via the core <code>FirebaseWatchlistService</code> (<code>getAllWatchedTickers</code> → <code>Map&lt;ticker, companyName&gt;</code>). This feature never writes it: <code>ticker</code> (doc ID), <code>companyName</code> (or <code>name</code>; falls back to the ticker).</p>
+  <h3>ytd_price_change/{ticker} — written</h3>
+  <p><code>StoredYtdChange</code> — <code>YtdChangeSnapshot</code> plus <code>updatedAt</code>. Full-overwrite <code>set()</code> (never <code>update</code>/merge): the document is a pure projection of the latest fetch, so replacing it wholesale is what makes every run idempotent. One document per ticker, bounded by watchlist size — no TTL, no cleanup function.</p>
+  <pre><code>ticker:            string          // duplicated from doc ID for client convenience
+companyName:       string
+year:              number          // e.g. 2026
+baselineDate:      string          // "YYYY-MM-DD" — prior-year final close date
+baselineClose:     number
+latestDate:        string          // "YYYY-MM-DD"
+latestClose:       number
+ytdChange:         number          // latestClose − baselineClose
+ytdChangePercent:  number          // ytdChange / baselineClose × 100
+updatedAt:         Timestamp       // server timestamp</code></pre>
+  <p><strong>Front-end read pattern.</strong> One-time fetches when the user views the watchlist or pulls to refresh — <strong>no continuous listeners</strong>, no queries, no composite indexes (<code>firestore.indexes.json</code> untouched):</p>
+  <pre><code>db.collection('ytd_price_change').doc(ticker).get()   // one get per watched ticker per refresh</code></pre>
+</section>
+
+<section id="eod">
+  <h2>Service — fmp_eod_service</h2>
+  <p>Fetches the current year's daily closes for one ticker from the FMP <strong>EOD-light</strong> endpoint and parses them into <code>EodClose[]</code>. A thin endpoint config over the shared <a href="#fmpclient">FmpClient</a> — identical endpoint and parsing to <code>stock_price_sync</code>'s EOD service, only the window is wider (full year vs a few days).</p>
+  <div class="table-wrap"><table>
+    <tr><th>Item</th><th>Value</th></tr>
+    <tr><td>Base URL</td><td><code>getRemoteConfig().fmp.baseUrl</code> → <code>https://financialmodelingprep.com/stable</code></td></tr>
+    <tr><td>Endpoint</td><td><code>GET {baseUrl}/historical-price-eod/light</code></td></tr>
+    <tr><td>Params</td><td><code>symbol</code> (single ticker), <code>from = Jan 1 − baselineLookbackCalendarDays</code> (mid-Dec prior year), <code>to = today</code>, <code>apikey</code></td></tr>
+    <tr><td><code>nonadjusted</code></td><td>omitted → <strong>false</strong> → split/dividend-adjusted closes (see <a href="#openq">Open Questions</a>)</td></tr>
+    <tr><td>Response</td><td>JSON array of daily records <code>{ symbol, date, price, volume }</code>, newest first; one record per trading day (closed days absent). <strong>Includes today's row during the session</strong> (~15-min delayed)</td></tr>
+  </table></div>
+  <p><code>fetchDailyCloses(ticker, window)</code> delegates to <code>client.fetchWindowedRows(FMP_EOD_ENDPOINT, ticker, window)</code> with the <code>EOD</code> descriptor (<code>path</code>, <code>label: 'EOD'</code>, error codes, <code>parseRow: parseEodClose</code>). <code>parseEodClose</code> accepts a row only if <code>date</code> is a non-empty string and <code>price</code> is a finite number, mapping to <code>{ date, close: price }</code>; invalid rows are dropped and counted in one info log per ticker. Returns the array as returned by FMP; the use case does not assume order — it scans for min/max dates explicitly.</p>
+  <div class="callout">Response handling is delegated entirely to the shared client: non-2xx → <code>AppError('FMP_EOD_FETCH_FAILED', status)</code> (transient statuses retried); non-array body → <code>AppError('FMP_EOD_INVALID_RESPONSE', 422)</code> (permanent); 10s per-attempt timeout. The newest record is the source of <code>latestClose</code>; the newest record before Jan 1 is the baseline.</div>
+</section>
+
+<section id="fmpclient">
+  <h2>Service — fmp_client (shared)</h2>
+  <p>The feature's FMP service delegates here. Every FMP call is a single windowed, single-symbol, bounded GET, so the fetch/retry/timeout/validation machinery is factored once and <code>fmp_eod_service.ts</code> becomes a typed endpoint descriptor. Mirrors <code>stock_price_sync/services/fmp_client.ts</code> — the duplication (rather than a shared <code>core/</code> client) is deliberate (see <a href="#decisions">Design Decisions</a>).</p>
+  <pre><code>interface FmpEndpoint&lt;T&gt; {
+  path: string;                 // '/historical-price-eod/light'
+  label: string;                // error/log label ('EOD')
+  fetchFailedCode: string;      // AppError code for a non-ok response
+  invalidResponseCode: string;  // AppError code for a non-array body
+  parseRow: (item: unknown) =&gt; T | null;   // boundary validation; null = drop
+}</code></pre>
+  <p><code>fetchWindowedRows&lt;T&gt;(endpoint, ticker, window)</code>: builds <code>{baseUrl}{path}?symbol=…&amp;from=…&amp;to=…&amp;apikey=…</code>, wraps the request in <code>retry()</code> with a <strong>10s</strong> <code>AbortSignal.timeout</code> per attempt; non-<code>ok</code> → <code>AppError(fetchFailedCode, status)</code>; non-array body → <code>AppError(invalidResponseCode, 422)</code>; maps rows via <code>parseRow</code>, dropping <code>null</code>s with one info log per ticker. Returns the raw (unsorted) validated <code>T[]</code>.</p>
+  <div class="callout"><strong>Transient policy.</strong> Retry <code>maxAttempts 3, 1s → 2s → throw</code> (<code>maxDelayMs 30000</code>). <code>isTransientError</code> retries only <code>AppError.status ∈ {429, 500, 502, 503, 504}</code>, network errors, and timeouts; a <code>422</code> non-array body and a malformed-JSON <code>SyntaxError</code> (both FMP contract changes) are <strong>not</strong> retried — they fail fast and surface. This is the single place the feature's FMP resilience is defined.</div>
+</section>
+
+<section id="firestore">
+  <h2>Service — firestore_service</h2>
+  <p><code>upsertYtd(snapshot)</code> — guards a non-empty <code>snapshot.ticker</code> (throws <code>upsertYtd: snapshot.ticker is required</code> before any write), builds a typed <code>YtdWrite</code> (<code>Omit&lt;StoredYtdChange,'updatedAt'&gt; &amp; { updatedAt: FieldValue }</code>), then full-overwrite <code>set()</code> on <code>ytd_price_change/{ticker}</code> with <code>updatedAt: serverTimestamp()</code>. Never <code>merge</code> (stale fields would survive shape changes and break the idempotency argument). Logs <code>Failed to upsert YTD change for {ticker}</code> and rethrows on failure — isolation and counting live in the use case; no in-process retry, the next run's rewrite is the retry. This service does not read Firestore.</p>
+</section>
+
+<section id="stack">
+  <h2>Tech Stack &amp; Retry</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Layer</th><th>Technology</th></tr>
+    <tr><td>Runtime</td><td>Node.js 20, TypeScript 5.x (strict mode)</td></tr>
+    <tr><td>Cloud Functions</td><td>GCF 2nd Gen (<code>firebase-functions/v2/scheduler</code>)</td></tr>
+    <tr><td>Scheduling</td><td>Cloud Scheduler — <code>0 10,12,14,17 * * 1-5</code> ET; four discrete fires, no in-code time gate</td></tr>
+    <tr><td>Database</td><td>Firestore — <code>ytd_price_change/{ticker}</code> (no TTL, no indexes)</td></tr>
+    <tr><td>Market data</td><td>FMP REST — <code>stable/historical-price-eod/light</code> — daily closes for the baseline and latest close</td></tr>
+    <tr><td>FMP transport</td><td><code>services/fmp_client.ts</code> — shared windowed-GET client (retry, 10s timeout, transient policy); the EOD service is an endpoint config over it (<a href="#fmpclient">fmp_client</a>)</td></tr>
+    <tr><td>Concurrency</td><td><code>src/core/concurrency.ts</code> — <code>runWithConcurrency</code> bounded pool</td></tr>
+    <tr><td>Secrets</td><td>GCP Secret Manager — <code>FMP_API_KEY</code></td></tr>
+    <tr><td>Retry / Logging / Config</td><td><code>src/core/retry.ts</code> (centralized in <code>fmp_client.ts</code> for FMP) · <code>src/core/logger.ts</code> · <code>src/core/remote-config.ts</code></td></tr>
+  </table></div>
+  <p>No LLM, no Pub/Sub, no Redis, no FCM, and no phase gate or cohort sharding — the run is a stateless full recompute; a single scheduled function with bounded concurrency covers it. Orchestration is thin: <code>usecase.ts</code> owns the run sequence and <code>snapshot.ts</code> holds the pure derivation.</p>
+  <h3>Retry Strategy</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Call site</th><th>maxAttempts</th><th>initialDelayMs</th><th>backoffFactor</th><th>Delay series</th></tr>
+    <tr><td>EOD-light fetch, via <code>fmp_client.ts</code></td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
+    <tr><td>Watchlist fetch (core service)</td><td>3</td><td>1000ms</td><td>2</td><td>1s → 2s → throw</td></tr>
+  </table></div>
+  <p><strong>Transient (retried):</strong> HTTP 429/500/502/503/504, network failures, timeouts (10s per request). <strong>Not retried:</strong> a <code>422</code> non-array body or a malformed-JSON <code>SyntaxError</code> (fail fast); run-level, a failed ticker or run is stale until the next fire's full recompute — the schedule is the retry. Firestore writes are never retried in-process.</p>
+  <h3>Cost Envelope (defaults, ~500 watched tickers)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Resource</th><th>Volume</th></tr>
+    <tr><td>FMP EOD calls</td><td>~500 × 4 fires ≈ <strong>2k/day</strong> (+ retries only on transient blips)</td></tr>
+    <tr><td>FMP bandwidth</td><td>~500 × 4 × a few KB ≈ <strong>a few MB/day</strong> — a rounding error against the 500 GB cap</td></tr>
+    <tr><td>Firestore writes</td><td>≤ 500 × 4 ≈ <strong>2k/day</strong> (full-overwrite <code>set()</code>)</td></tr>
+    <tr><td>Firestore reads</td><td>watchlist 500 × 4 ≈ <strong>2k/day</strong> (fires are hours apart, so the 300s cache rarely hits across fires)</td></tr>
+    <tr><td>Invocations</td><td><strong>4/day</strong> × ~10–30s runtime @ 256MiB</td></tr>
+  </table></div>
+</section>
+
+<section id="config">
+  <h2>Remote Config — ytd_price_change_config</h2>
+  <p>Created with the <strong>JSON data type</strong> (like <code>stock_prices_config</code>), parsed by <code>src/core/remote-config.ts</code> and <strong>merged over <code>DEFAULT_CONFIG.ytd_price_change</code></strong> (so a new field keeps its default against a stale live template — the same pattern as <code>stock_prices</code> / <code>general_market_news</code>):</p>
+  <pre><code>ytd_price_change: {
+  fetchConcurrency: number;             // default 8    — parallel FMP calls; FMP-politeness / runtime-budget dial
+  watchlistCacheSeconds: number;        // default 300  — per-instance watchlist cache TTL
+  baselineLookbackCalendarDays: number; // default 15   — days before Jan 1 to widen the fetch so the prior-year final close is in range
+}</code></pre>
+  <p>Wiring required in <code>remote-config.ts</code>: add the <code>YtdPriceChangeConfig</code> interface, the <code>ytd_price_change</code> field on <code>AppConfig</code>, a <code>DEFAULT_CONFIG.ytd_price_change</code> block, and a <code>rawYtdPriceChange</code> parse line that merges over the default. There is <strong>no <code>maxCallsPerRun</code> / cohort knob</strong> and <strong>no <code>enabled</code> flag</strong> — pausing the Cloud Scheduler job is the kill switch.</p>
+</section>
+
+<section id="planlimits">
+  <h2>FMP Plan Limits — Enterprise (confirmed 2026-07-16)</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Limit</th><th>Value</th><th>This feature's budget (~500 tickers)</th></tr>
+    <tr><td>API calls / min</td><td><strong>1,500</strong></td><td>One ~500-call burst at each of the four fires — ≤ 33% of quota for a few seconds, not sustained; trivially within limit</td></tr>
+    <tr><td>Bandwidth / 30 days</td><td><strong>500 GB</strong> rolling</td><td>~140-row daily series per ticker ≈ a few KB/call → ~500 × 4/day ≈ a few MB/day → <strong>negligible</strong></td></tr>
+    <tr><td>Price data delay</td><td><strong>EOD light: ~15-min delayed</strong></td><td><code>latestClose</code> is ~15 min behind during the session; the 17:00 fire captures today's finalized close</td></tr>
+    <tr><td>Extended hours</td><td><strong>Not included</strong></td><td>Irrelevant — daily closes only</td></tr>
+    <tr><td>Bulk / batch EOD</td><td><strong>Not on the plan</strong></td><td>Per-ticker fan-out, bounded by <code>fetchConcurrency</code></td></tr>
+  </table></div>
+</section>
+
+<section id="decisions">
+  <h2>Design Decisions</h2>
+  <p>This feature is deliberately a <em>stripped-down</em> <a href="../../../stock_price_sync/docs/price_ingestion/spec.html">stock_price_sync</a>. It reuses that pipeline's keystone property but sheds every piece of machinery that property makes unnecessary at a four-times-a-day cadence.</p>
+  <div class="callout green"><strong>The keystone property:</strong> each run fetches the entire year window per ticker and fully overwrites <code>ytd_price_change/{ticker}</code>. No run depends on any previous run. A failed ticker, a failed run, or a multi-hour outage requires <strong>zero</strong> recovery — the next successful fire rebuilds every document identically. There is nothing to retry because there is nothing lost. The Pub/Sub-rejection analysis in <code>stock_price_sync</code> applies verbatim and is not repeated.</div>
+  <h3>Baseline = prior-year final close</h3>
+  <p><code>ytdChange</code> measures the move from the <strong>prior trading year's official final close</strong> — the newest EOD record with <code>date &lt; `${year}-01-01`</code>. This is the standard financial YTD convention ("since year-end"), not the first-session-of-year open. The single fetch window is widened to mid-December of the prior year (<code>baselineLookbackCalendarDays</code>, default 15) so that record is always present; because EOD records are daily-grained, <strong>closed days are simply absent</strong>, so "newest record before Jan 1" is always the correct prior-year close with <strong>zero holiday-calendar dependency</strong> — the market data is the calendar.</p>
+  <p><strong>Single baseline source — no fallback.</strong> The baseline is <em>always</em> the prior-year final close; there is no <code>baselineSource</code> discriminator. The only way a ticker lacks a prior-year record is if it first listed in the current year, and the watchlist does not carry current-year listings — so a would-be fallback branch is unreachable in practice. Rather than carry dead code, <code>buildYtdSnapshot</code> returns <code>null</code> when no prior-year close exists and the ticker is <strong>skipped</strong>. <em>Rejected:</em> a <code>first_session_of_year</code> fallback with a <code>baselineSource</code> field — it added a field and a code path that would never fire for the tickers this feature processes, and conflated two different meanings ("since year-end" vs "since IPO") in one number. If current-year IPOs are ever added to the watchlist, revisit this deliberately rather than let a silent fallback change what the number means.</p>
+  <h3>"Current" = latest EOD-light record, not a live quote</h3>
+  <p>The EOD-light endpoint <strong>includes today's row during the session</strong> (~15-min delayed on the Enterprise plan; verified an AAPL call at 12:36 ET on 2026-07-21 returned a same-day row). So a single endpoint supplies both ends of the calculation, and all four daily fires advance <code>latestClose</code>. <em>Rejected:</em> reading the live intraday price <code>stock_price_sync</code> already writes to <code>stock_prices/{ticker}</code> — it would couple the two features and add a second data source for a ~15-minute freshness gain a YTD figure does not need.</p>
+  <h3>No lease, no cohort, no phase gate</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Dropped</th><th>Why it existed there</th><th>Why it is unnecessary here</th></tr>
+    <tr><td><strong>Phase gate</strong> (<code>phase.ts</code>)</td><td>One cron couldn't express 9:15 / 9:30 / 4:05 / 4:20 boundaries, so an in-code gate routed each minute</td><td>The schedule <em>is</em> the policy — four discrete fires, each running the identical full pipeline. Cron expresses it directly.</td></tr>
+    <tr><td><strong>Cohort sharding</strong> (<code>cohort.ts</code>, <code>maxCallsPerRun</code>)</td><td>Per-minute runs could round-robin the watchlist across runs to throttle FMP</td><td>This runs <strong>4×/day</strong>; sharding across runs would leave tickers stale for <em>hours</em>. The whole watchlist must be processed every fire — one ~500-call burst is well within the 1,500/min quota.</td></tr>
+    <tr><td><strong>Previous-close warm cache</strong> (<code>previous_close.ts</code>)</td><td>The intraday loop needed <code>previousClose</code> every minute without re-fetching</td><td>The baseline comes from the <em>same</em> single fetch as the latest close; there is nothing to cache across runs.</td></tr>
+  </table></div>
+  <p><code>maxInstances: 1</code> plus last-write-wins is sufficient — overlapping runs would both write complete valid snapshots, so no transactional lease is warranted.</p>
+  <h3>No unchanged-skip cache</h3>
+  <p><code>stock_price_sync</code> suppresses writes when the newest 1-min bar is unchanged because it fires ~390×/day. Here the ceiling is <code>watchlist × 4 ≈ 2k writes/day</code>, and every fire legitimately produces a fresh <code>latestClose</code>, so an unchanged-skip cache would add state to save almost nothing. Omitted.</p>
+  <h3>Feature-local FMP client, not a shared core client</h3>
+  <p>The windowed-GET client (<code>services/fmp_client.ts</code>) is copied into this feature rather than promoted to <code>src/core</code> and shared with <code>stock_price_sync</code>. This matches the established convention (each feature owns its <code>services/</code>) and keeps the feature self-contained and independently deployable. The duplication is ~50 lines of stable transport code; extracting a shared client is a cross-feature refactor deferred until a third consumer appears.</p>
+  <div class="callout green"><strong>Consistency guarantees:</strong> Documents — always internally consistent (atomic full overwrite). Freshness — each fire reflects the FMP EOD series at fetch time (~15 min behind intraday); <code>updatedAt</code>/<code>latestDate</code> self-label it. Recovery — unconditional: any failure heals on the next successful fire, no operator action.</div>
+</section>
+
+<section id="resolved">
+  <h2>Resolved Decisions</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Decision</th><th>Resolution</th></tr>
+    <tr><td>Baseline</td><td>Always the prior trading year's <strong>official final close</strong> (newest EOD record with <code>date &lt; Jan 1</code>) — no fallback, no <code>baselineSource</code> field. A ticker with no prior-year record (a current-year listing, not carried on the watchlist) is skipped.</td></tr>
+    <tr><td>"Current" value</td><td>Latest EOD-light record in the same response — includes today's ~15-min-delayed row intraday, so all four fires advance it. No separate live-intraday source (declined).</td></tr>
+    <tr><td>Full-year fetch window</td><td><code>from = Jan 1 − baselineLookbackCalendarDays</code> (default 15 → mid-Dec prior year) captures the prior-year final close across the holiday break; closed days are absent, so no holiday calendar is needed.</td></tr>
+    <tr><td>No phase / cohort / lease</td><td>Four discrete fires and one call per ticker — no cron phase gate, no <code>maxCallsPerRun</code> sharding, no transactional lease; <code>maxInstances: 1</code> + last-write-wins suffices.</td></tr>
+    <tr><td>No unchanged-skip cache</td><td>At 4 runs/day the write volume is trivial and every run yields a fresh <code>latestClose</code>; the skip machinery <code>stock_price_sync</code> needs is omitted.</td></tr>
+  </table></div>
+</section>
+
+<section id="openq">
+  <h2>Open Questions / TODOs</h2>
+  <div class="table-wrap"><table>
+    <tr><th>#</th><th>Question</th></tr>
+    <tr><td>1</td><td><strong>Adjusted vs unadjusted close.</strong> Confirm <code>historical-price-eod/light</code> (with <code>nonadjusted</code> omitted) returns split/dividend-<strong>adjusted</strong> closes, so a split between Jan 1 and today does not distort the YTD %. If it returns unadjusted, decide whether to pass <code>nonadjusted=false</code> explicitly or adjust in code.</td></tr>
+    <tr><td>2</td><td><strong><code>ytdChangePercent</code> units</strong> are a percentage number (<code>12.34</code> = +12.34%), not a fraction or basis points — confirm the front end expects this.</td></tr>
+    <tr><td>3</td><td><strong>Current-year listings.</strong> Confirmed the watchlist does not carry tickers that first listed in the current year, so skipping any ticker with no prior-year close is safe. Revisit the baseline rule deliberately if that ever changes.</td></tr>
+    <tr><td>4</td><td><strong>Stale documents.</strong> A ticker removed from the watchlist keeps its <code>ytd_price_change/{ticker}</code> doc (no longer updated, not deleted). Decide whether a cleanup pass is needed (out of scope v1).</td></tr>
+    <tr><td>5</td><td><strong>Front-end read fit.</strong> Confirm reads of <code>ytd_price_change/{ticker}</code> fit the security rules (read-only to authenticated clients, writes denied).</td></tr>
+    <tr><td>6</td><td><strong>Manual harness.</strong> Add <code>_manual_harness.ts</code> + a <code>package.json</code> script (<code>ts-node --transpile-only</code>) so a run is exercisable locally as <code>npm run &lt;name&gt; -- --project &lt;dev|qa|prod&gt;</code>, per project convention.</td></tr>
+  </table></div>
+</section>
+
+</main>
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
