@@ -19,6 +19,7 @@ import { FcmNotificationService } from '../core/services/notification_service';
 import { VertexAiService } from '../core/services/ai_service';
 import { FmpSecService } from '../core/services/sec_service';
 import { FirebaseFilingHistoryService } from '../core/services/filing_history_service';
+import { FirebaseSecFilingsRepository } from '../core/services/sec_filings_repository';
 import { SecFilingsNotifierUseCase } from '../features/sec_filings_notifier/usecase';
 
 const _logger = new Logger('Manual SEC Test');
@@ -44,7 +45,7 @@ async function run() {
 
         _logger.info("--- 1. Search for a recent 10-K (Last 90 Days) ---");
         // Get 10-Ks
-        const filings = await secService.getFilings('10-K', pastStr, today);
+        const filings = await secService.getFilings({ type: '10-K', startDate: pastStr, endDate: today });
         _logger.info(`Fetched ${filings.length} 10-Ks from ${pastStr} to ${today} globally.`);
 
         if (!filings || filings.length === 0 || !filings[0]) {
@@ -82,12 +83,14 @@ async function run() {
 
         _logger.info(`--- 2. Executing Use Case (Simulated Date: ${simulateDate.toISOString().split('T')[0]}) for ${targetFiling.symbol} ---`);
         const aiService = new VertexAiService(); // Mock or Real
+        const secFilingsRepository = new FirebaseSecFilingsRepository();
         const useCase = new SecFilingsNotifierUseCase(
             watchlistService,
             secService,
             filingHistoryService,
             notificationService,
-            aiService
+            aiService,
+            secFilingsRepository
         );
 
         await useCase.execute(simulateDate);

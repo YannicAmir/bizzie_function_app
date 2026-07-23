@@ -47,14 +47,14 @@ export class SecFilingAnalyzerUseCase {
 
         _logger.info(`Starting Deep Analysis for ${reportId} from ${link}`);
 
-        const filingText = await this.secService.getFilingText(link);
-        if (!filingText) {
-            _logger.error(`Failed to fetch text from ${link}`);
+        const textResult = await this.secService.getFilingText(link);
+        if (textResult.status !== 'ok') {
+            _logger.error(`Failed to fetch text from ${link} (status: ${textResult.status})`);
             return;
         }
 
         const analysisResult = await this.aiService.enrichDeepFinancialReport(
-            filingText,
+            textResult.text,
             formType,
             symbol,
             filingDate

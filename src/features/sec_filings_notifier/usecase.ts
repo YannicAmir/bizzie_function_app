@@ -1,15 +1,21 @@
-
 import { Logger } from '../../core/logger';
 import { WatchlistService } from '../../core/services/watchlist_service';
 import { NotificationService } from '../../core/services/notification_service';
-import { SecService } from '../../core/services/sec_service';
+import { SecService, SecFiling, FORM_TYPE_10K, FORM_TYPE_10Q } from '../../core/services/sec_service';
 import { FilingHistoryService } from '../../core/services/filing_history_service';
-import { AiService } from '../../core/services/ai_service';
+import { AiService, EnrichedFinancialData } from '../../core/services/ai_service';
+import { SecFilingsRepository, SaveFinancialReportParams } from '../../core/services/sec_filings_repository';
 
-import { getFirebaseAdmin } from '../../core/firebase';
-import * as admin from 'firebase-admin';
+import { easternDateString } from '../../core/time';
 
 const _logger = new Logger('SEC Filings Usecase');
+
+const WATCHLIST_CACHE_SECONDS = 300;
+const NOTIFICATION_TYPE = 'sec_filing';
+const PERIOD_ANNUAL = 'year';
+const PERIOD_QUARTERLY = 'quarter';
+
+type FilingOutcome = 'skipped' | 'deduped' | 'sent' | 'failed';
 
 export class SecFilingsNotifierUseCase {
 
@@ -18,106 +24,126 @@ export class SecFilingsNotifierUseCase {
         private secService: SecService,
         private filingHistoryService: FilingHistoryService,
         private notificationService: NotificationService,
-        private aiService: AiService
+        private aiService: AiService,
+        private secFilingsRepository: SecFilingsRepository
     ) { }
 
     async execute(targetDate?: Date): Promise<void> {
-        const today = targetDate ? new Date(targetDate) : new Date();
-        const formatDate = (d: Date) => d.toISOString().substring(0, 10);
-        const fromDateStr = formatDate(today);
-        const toDateStr = formatDate(today);
-
-        _logger.info(`Running SEC Filings Check from ${fromDateStr} to ${toDateStr}`);
+        const dateStr = easternDateString(targetDate ?? new Date());
+        _logger.info(`Running SEC Filings Check for ${dateStr}`);
 
         _logger.info("Fetching global watchlist...");
-        const watchedTickers = await this.watchlistService.getAllWatchedTickers();
+        const watchedTickers = await this.watchlistService.getAllWatchedTickers(WATCHLIST_CACHE_SECONDS);
         if (watchedTickers.size === 0) {
             _logger.info("Watchlist is empty. Exiting.");
             return;
         }
         _logger.info(`Monitoring ${watchedTickers.size} tickers.`);
 
-        const filings10K = await this.secService.getFilings('10-K', fromDateStr, toDateStr);
-        const filings10Q = await this.secService.getFilings('10-Q', fromDateStr, toDateStr);
+        const filings = await this.fetchFilings(dateStr);
 
-        const allFilings = [...filings10K, ...filings10Q];
-        _logger.info(`Fetched ${allFilings.length} total filings (${filings10K.length} 10-Ks, ${filings10Q.length} 10-Qs).`);
-
-        let sentCount = 0;
-        let skippedCount = 0;
-        let dedupedCount = 0;
-
-        for (const filing of allFilings) {
-            if (!watchedTickers.has(filing.symbol)) {
-                skippedCount++;
-                continue;
-            }
-
-            const isProcessed = await this.filingHistoryService.hasProcessed(filing);
-            if (isProcessed) {
-                dedupedCount++;
-                continue;
-            }
-
-            const companyName = watchedTickers.get(filing.symbol) || filing.symbol;
-            const periodText = filing.formType === '10-K' ? 'year' : 'quarter';
-
-            let aiData = { revenue: null as number | null, eps: null as number | null, summary: `${filing.formType} filed.` };
-
-            try {
-                const targetLink = filing.finalLink || filing.link;
-                if (targetLink) {
-                    _logger.info(`Analyzing ${filing.formType} for ${filing.symbol}...`);
-                    const filingText = await this.secService.getFilingText(targetLink);
-                    if (filingText) {
-                        const result = await this.aiService.enrichFinancialReport(filingText, filing.formType);
-                        if (result) {
-                            aiData = result;
-                            _logger.info(`AI Analysis for ${filing.symbol}: ${JSON.stringify(aiData)}`);
-                        }
-                    }
-                }
-            } catch (err) {
-                _logger.error(`Failed to run AI analysis for ${filing.symbol}`, err);
-            }
-
-            const title = `${filing.symbol}'s ${filing.formType} is now available`;
-
-            const body = aiData.summary;
-
-            await this.notificationService.sendTopicNotification(
-                filing.symbol,
-                title,
-                body,
-                {
-                    type: 'sec_filing',
-                    ticker: filing.symbol,
-                    formType: filing.formType,
-                    period: filing.period || periodText,
-                    link: filing.finalLink,
-                    filingDate: filing.filingDate
-                }
-            );
-            sentCount++;
-
-            await getFirebaseAdmin().firestore().collection('sec_filings').add({
-                symbol: filing.symbol,
-                companyName: companyName,
-                formType: filing.formType,
-                filingDate: filing.filingDate,
-                link: filing.finalLink,
-                summary: aiData.summary,
-                revenue: aiData.revenue,
-                eps: aiData.eps,
-                createdAt: admin.firestore.FieldValue.serverTimestamp()
-            });
-
-            await this.filingHistoryService.markProcessed(filing);
+        const tally: Record<FilingOutcome, number> = { skipped: 0, deduped: 0, sent: 0, failed: 0 };
+        for (const filing of filings) {
+            tally[await this.processFiling(filing, watchedTickers)]++;
         }
 
         _logger.info(`Cycle Check Complete. Stats:`);
-        _logger.info(`- Skipped (Not Watched): ${skippedCount}`);
-        _logger.info(`- Deduped (Already Sent): ${dedupedCount}`);
-        _logger.info(`- Sent (New): ${sentCount}`);
+        _logger.info(`- Skipped (Not Watched): ${tally.skipped}`);
+        _logger.info(`- Deduped (Already Sent): ${tally.deduped}`);
+        _logger.info(`- Sent (New): ${tally.sent}`);
+        if (tally.failed > 0) {
+            _logger.error(`- Failed (Send/Persist): ${tally.failed}`);
+        }
+    }
+
+    private async fetchFilings(dateStr: string): Promise<SecFiling[]> {
+        const [filings10K, filings10Q] = await Promise.all([
+            this.secService.getFilings({ type: FORM_TYPE_10K, startDate: dateStr, endDate: dateStr }),
+            this.secService.getFilings({ type: FORM_TYPE_10Q, startDate: dateStr, endDate: dateStr }),
+        ]);
+
+        const allFilings = [...filings10K, ...filings10Q];
+        _logger.info(`Fetched ${allFilings.length} total filings (${filings10K.length} 10-Ks, ${filings10Q.length} 10-Qs).`);
+        return allFilings;
+    }
+
+    private async processFiling(filing: SecFiling, watchedTickers: Map<string, string>): Promise<FilingOutcome> {
+        if (!watchedTickers.has(filing.symbol)) {
+            return 'skipped';
+        }
+
+        if (!(await this.filingHistoryService.claimForProcessing(filing))) {
+            return 'deduped';
+        }
+
+        const targetLink = filing.finalLink || filing.link;
+        const companyName = watchedTickers.get(filing.symbol) || filing.symbol;
+
+        try {
+            const aiData = await this.analyzeFiling(filing, targetLink);
+            await this.persist({ filing, enriched: aiData, companyName, link: targetLink });
+            await this.notify(filing, targetLink, aiData);
+            await this.filingHistoryService.markSent(filing);
+            return 'sent';
+        } catch (err) {
+            _logger.error(`Failed to send/persist ${filing.formType} for ${filing.symbol}; releasing claim.`, err);
+            await this.filingHistoryService.releaseClaim(filing);
+            return 'failed';
+        }
+    }
+
+    private async analyzeFiling(filing: SecFiling, targetLink: string): Promise<EnrichedFinancialData> {
+        const fallback: EnrichedFinancialData = {
+            revenue: null,
+            eps: null,
+            reportingCurrency: null,
+            summary: `${filing.formType} filed.`,
+        };
+
+        if (!targetLink) {
+            return fallback;
+        }
+
+        try {
+            _logger.info(`Analyzing ${filing.formType} for ${filing.symbol}...`);
+            const textResult = await this.secService.getFilingText(targetLink);
+            if (textResult.status !== 'ok') {
+                return fallback;
+            }
+
+            const result = await this.aiService.enrichFinancialReport(textResult.text, filing.formType);
+            if (!result) {
+                return fallback;
+            }
+
+            _logger.info(`AI Analysis for ${filing.symbol}: ${JSON.stringify(result)}`);
+            return result;
+        } catch (err) {
+            _logger.error(`Failed to run AI analysis for ${filing.symbol}`, err);
+            return fallback;
+        }
+    }
+
+    private persist(params: SaveFinancialReportParams): Promise<void> {
+        return this.secFilingsRepository.save(params);
+    }
+
+    private notify(filing: SecFiling, targetLink: string, aiData: EnrichedFinancialData): Promise<void> {
+        const periodText = filing.formType === FORM_TYPE_10K ? PERIOD_ANNUAL : PERIOD_QUARTERLY;
+        const title = `${filing.symbol}'s ${filing.formType} is now available`;
+
+        return this.notificationService.sendTopicNotification(
+            filing.symbol,
+            title,
+            aiData.summary,
+            {
+                type: NOTIFICATION_TYPE,
+                ticker: filing.symbol,
+                formType: filing.formType,
+                period: filing.period || periodText,
+                link: targetLink,
+                filingDate: filing.filingDate,
+            }
+        );
     }
 }

@@ -14,12 +14,13 @@ process.env.LOCATION = 'us-central1'; // Default location
 
 // NOW import application code
 import { Logger } from '../core/logger';
-import { SecService, SecFiling } from "../core/services/sec_service";
+import { SecService, SecFiling, GetFilingsRequest, FilingTextResult } from "../core/services/sec_service";
 import { SecFilingsNotifierUseCase } from "../features/sec_filings_notifier/usecase";
 import { Realtime8kNotifierUseCase } from "../features/realtime_8k_notifier/usecase";
 import { FirebaseWatchlistService } from "../core/services/watchlist_service";
 import { FcmNotificationService } from "../core/services/notification_service";
 import { FirebaseFilingHistoryService } from "../core/services/filing_history_service";
+import { FirebaseSecFilingsRepository } from "../core/services/sec_filings_repository";
 import { VertexAiService } from "../core/services/ai_service";
 
 // Initialize Firebase Admin (Uses Default Credentials)
@@ -86,12 +87,12 @@ const MOCK_DATA: SecFiling[] = [
 class MockSecService implements SecService {
     constructor(private mockFilings: SecFiling[]) { }
 
-    async getFilings(type: '10-K' | '10-Q' | '8-K'): Promise<SecFiling[]> {
-        logger.info(`[MockSecService] Returning mock data for type: ${type}`);
-        return this.mockFilings.filter(f => f.formType === type);
+    async getFilings(request: GetFilingsRequest): Promise<SecFiling[]> {
+        logger.info(`[MockSecService] Returning mock data for type: ${request.type}`);
+        return this.mockFilings.filter(f => f.formType === request.type);
     }
 
-    async getFilingText(url: string): Promise<string> {
+    async getFilingText(url: string): Promise<FilingTextResult> {
         logger.info(`[MockSecService] Fetching REAL text from: ${url}`);
         try {
             const response = await fetch(url, {
@@ -100,13 +101,13 @@ class MockSecService implements SecService {
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
                 }
             });
-            if (!response.ok) return "";
+            if (!response.ok) return { status: 'unavailable' };
             const rawText = await response.text();
-            const stripped = rawText.replace(/<[^>]*>?/gm, ' ');
-            return stripped.substring(0, 1500000);
+            const text = rawText.replace(/<[^>]*>?/gm, ' ').substring(0, 1500000);
+            return text.trim().length === 0 ? { status: 'empty' } : { status: 'ok', text };
         } catch (e) {
             console.error("[MockSecService] Fetch failed", e);
-            return "";
+            return { status: 'unavailable' };
         }
     }
 }
@@ -117,6 +118,7 @@ async function runSimulation() {
     // 1. Dependency Injection
     const watchlistService = new FirebaseWatchlistService();
     const filingHistoryService = new FirebaseFilingHistoryService();
+    const secFilingsRepository = new FirebaseSecFilingsRepository();
     const notificationService = new FcmNotificationService();
     const aiService = new VertexAiService();
 
@@ -130,7 +132,8 @@ async function runSimulation() {
         mockSecService,
         filingHistoryService,
         notificationService,
-        aiService
+        aiService,
+        secFilingsRepository
     );
     await reportUseCase.execute(new Date());
 
@@ -140,6 +143,7 @@ async function runSimulation() {
         watchlistService,
         mockSecService,
         filingHistoryService,
+        secFilingsRepository,
         notificationService,
         aiService
     );
