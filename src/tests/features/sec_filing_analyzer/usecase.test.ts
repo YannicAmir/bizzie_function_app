@@ -71,7 +71,7 @@ describe('SecFilingAnalyzerUseCase', () => {
     test('execute_fetchContentFails_abortsAnalysis', async () => {
         // Arrange
         (mockReportService.hasReport as jest.Mock).mockResolvedValue(false);
-        (mockSecService.getFilingText as jest.Mock).mockResolvedValue(null);
+        (mockSecService.getFilingText as jest.Mock).mockResolvedValue({ status: 'unavailable' });
 
         // Act
         await useCase.execute(mockSnapshot);
@@ -84,7 +84,7 @@ describe('SecFilingAnalyzerUseCase', () => {
     test('execute_aiAnalysisReturnsNull_abortsSave', async () => {
         // Arrange
         (mockReportService.hasReport as jest.Mock).mockResolvedValue(false);
-        (mockSecService.getFilingText as jest.Mock).mockResolvedValue("Raw Filing Text");
+        (mockSecService.getFilingText as jest.Mock).mockResolvedValue({ status: 'ok', text: 'Raw Filing Text' });
         (mockAiService.enrichDeepFinancialReport as jest.Mock).mockResolvedValue(null);
 
         // Act
@@ -98,7 +98,7 @@ describe('SecFilingAnalyzerUseCase', () => {
     test('execute_validDataAndNewReport_performsAnalysisAndSaves', async () => {
         // Arrange
         (mockReportService.hasReport as jest.Mock).mockResolvedValue(false);
-        (mockSecService.getFilingText as jest.Mock).mockResolvedValue("Raw Filing Text");
+        (mockSecService.getFilingText as jest.Mock).mockResolvedValue({ status: 'ok', text: 'Raw Filing Text' });
         (mockAiService.enrichDeepFinancialReport as jest.Mock).mockResolvedValue({
             income: { revenue: { amount: "$10B" } }
         });

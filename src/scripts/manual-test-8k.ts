@@ -3,6 +3,7 @@ import { FirebaseWatchlistService } from '../core/services/watchlist_service';
 import { FcmNotificationService } from '../core/services/notification_service';
 import { FmpSecService } from '../core/services/sec_service';
 import { FirebaseFilingHistoryService } from '../core/services/filing_history_service';
+import { FirebaseSecFilingsRepository } from '../core/services/sec_filings_repository';
 import { VertexAiService } from '../core/services/ai_service';
 import { getFirebaseAdmin } from '../core/firebase';
 import { Logger } from '../core/logger';
@@ -28,6 +29,7 @@ async function run() {
         const watchlistService = new FirebaseWatchlistService();
         const secService = new FmpSecService(apiKey);
         const filingHistoryService = new FirebaseFilingHistoryService();
+        const secFilingsRepository = new FirebaseSecFilingsRepository();
         const notificationService = new FcmNotificationService();
         const aiService = new VertexAiService();
 
@@ -61,6 +63,7 @@ async function run() {
             watchlistService,
             secService,
             filingHistoryService,
+            secFilingsRepository,
             notificationService,
             aiService
         );

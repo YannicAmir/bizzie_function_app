@@ -3,11 +3,9 @@ import { WatchlistService } from '../../../core/services/watchlist_service';
 import { NotificationService } from '../../../core/services/notification_service';
 import { SecService, SecFiling } from '../../../core/services/sec_service';
 import { FilingHistoryService } from '../../../core/services/filing_history_service';
+import { SecFilingsRepository } from '../../../core/services/sec_filings_repository';
 import { AiService } from '../../../core/services/ai_service';
-import * as firebaseCore from '../../../core/firebase';
-import * as admin from 'firebase-admin';
 
-jest.mock('../../../core/firebase');
 jest.mock('../../../core/logger', () => ({
     Logger: jest.fn().mockImplementation(() => ({
         info: jest.fn(),
@@ -23,15 +21,15 @@ describe('Realtime8kNotifierUseCase', () => {
     let mockWatchlistService: jest.Mocked<WatchlistService>;
     let mockSecService: jest.Mocked<SecService>;
     let mockFilingHistoryService: jest.Mocked<FilingHistoryService>;
+    let mockSecFilingsRepository: jest.Mocked<SecFilingsRepository>;
     let mockNotificationService: jest.Mocked<NotificationService>;
     let mockAiService: jest.Mocked<AiService>;
-
-    let mockFirestoreAdd: jest.Mock;
 
     beforeEach(() => {
         mockWatchlistService = { getAllWatchedTickers: jest.fn() };
         mockSecService = { getFilings: jest.fn(), getFilingText: jest.fn() };
-        mockFilingHistoryService = { hasProcessed: jest.fn(), markProcessed: jest.fn() };
+        mockFilingHistoryService = { claimForProcessing: jest.fn(), markSent: jest.fn(), releaseClaim: jest.fn() };
+        mockSecFilingsRepository = { save: jest.fn(), saveEnriched8k: jest.fn() };
         mockNotificationService = {
             sendTopicNotification: jest.fn(),
             sendToToken: jest.fn(),
@@ -40,26 +38,11 @@ describe('Realtime8kNotifierUseCase', () => {
         };
         mockAiService = { enrich8k: jest.fn(), enrichFinancialReport: jest.fn(), enrichDeepFinancialReport: jest.fn() };
 
-        mockFirestoreAdd = jest.fn();
-        (firebaseCore.getFirebaseAdmin as jest.Mock).mockReturnValue({
-            firestore: () => ({
-                collection: () => ({
-                    add: mockFirestoreAdd
-                })
-            })
-        });
-
-        Object.defineProperty(admin.firestore, 'FieldValue', {
-            value: {
-                serverTimestamp: jest.fn().mockReturnValue('SERVER_TIMESTAMP')
-            },
-            writable: true
-        });
-
         useCase = new Realtime8kNotifierUseCase(
             mockWatchlistService,
             mockSecService,
             mockFilingHistoryService,
+            mockSecFilingsRepository,
             mockNotificationService,
             mockAiService
         );
@@ -77,7 +60,7 @@ describe('Realtime8kNotifierUseCase', () => {
         await useCase.execute();
 
         // Assert
-        expect(mockWatchlistService.getAllWatchedTickers).toHaveBeenCalled();
+        expect(mockWatchlistService.getAllWatchedTickers).toHaveBeenCalledWith(300);
         expect(mockSecService.getFilings).not.toHaveBeenCalled();
     });
 
@@ -91,7 +74,12 @@ describe('Realtime8kNotifierUseCase', () => {
         await useCase.execute();
 
         // Assert
-        expect(mockSecService.getFilings).toHaveBeenCalledWith('8-K', expect.any(String), expect.any(String));
+        expect(mockSecService.getFilings).toHaveBeenCalledWith({
+            type: '8-K',
+            startDate: expect.any(String),
+            endDate: expect.any(String),
+            sinceAcceptedDate: expect.any(String)
+        });
         expect(mockNotificationService.sendTopicNotification).not.toHaveBeenCalled();
     });
 
@@ -115,11 +103,11 @@ describe('Realtime8kNotifierUseCase', () => {
         await useCase.execute();
 
         // Assert
-        expect(mockFilingHistoryService.hasProcessed).not.toHaveBeenCalled();
+        expect(mockFilingHistoryService.claimForProcessing).not.toHaveBeenCalled();
         expect(mockNotificationService.sendTopicNotification).not.toHaveBeenCalled();
     });
 
-    it('execute_filingAlreadyProcessed_skipsProcessing', async () => {
+    it('execute_claimFails_skipsProcessing', async () => {
         // Arrange
         const watchlist = new Map([['AAPL', 'Apple']]);
         mockWatchlistService.getAllWatchedTickers.mockResolvedValue(watchlist);
@@ -134,17 +122,17 @@ describe('Realtime8kNotifierUseCase', () => {
             cik: '54321'
         };
         mockSecService.getFilings.mockResolvedValue([filing]);
-        mockFilingHistoryService.hasProcessed.mockResolvedValue(true);
+        mockFilingHistoryService.claimForProcessing.mockResolvedValue(false);
 
         // Act
         await useCase.execute();
 
         // Assert
-        expect(mockFilingHistoryService.hasProcessed).toHaveBeenCalledWith(filing);
+        expect(mockFilingHistoryService.claimForProcessing).toHaveBeenCalledWith(filing);
         expect(mockSecService.getFilingText).not.toHaveBeenCalled();
     });
 
-    it('execute_aiReturnsNull_marksProcessedAndSkips', async () => {
+    it('execute_filingTextUnavailable_releasesClaim', async () => {
         // Arrange
         const watchlist = new Map([['AAPL', 'Apple']]);
         mockWatchlistService.getAllWatchedTickers.mockResolvedValue(watchlist);
@@ -159,9 +147,63 @@ describe('Realtime8kNotifierUseCase', () => {
             cik: '54321'
         };
         mockSecService.getFilings.mockResolvedValue([filing]);
-        mockFilingHistoryService.hasProcessed.mockResolvedValue(false);
+        mockFilingHistoryService.claimForProcessing.mockResolvedValue(true);
+        mockSecService.getFilingText.mockResolvedValue({ status: 'unavailable' });
 
-        mockSecService.getFilingText.mockResolvedValue('Raw 8-K Text');
+        // Act
+        await useCase.execute();
+
+        // Assert
+        expect(mockFilingHistoryService.releaseClaim).toHaveBeenCalledWith(filing);
+        expect(mockAiService.enrich8k).not.toHaveBeenCalled();
+        expect(mockFilingHistoryService.markSent).not.toHaveBeenCalled();
+    });
+
+    it('execute_filingTextEmpty_marksSentWithoutRetry', async () => {
+        // Arrange
+        const watchlist = new Map([['AAPL', 'Apple']]);
+        mockWatchlistService.getAllWatchedTickers.mockResolvedValue(watchlist);
+
+        const filing: SecFiling = {
+            symbol: 'AAPL',
+            filingDate: '2023-10-01',
+            acceptedDate: '2023-10-01',
+            link: 'http://link',
+            finalLink: 'http://final',
+            formType: '8-K',
+            cik: '54321'
+        };
+        mockSecService.getFilings.mockResolvedValue([filing]);
+        mockFilingHistoryService.claimForProcessing.mockResolvedValue(true);
+        mockSecService.getFilingText.mockResolvedValue({ status: 'empty' });
+
+        // Act
+        await useCase.execute();
+
+        // Assert
+        expect(mockFilingHistoryService.markSent).toHaveBeenCalledWith(filing);
+        expect(mockAiService.enrich8k).not.toHaveBeenCalled();
+        expect(mockFilingHistoryService.releaseClaim).not.toHaveBeenCalled();
+    });
+
+    it('execute_aiReturnsNull_marksSentAndSkips', async () => {
+        // Arrange
+        const watchlist = new Map([['AAPL', 'Apple']]);
+        mockWatchlistService.getAllWatchedTickers.mockResolvedValue(watchlist);
+
+        const filing: SecFiling = {
+            symbol: 'AAPL',
+            filingDate: '2023-10-01',
+            acceptedDate: '2023-10-01',
+            link: 'http://link',
+            finalLink: 'http://final',
+            formType: '8-K',
+            cik: '54321'
+        };
+        mockSecService.getFilings.mockResolvedValue([filing]);
+        mockFilingHistoryService.claimForProcessing.mockResolvedValue(true);
+
+        mockSecService.getFilingText.mockResolvedValue({ status: 'ok', text: 'Raw 8-K Text' });
         mockAiService.enrich8k.mockResolvedValue(null);
 
         // Act
@@ -169,8 +211,8 @@ describe('Realtime8kNotifierUseCase', () => {
 
         // Assert
         expect(mockAiService.enrich8k).toHaveBeenCalled();
-        expect(mockFilingHistoryService.markProcessed).toHaveBeenCalledWith(filing);
-        expect(mockFirestoreAdd).not.toHaveBeenCalled();
+        expect(mockFilingHistoryService.markSent).toHaveBeenCalledWith(filing);
+        expect(mockSecFilingsRepository.saveEnriched8k).not.toHaveBeenCalled();
         expect(mockNotificationService.sendTopicNotification).not.toHaveBeenCalled();
     });
 
@@ -189,8 +231,8 @@ describe('Realtime8kNotifierUseCase', () => {
             cik: '54321'
         };
         mockSecService.getFilings.mockResolvedValue([filing]);
-        mockFilingHistoryService.hasProcessed.mockResolvedValue(false);
-        mockSecService.getFilingText.mockResolvedValue('Raw 8-K Text');
+        mockFilingHistoryService.claimForProcessing.mockResolvedValue(true);
+        mockSecService.getFilingText.mockResolvedValue({ status: 'ok', text: 'Raw 8-K Text' });
 
         mockAiService.enrich8k.mockResolvedValue({
             topic: 'M&A',
@@ -205,10 +247,14 @@ describe('Realtime8kNotifierUseCase', () => {
         await useCase.execute();
 
         // Assert
-        expect(mockFirestoreAdd).toHaveBeenCalledWith(expect.objectContaining({
-            symbol: 'AAPL',
-            topic: 'M&A',
-            summary: 'Apple buys startup.'
+        expect(mockSecFilingsRepository.saveEnriched8k).toHaveBeenCalledWith(expect.objectContaining({
+            filing,
+            companyName: 'Apple',
+            link: 'http://final',
+            enriched: expect.objectContaining({
+                topic: 'M&A',
+                summary: 'Apple buys startup.'
+            })
         }));
 
         expect(mockNotificationService.sendTopicNotification).toHaveBeenCalledWith(
@@ -222,6 +268,41 @@ describe('Realtime8kNotifierUseCase', () => {
             })
         );
 
-        expect(mockFilingHistoryService.markProcessed).toHaveBeenCalledWith(filing);
+        expect(mockFilingHistoryService.markSent).toHaveBeenCalledWith(filing);
+    });
+
+    it('execute_sendThrows_releasesClaim', async () => {
+        // Arrange
+        const watchlist = new Map([['AAPL', 'Apple']]);
+        mockWatchlistService.getAllWatchedTickers.mockResolvedValue(watchlist);
+
+        const filing: SecFiling = {
+            symbol: 'AAPL',
+            filingDate: '2023-10-01',
+            acceptedDate: '2023-10-01',
+            link: 'http://link',
+            finalLink: 'http://final',
+            formType: '8-K',
+            cik: '54321'
+        };
+        mockSecService.getFilings.mockResolvedValue([filing]);
+        mockFilingHistoryService.claimForProcessing.mockResolvedValue(true);
+        mockSecService.getFilingText.mockResolvedValue({ status: 'ok', text: 'Raw 8-K Text' });
+        mockAiService.enrich8k.mockResolvedValue({
+            topic: 'M&A',
+            isEarnings: false,
+            summary: 'Apple buys startup.',
+            sentiment: 'Positive',
+            revenue: null,
+            eps: null
+        });
+        mockNotificationService.sendTopicNotification.mockRejectedValue(new Error('fcm down'));
+
+        // Act
+        await useCase.execute();
+
+        // Assert
+        expect(mockFilingHistoryService.releaseClaim).toHaveBeenCalledWith(filing);
+        expect(mockFilingHistoryService.markSent).not.toHaveBeenCalled();
     });
 });
