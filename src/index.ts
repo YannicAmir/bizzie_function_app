@@ -17,3 +17,4 @@ export * from './features/stock_news_notifier/trigger';
 export * from './features/stock_price_sync/trigger';
 export * from './features/ytd_price_sync/trigger';
 export * from './features/general_market_news/trigger';
+export * from './features/new_user_watchlist_logos/trigger';
